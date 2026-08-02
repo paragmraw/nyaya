@@ -1,4 +1,4 @@
-Eight Schedule
+Eighth Schedule
 
 Articles 344(1) and 351
 
