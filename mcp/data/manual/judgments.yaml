@@ -1,0 +1,120 @@
+# Landmark Supreme Court judgments curated for the nyaya corpus.
+#
+# Text is pasted from indiankanoon.org's free browse view (public domain —
+# government edicts are not copyrightable in India under Section 52(1)(q) of
+# the Copyright Act 1957). Replace the `text` fields below with the full
+# judgment text from:
+#   https://indiankanoon.org/search/?formInput=doctypes%3Asupremecourt+<case name>
+#
+# Keep the structure: case_name, citation, court, date, summary, text.
+# `summary` is optional but recommended — it's what semantic search will
+# weight most heavily for judgment retrieval.
+
+judgments:
+  - case_name: "Kesavananda Bharati v. State of Kerala"
+    citation: "AIR 1973 SC 1461"
+    court: "Supreme Court of India"
+    date: "1973-04-24"
+    summary: >
+      The Supreme Court's basic-structure doctrine: Parliament can amend the
+      Constitution under Article 368, including fundamental rights, but cannot
+      alter its basic structure. The 13-judge bench held, 7:6, that the
+      amendment power is limited by the basic structure of the Constitution.
+    text: >
+      [Paste the full judgment text from indiankanoon.org here. Search for
+      "Kesavananda Bharati v. State of Kerala" on indiankanoon.org, open the
+      top result, and copy the judgment body. The text below is a placeholder.]
+
+      This case was heard by the largest bench in the history of the Supreme
+      Court of India — thirteen judges. The question referred to the bench was
+      whether the amendment power conferred by Article 368 is subject to any
+      limitations, and in particular whether the 24th, 25th, and 29th
+      Amendments to the Constitution are valid.
+
+      The court held, by a majority of seven to six, that Parliament's power
+      to amend the Constitution under Article 368 is not unlimited: it cannot
+      alter the basic structure of the Constitution. Chief Justice Sikri
+      enumerated the basic features as including the supremacy of the
+      Constitution, republican and democratic form of government, secular
+      character, separation of powers, and federalism.
+
+  - case_name: "Maneka Gandhi v. Union of India"
+    citation: "AIR 1978 SC 597"
+    court: "Supreme Court of India"
+    date: "1978-01-25"
+    summary: >
+      Transformed Article 21 (right to life and personal liberty). Held that
+      any law depriving a person of life or personal liberty must satisfy a
+      just, fair, and reasonable procedure — not merely any procedure
+      established by law. Connected Article 21 with Article 14 (equality) and
+      Article 19 (freedoms), establishing the "golden triangle" of fundamental
+      rights.
+    text: >
+      [Paste the full judgment text from indiankanoon.org here.]
+
+      The petitioner's passport was impounded by the Government of India under
+      Section 10(3)(c) of the Passports Act, 1967. The court examined whether
+      the procedure contemplated by Article 21 must be "right, just, and fair"
+      and not arbitrary, fanciful, or oppressive. The judgment expanded the
+      scope of Article 21 and read it together with Articles 14 and 19,
+      establishing that any procedure affecting life or liberty must be
+      reasonable.
+
+  - case_name: "K.S. Puttaswamy v. Union of India"
+    citation: "(2017) 10 SCC 1"
+    court: "Supreme Court of India"
+    date: "2017-08-24"
+    summary: >
+      A nine-judge bench unanimously held that the right to privacy is a
+      fundamental right protected under Article 21 and Part III of the
+      Constitution. Overruled earlier judgments (Kharak Singh, MP Sharma) that
+      had held privacy was not a fundamental right.
+    text: >
+      [Paste the full judgment text from indiankanoon.org here. There are six
+      concurring opinions — paste the main judgment by Chandrachud J. and add
+      the concurrences as appropriate.]
+
+      The question referred to this nine-judge bench was whether the right to
+      privacy is a fundamental right under the Constitution of India. The
+      court held unanimously that the right to privacy is a fundamental right
+      intrinsic to Part III and protected by Article 21. The earlier decisions
+      in Kharak Singh and M.P. Sharma, to the extent they held the contrary,
+      stand overruled.
+
+  - case_name: "Mohammed Ahmed Khan v. Shah Bano Begum"
+    citation: "AIR 1985 SC 945"
+    court: "Supreme Court of India"
+    date: "1985-04-23"
+    summary: >
+      Held that a divorced Muslim woman is entitled to maintenance under
+      Section 125 of the CrPC, regardless of personal law. A landmark in the
+      conflict between secular law and religious personal law in India.
+    text: >
+      [Paste the full judgment text from indiankanoon.org here.]
+
+      The appellant, an advocate, divorced his wife after 43 years of marriage
+      by pronouncing triple talaq. He paid maintenance for two years under the
+      Muslim Personal Law but refused further maintenance. The Supreme Court
+      held that under Section 125 of the Code of Criminal Procedure, a
+      divorced Muslim woman is entitled to maintenance from her former husband
+      if she is unable to maintain herself, and this provision applies
+      regardless of the personal law applicable to the parties.
+
+  - case_name: "Navtej Singh Johar v. Union of India"
+    citation: "(2018) 10 SCC 1"
+    court: "Supreme Court of India"
+    date: "2018-09-06"
+    summary: >
+      Read down Section 377 of the IPC to decriminalise consensual
+      same-sex relations between adults. Held that Section 377, insofar as it
+      criminalised consensual sexual conduct between adults of the same sex,
+      violated Articles 14, 15, 19, and 21.
+    text: >
+      [Paste the full judgment text from indiankanoon.org here.]
+
+      The petitioners challenged the constitutional validity of Section 377
+      of the Indian Penal Code, 1860, insofar as it criminalised consensual
+      sexual acts between adults of the same sex. The court held that Section
+      377, in its application to consensual same-sex conduct between adults,
+      is unconstitutional. The provision was read down to apply only to
+      non-consensual acts and to acts with minors and animals.

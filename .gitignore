@@ -216,3 +216,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- nyaya project ---------------------------------------------------------
+# Local data artifacts (keep manual YAML, ignore ingested raw dumps)
+data/raw/
+data/hf_cache/
+data/cache/
+*.db
+*.db-journal
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Railway
+railway.json
+railway.lock

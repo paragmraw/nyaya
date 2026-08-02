@@ -1,0 +1,18 @@
+[build]
+# The Dockerfile lives under mcp/ (the MCP server is one component of a
+# larger monorepo). Railway's build context is the repo root, so the
+# Dockerfile's COPY paths are prefixed with mcp/.
+dockerfilePath = "mcp/Dockerfile"
+
+[deploy]
+# Healthcheck: poll /health on the internal port.
+healthcheckPath = "/health"
+healthcheckTimeout = 10
+healthcheckInterval = 30
+
+# Single replica is plenty for v1. The server is stateless (stateless_http=True),
+# so this can be scaled up later without code changes.
+replicas = 1
+
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

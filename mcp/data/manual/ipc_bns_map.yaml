@@ -1,0 +1,37 @@
+# Manual mapping between IPC (1860) and BNS (2023) sections.
+# The 2023 Bharatiya Nyaya Sanhita replaced the Indian Penal Code. This table
+# captures the correspondence so the cross_reference tool can answer queries
+# like "what replaced IPC 302?" and "what was BNS 103 in the IPC?".
+#
+# Source: PRS comparison documents and the BNS bill's statement of objects.
+# `kind` is "corresponds_to" by default; use "repeals" where the IPC section
+# was dropped rather than re-enacted.
+#
+# This is a partial starter list — extend it as you verify more sections.
+
+mappings:
+  # Offences against the body
+  - { ipc: "302", bns: "103", kind: "corresponds_to" }   # Murder
+  - { ipc: "304", bns: "106", kind: "corresponds_to" }   # Culpable homicide
+  - { ipc: "304A", bns: "106", kind: "corresponds_to" }  # Causing death by negligence
+  - { ipc: "304B", bns: "80", kind: "corresponds_to" }   # Dowry death
+  - { ipc: "307", bns: "109", kind: "corresponds_to" }   # Attempt to murder
+  - { ipc: "354", bns: "74", kind: "corresponds_to" }    # Assault to outrage modesty
+  - { ipc: "354A", bns: "74", kind: "corresponds_to" }   # Sexual harassment
+  - { ipc: "376", bns: "64", kind: "corresponds_to" }    # Rape
+  - { ipc: "377", bns: "—", kind: "repeals" }            # Unnatural offences (decriminalised for consensual adults)
+
+  # Offences against property
+  - { ipc: "378", bns: "303", kind: "corresponds_to" }   # Theft
+  - { ipc: "392", bns: "309", kind: "corresponds_to" }   # Robbery
+  - { ipc: "395", bns: "310", kind: "corresponds_to" }   # Dacoity
+  - { ipc: "415", bns: "316", kind: "corresponds_to" }   # Cheating
+  - { ipc: "420", bns: "318", kind: "corresponds_to" }   # Cheating and dishonestly inducing delivery of property
+
+  # Offences against the state
+  - { ipc: "124A", bns: "152", kind: "corresponds_to" }  # Sedition (re-enacted with modifications)
+
+  # General provisions
+  - { ipc: "1", bns: "1", kind: "corresponds_to" }       # Title and extent
+  - { ipc: "2", bns: "2", kind: "corresponds_to" }       # Punishment of offences committed within India
+  - { ipc: "3", bns: "3", kind: "corresponds_to" }       # Punishment of offences committed beyond India
