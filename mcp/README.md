@@ -6,11 +6,13 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 
 ## What it gives you
 
-- **6 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters`, `cross_reference`, `semantic_query`
-- **5 resource templates**: `corpus://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`
-- **Full-text search** via Postgres `tsvector` + GIN indexes
+- **17 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters` / `list_sections` / `list_articles`, `cross_reference` (bidirectional), `semantic_query`, `get_judgment`, `search_judgments`, `get_sections_by_range`, `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment`, `define`
+- **13 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
+- **Full-text search** via Postgres `tsvector` + GIN indexes, with true total counts and `offset` pagination
 - **Semantic search** via `pgvector` + local `fastembed` embeddings (BAAI/bge-large-en-v1.5, 1024-d) — available in local dev and the slim-based image; **disabled in the Alpine image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants)). CUDAExecutionProvider is used on NVIDIA GPUs with automatic CPU fallback.
-- **Provenance on every result**: source, license, and `as_of` date
+- **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
+- **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
+- **Structured errors**: `NotFound` with `kind` (act/section/article/judgment/schedule/amendment) and `hint`; `EmbeddingUnavailable` distinct from "no matches"
 
 ## Corpus and sources
 
@@ -95,19 +97,20 @@ Constitution JSON. Run them in order:
 ```bash
 nyaya-ingest schema           # apply schema.sql (idempotent)
 nyaya-ingest constitution     # Articles 1–395 + schedules + amendments
-nyaya-ingest bare-acts        # IPC, CrPC, CPC, Evidence, commercial statutes
+nyaya-ingest civictech        # IPC, IEA, CPC from civictech JSON (full text)
+nyaya-ingest bare-acts        # CrPC + commercial statutes from HuggingFace
 nyaya-ingest sanhitas         # BNS, BNSS, BSA from PRS PDFs
 nyaya-ingest judgments        # landmark SC judgments from data/manual/judgments.yaml
 nyaya-ingest cross-refs       # IPC↔BNS mapping + inline references
-nyaya-ingest embeddings       # pgvector embeddings (~520MB model download on first run)
+nyaya-ingest embeddings       # pgvector embeddings (~1.3GB model download on first run)
 nyaya-ingest counts           # show row counts
 ```
 
-`nyaya-ingest all` runs everything in order. The CLI embeds the raw text column
-(simpler than the notebook's enriched text); for the best retrieval quality, use
-the notebook.
+`nyaya-ingest all` runs everything in order. The CLI now embeds **enriched**
+text (act/ref/title prefix, matching the notebook) so CLI and notebook
+hydrations produce identical-quality vectors.
 
-> **Manual data**: `data/manual/judgments.yaml` ships with placeholder judgment text. Replace the `text:` fields with full judgment text pasted from [indiankanoon.org](https://indiankanoon.org) (free browse, no API needed). Same for `data/manual/ipc_bns_map.yaml` (extend the mapping) and `data/manual/schedules/*.md` (fill in schedule text from the official Constitution PDF).
+> **Manual data**: `data/manual/judgments.yaml` ships with full verbatim text for 5 landmark judgments (Kesavananda Bharati, Maneka Gandhi, K.S. Puttaswamy, Shah Bano, Navtej Singh Johar) pasted from [indiankanoon.org](https://indiankanoon.org) (free browse, no API needed). Extend it with more cases as needed. Same for `data/manual/ipc_bns_map.yaml` (the starter map now covers ~160 sections — extend it) and `data/manual/schedules/*.md` (all 12 schedules filled from the official Constitution PDF).
 
 ## Deploy to Railway
 
@@ -201,26 +204,39 @@ asyncio.run(main())
 
 | Tool | Args | Returns |
 |---|---|---|
-| `search_law` | `query: str`, `act: str?`, `limit: int=10` | FTS hits across the corpus |
+| `search_law` | `query: str`, `act: str?`, `limit: int=10`, `offset: int=0` | FTS hits with true total + pagination |
 | `get_section` | `act: str`, `section: str` | Full section text + provenance |
 | `get_article` | `article: str` | Constitution article + provenance |
 | `list_acts` | — | All acts in the corpus |
 | `list_chapters` | `act: str` | Chapters of an act |
-| `cross_reference` | `act: str`, `section: str` | Cross-refs (incl. IPC↔BNS) |
-| `semantic_query` | `query: str`, `limit: int=5` | Embedding-NN hits |
+| `list_sections` | `act: str`, `chapter: int?`, `limit: int=100`, `offset: int=0` | Sections of an act (paginated) |
+| `list_articles` | `part: str?`, `limit: int=100`, `offset: int=0` | Constitution articles by Part |
+| `cross_reference` | `act: str`, `section: str`, `direction: str="both"` | Bidirectional cross-refs (from+to) |
+| `semantic_query` | `query: str`, `act: str?`, `limit: int=5` | Embedding-NN hits (raises `EmbeddingUnavailable` if disabled) |
+| `get_judgment` | `case_slug: str` | Full judgment by citation or slug |
+| `search_judgments` | `query: str`, `court: str?`, `date_from: str?`, `date_to: str?`, `limit: int=10`, `offset: int=0` | FTS over judgments |
+| `get_sections_by_range` | `act: str`, `start: str`, `end: str`, `limit: int=500` | Sections in a numeric range |
+| `list_schedules` | — | All 12 Constitution schedules |
+| `get_schedule` | `number: int` | A single schedule |
+| `list_amendments` | `year_from: int?`, `year_to: int?` | Constitutional amendments |
+| `get_amendment` | `number: int` | A single amendment |
+| `define` | `term: str`, `act: str?`, `limit: int=10` | Statutory definitions of a term |
 
 ### Resources
 
 | URI | Description |
 |---|---|
-| `corpus://` | Corpus overview + counts |
+| `corpus://` | Corpus overview + counts (as_of derived from DB) |
 | `acts://` | List of all acts |
+| `schedules://` | Constitution schedules |
+| `amendments://` | Constitution amendments |
+| `judgments://` | List of all landmark judgments |
 | `act://{short_name}` | Act metadata + table of contents |
 | `section://{act}/{number}` | Full section |
 | `article://{number}` | Constitution article |
 | `judgment://{case_slug}` | Landmark judgment |
-| `schedules://` | Constitution schedules |
-| `amendments://` | Constitution amendments |
+| `amendment://{number}` | A single amendment |
+| `schedule://{number}` | A single schedule |
 
 ## Development
 

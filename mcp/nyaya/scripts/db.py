@@ -201,6 +201,7 @@ class IngestDB:
                 insert into judgments (case_name, citation, court, date, summary, text)
                 values (%s, %s, %s, %s, %s, %s)
                 on conflict (case_name) do update set
+                    citation = excluded.citation,
                     court = excluded.court,
                     date = excluded.date,
                     summary = excluded.summary,

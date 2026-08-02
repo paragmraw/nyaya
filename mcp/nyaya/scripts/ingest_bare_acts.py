@@ -82,7 +82,7 @@ def ingest_bare_acts(db: IngestDB) -> None:
                 short_name=short,
                 full_name=full,
                 year=year,
-                citation=f"Act No. of {year}" if year else None,
+                citation=f"Act of {year}" if year else None,
                 kind=kind,
                 source=SOURCE,
                 source_license=LICENSE,

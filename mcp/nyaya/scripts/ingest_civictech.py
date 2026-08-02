@@ -67,11 +67,25 @@ ACTS: list[dict] = [
 ]
 
 
-def _download(url: str) -> list[dict]:
-    with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-        r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
-        r.raise_for_status()
-        return r.json()
+def _download(url: str, retries: int = 3) -> list[dict]:
+    import time
+
+    last_err: Exception | None = None
+    for attempt in range(retries):
+        try:
+            with httpx.Client(follow_redirects=True, timeout=60.0) as client:
+                r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
+                r.raise_for_status()
+                return r.json()
+        except (httpx.HTTPError, httpx.DecodingError) as e:
+            last_err = e
+            if attempt < retries - 1:
+                wait = 2 ** attempt
+                print(f"  ! Download failed (attempt {attempt + 1}/{retries}): {e}; retrying in {wait}s…")
+                time.sleep(wait)
+            else:
+                print(f"  ! Download failed after {retries} attempts: {e}")
+    raise RuntimeError(f"Could not download {url}: {last_err}")
 
 
 def _normalize(row: dict, act: dict) -> dict:
@@ -97,7 +111,11 @@ def _normalize(row: dict, act: dict) -> dict:
 def ingest_civictech(db: IngestDB) -> None:
     for act in ACTS:
         print(f"→ Ingesting {act['short_name']} from civictech…")
-        rows = _download(act["url"])
+        try:
+            rows = _download(act["url"])
+        except Exception as e:
+            print(f"  ! Failed to download {act['short_name']}: {e}; skipping.")
+            continue
         act_id = db.upsert_act(
             short_name=act["short_name"],
             full_name=act["full_name"],

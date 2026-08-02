@@ -21,6 +21,7 @@ create table if not exists acts (
     source_license text,
     as_of         date
 );
+create index if not exists acts_kind_year_idx on acts (kind, year nulls last, short_name);
 
 -- Chapters --------------------------------------------------------------------
 create table if not exists chapters (
@@ -47,8 +48,9 @@ create table if not exists sections (
     unique (act_id, number)
 );
 create index if not exists sections_search_idx on sections using gin (search_tsv);
-create index if not exists sections_act_number_idx on sections (act_id, number);
-create index if not exists sections_act_id_idx on sections (act_id);
+-- The unique (act_id, number) constraint already creates a btree index that
+-- covers act_id-prefix lookups, so we no longer add the redundant
+-- sections_act_number_idx / sections_act_id_idx.
 
 -- Constitution articles -------------------------------------------------------
 create table if not exists articles (
@@ -62,7 +64,7 @@ create table if not exists articles (
     ) stored
 );
 create index if not exists articles_search_idx on articles using gin (search_tsv);
-create index if not exists articles_number_idx on articles (number);
+-- The unique constraint on number already indexes it; no separate articles_number_idx.
 
 -- Constitution schedules ------------------------------------------------------
 create table if not exists schedules (
@@ -101,6 +103,8 @@ create table if not exists judgments (
 );
 create index if not exists judgments_search_idx on judgments using gin (search_tsv);
 create unique index if not exists judgments_case_name_idx on judgments (case_name);
+create index if not exists judgments_citation_idx on judgments (citation) where citation is not null;
+create index if not exists judgments_date_idx on judgments (date desc) where date is not null;
 
 -- Cross-references ------------------------------------------------------------
 -- Stores relationships like "IPC s.302 corresponds_to BNS s.103",
@@ -134,15 +138,35 @@ create table if not exists judgment_embeddings (
     embedding   vector(1024)
 );
 
--- ivfflat indexes need to be built after data is loaded; we create them with
--- an explicit list count. For small corpora (<10k rows) brute-force scan is
--- also fine — these indexes are a bonus, not a requirement.
-create index if not exists section_embeddings_idx
-    on section_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
-create index if not exists article_embeddings_idx
-    on article_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
-create index if not exists judgment_embeddings_idx
-    on judgment_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+-- HNSW indexes (pgvector >= 0.5.0). HNSW does not need pre-training on existing
+-- data the way ivfflat does, so it's safe to create before loading data and
+-- gives good recall at any corpus size. For very small corpora (<10k rows)
+-- brute-force is also fine — these indexes are a bonus, not a requirement.
+-- Fall back to ivfflat if HNSW is unavailable (older pgvector).
+do $$
+begin
+    begin
+        create index if not exists section_embeddings_idx
+            on section_embeddings using hnsw (embedding vector_cosine_ops);
+    exception when others then
+        create index if not exists section_embeddings_idx
+            on section_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+    end;
+    begin
+        create index if not exists article_embeddings_idx
+            on article_embeddings using hnsw (embedding vector_cosine_ops);
+    exception when others then
+        create index if not exists article_embeddings_idx
+            on article_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+    end;
+    begin
+        create index if not exists judgment_embeddings_idx
+            on judgment_embeddings using hnsw (embedding vector_cosine_ops);
+    exception when others then
+        create index if not exists judgment_embeddings_idx
+            on judgment_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+    end;
+end $$;
 
 -- Helpful view: unified "documents" for semantic search ----------------------
 -- Makes it easy to query across sections + articles + judgments in one go.

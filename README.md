@@ -6,7 +6,7 @@ A monorepo for Indian-law tooling. The first component is an MCP server; other t
 
 | Path | Status | Description |
 |---|---|---|
-| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 6 tools and 5 resource templates over HTTP. Deployable to Railway via Docker. |
+| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 17 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
 
 See [`mcp/README.md`](mcp/README.md) for setup, deployment, and client-configuration instructions.
 

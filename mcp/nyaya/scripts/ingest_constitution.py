@@ -29,15 +29,23 @@ def _load_articles() -> list[dict]:
             "indianconstitution not installed. Install with: pip install 'nyaya[ingest]'"
         ) from e
 
-    import tempfile, os
+    import os
+    import tempfile
+
     c = Constitution()
     tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w", encoding="utf-8")
     tmp_path = tmp.name
     tmp.close()
-    c.export("json", tmp_path)
-    with open(tmp_path, encoding="utf-8") as f:
-        data = json.load(f)
-    os.unlink(tmp_path)
+    try:
+        c.export("json", tmp_path)
+        with open(tmp_path, encoding="utf-8") as f:
+            data = json.load(f)
+    finally:
+        # Ensure the temp file is cleaned up even if export/json.load raises.
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
     if isinstance(data, dict) and "articles" in data:
         data = data["articles"]
     return data

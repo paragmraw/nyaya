@@ -41,7 +41,7 @@ PDFS: list[dict] = [
         "full_name": "The Bharatiya Sakshya Adhiniyam, 2023",
         "year": 2023,
         "kind": "civil",
-        "url": "https://prsindia.org/files/bills_acts/acts_parliament/2023/The Bharatiya Sakshya Bill, 2023.pdf",
+        "url": "https://prsindia.org/files/bills_acts/acts_parliament/2023/The Bharatiya Sakshya Adhiniyam, 2023.pdf",
         "citation": "Act 47 of 2023",
     },
 ]
@@ -75,7 +75,15 @@ def _parse_sections(text: str) -> list[dict]:
     sections: list[dict] = []
     current: dict | None = None
     current_chapter: tuple[int, str] | None = None
-    roman_to_int = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12}
+    # BNS has 21 chapters; the previous map only covered I-XII, silently
+    # dropping chapters 13-21. Extend to XXI (and beyond via computation).
+    roman_to_int = {
+        "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7,
+        "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12, "XIII": 13,
+        "XIV": 14, "XV": 15, "XVI": 16, "XVII": 17, "XVIII": 18,
+        "XIX": 19, "XX": 20, "XXI": 21, "XXII": 22, "XXIII": 23,
+        "XXIV": 24, "XXV": 25,
+    }
 
     for line in lines:
         stripped = line.strip()

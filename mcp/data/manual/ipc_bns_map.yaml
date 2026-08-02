@@ -7,31 +7,260 @@
 # `kind` is "corresponds_to" by default; use "repeals" where the IPC section
 # was dropped rather than re-enacted.
 #
-# This is a partial starter list — extend it as you verify more sections.
+# This is a curated list covering the most-referenced sections. Sections not
+# listed here will still be discoverable via the text-scan cross-references
+# (build_cross_refs._scan_text_refs).
 
 mappings:
-  # Offences against the body
-  - { ipc: "302", bns: "103", kind: "corresponds_to" }   # Murder
-  - { ipc: "304", bns: "106", kind: "corresponds_to" }   # Culpable homicide
-  - { ipc: "304A", bns: "106", kind: "corresponds_to" }  # Causing death by negligence
-  - { ipc: "304B", bns: "80", kind: "corresponds_to" }   # Dowry death
-  - { ipc: "307", bns: "109", kind: "corresponds_to" }   # Attempt to murder
-  - { ipc: "354", bns: "74", kind: "corresponds_to" }    # Assault to outrage modesty
-  - { ipc: "354A", bns: "74", kind: "corresponds_to" }   # Sexual harassment
-  - { ipc: "376", bns: "64", kind: "corresponds_to" }    # Rape
-  - { ipc: "377", bns: "—", kind: "repeals" }            # Unnatural offences (decriminalised for consensual adults)
-
-  # Offences against property
-  - { ipc: "378", bns: "303", kind: "corresponds_to" }   # Theft
-  - { ipc: "392", bns: "309", kind: "corresponds_to" }   # Robbery
-  - { ipc: "395", bns: "310", kind: "corresponds_to" }   # Dacoity
-  - { ipc: "415", bns: "316", kind: "corresponds_to" }   # Cheating
-  - { ipc: "420", bns: "318", kind: "corresponds_to" }   # Cheating and dishonestly inducing delivery of property
-
-  # Offences against the state
-  - { ipc: "124A", bns: "152", kind: "corresponds_to" }  # Sedition (re-enacted with modifications)
-
-  # General provisions
+  # --- General provisions ---
   - { ipc: "1", bns: "1", kind: "corresponds_to" }       # Title and extent
   - { ipc: "2", bns: "2", kind: "corresponds_to" }       # Punishment of offences committed within India
   - { ipc: "3", bns: "3", kind: "corresponds_to" }       # Punishment of offences committed beyond India
+  - { ipc: "4", bns: "4", kind: "corresponds_to" }       # Extension of Code to extraterritorial offences
+  - { ipc: "5", bns: "5", kind: "corresponds_to" }       # Certain laws not affected by this Sanhita
+  - { ipc: "6", bns: "6", kind: "corresponds_to" }       # Definitions in the Code
+  - { ipc: "7", bns: "7", kind: "corresponds_to" }       # Sense of expression once explained
+  - { ipc: "8", bns: "8", kind: "corresponds_to" }       # Gender
+  - { ipc: "9", bns: "9", kind: "corresponds_to" }       # Number
+  - { ipc: "10", bns: "10", kind: "corresponds_to" }     # Man, woman
+  - { ipc: "11", bns: "11", kind: "corresponds_to" }     # Person
+  - { ipc: "12", bns: "12", kind: "corresponds_to" }     # Public
+  - { ipc: "13", bns: "14", kind: "corresponds_to" }     # Queen (-> Government of India)
+  - { ipc: "14", bns: "15", kind: "corresponds_to" }     # Servant of Government
+  - { ipc: "17", bns: "17", kind: "corresponds_to" }     # Good faith
+  - { ipc: "18", bns: "18", kind: "corresponds_to" }     # India
+  - { ipc: "19", bns: "19", kind: "corresponds_to" }     # Judge
+  - { ipc: "20", bns: "20", kind: "corresponds_to" }     # Court of Justice
+  - { ipc: "21", bns: "21", kind: "corresponds_to" }     # Public servant
+  - { ipc: "22", bns: "22", kind: "corresponds_to" }     # Movable property
+  - { ipc: "23", bns: "23", kind: "corresponds_to" }     # Wrongful gain
+  - { ipc: "24", bns: "24", kind: "corresponds_to" }     # Dishonestly
+  - { ipc: "25", bns: "25", kind: "corresponds_to" }     # Fraudulently
+  - { ipc: "26", bns: "26", kind: "corresponds_to" }     # Reason to believe
+  - { ipc: "27", bns: "27", kind: "corresponds_to" }     # Property in possession of spouse
+  - { ipc: "28", bns: "28", kind: "corresponds_to" }     # Counterfeit
+  - { ipc: "29", bns: "29", kind: "corresponds_to" }     # Document
+  - { ipc: "30", bns: "30", kind: "corresponds_to" }     # Valuable security
+  - { ipc: "31", bns: "31", kind: "corresponds_to" }     # A will
+  - { ipc: "32", bns: "32", kind: "corresponds_to" }     # Words referring to acts include illegal omissions
+  - { ipc: "33", bns: "33", kind: "corresponds_to" }     # Omission
+  - { ipc: "34", bns: "34", kind: "corresponds_to" }     # Acts done by several persons in furtherance of common intention
+  - { ipc: "35", bns: "35", kind: "corresponds_to" }     # When criminal act is done with criminal knowledge or intention
+  - { ipc: "36", bns: "36", kind: "corresponds_to" }     # Effect caused partly by act and partly by omission
+  - { ipc: "37", bns: "37", kind: "corresponds_to" }     # Cooperation by doing one of several acts
+  - { ipc: "38", bns: "38", kind: "corresponds_to" }     # Persons concerned in criminal act may be guilty of different offences
+  - { ipc: "39", bns: "39", kind: "corresponds_to" }     # Voluntarily
+  - { ipc: "40", bns: "40", kind: "corresponds_to" }     # Offence
+  - { ipc: "41", bns: "41", kind: "corresponds_to" }     # Special law
+  - { ipc: "42", bns: "42", kind: "corresponds_to" }     # Local law
+  - { ipc: "43", bns: "43", kind: "corresponds_to" }     # Illegal, legally bound to do
+  - { ipc: "44", bns: "44", kind: "corresponds_to" }     # Injury
+  - { ipc: "45", bns: "45", kind: "corresponds_to" }     # Life
+  - { ipc: "46", bns: "46", kind: "corresponds_to" }     # Death
+  - { ipc: "47", bns: "47", kind: "corresponds_to" }     # Animal
+  - { ipc: "48", bns: "48", kind: "corresponds_to" }     # Vessel
+  - { ipc: "49", bns: "49", kind: "corresponds_to" }     # Year, month
+  - { ipc: "50", bns: "50", kind: "corresponds_to" }     # Section
+  - { ipc: "51", bns: "51", kind: "corresponds_to" }     # Oath
+  - { ipc: "52", bns: "52", kind: "corresponds_to" }     # Good faith (illustrations)
+
+  # --- Punishments ---
+  - { ipc: "53", bns: "117", kind: "corresponds_to" }    # Punishments
+  - { ipc: "53A", bns: "118", kind: "corresponds_to" }   # Solitary confinement
+  - { ipc: "54", bns: "119", kind: "corresponds_to" }   # Commutation of death sentence
+  - { ipc: "55", bns: "120", kind: "corresponds_to" }   # Commutation of life imprisonment
+  - { ipc: "55A", bns: "121", kind: "corresponds_to" }  # Commutation of sentence
+  - { ipc: "56", bns: "122", kind: "corresponds_to" }   # Sentence of forfeited property
+  - { ipc: "57", bns: "123", kind: "corresponds_to" }   # Fraction of terms of imprisonment
+  - { ipc: "58", bns: "124", kind: "corresponds_to" }   # Imprisonment for life (whole remaining life)
+  - { ipc: "59", bns: "125", kind: "corresponds_to" }   # Sentence of imprisonment in solitary confinement
+  - { ipc: "60", bns: "126", kind: "corresponds_to" }   # Sentence may be wholly or partly rigorous or simple
+  - { ipc: "61", bns: "127", kind: "corresponds_to" }   # Sentence of simple imprisonment
+  - { ipc: "62", bns: "128", kind: "corresponds_to" }   # Sentence of imprisonment for non-payment of fine
+  - { ipc: "63", bns: "129", kind: "corresponds_to" }   # Amount of fine
+  - { ipc: "64", bns: "130", kind: "corresponds_to" }   # Sentence of imprisonment for non-payment of fine
+  - { ipc: "65", bns: "131", kind: "corresponds_to" }   # Limit of imprisonment for non-payment of fine
+  - { ipc: "66", bns: "132", kind: "corresponds_to" }   # Description of imprisonment for non-payment of fine
+  - { ipc: "67", bns: "133", kind: "corresponds_to" }   # Imprisonment for non-payment of fine
+  - { ipc: "68", bns: "134", kind: "corresponds_to" }   # Imprisonment to terminate on payment of fine
+  - { ipc: "69", bns: "135", kind: "corresponds_to" }   # Termination of imprisonment on payment of proportional fine
+  - { ipc: "70", bns: "136", kind: "corresponds_to" }   # Fine levied within six years
+  - { ipc: "71", bns: "137", kind: "corresponds_to" }   # Sentence of imprisonment may be suspended
+
+  # --- Offences against the body ---
+  - { ipc: "299", bns: "100", kind: "corresponds_to" }  # Culpable homicide
+  - { ipc: "300", bns: "101", kind: "corresponds_to" }  # Murder
+  - { ipc: "301", bns: "102", kind: "corresponds_to" }  # Culpable homicide by causing death of person other than intended
+  - { ipc: "302", bns: "103", kind: "corresponds_to" }  # Punishment for murder
+  - { ipc: "304", bns: "106", kind: "corresponds_to" }  # Punishment for culpable homicide
+  - { ipc: "304A", bns: "106", kind: "corresponds_to" } # Causing death by negligence
+  - { ipc: "304B", bns: "80", kind: "corresponds_to" }  # Dowry death
+  - { ipc: "305", bns: "104", kind: "corresponds_to" }  # Abetment of suicide of child or insane person
+  - { ipc: "306", bns: "105", kind: "corresponds_to" }  # Abetment of suicide
+  - { ipc: "307", bns: "109", kind: "corresponds_to" }  # Attempt to murder
+  - { ipc: "308", bns: "110", kind: "corresponds_to" }  # Attempt to commit culpable homicide
+  - { ipc: "309", bns: "226", kind: "corresponds_to" }  # Attempt to commit suicide (decriminalized, moved to mental healthcare)
+  - { ipc: "318", bns: "94", kind: "corresponds_to" }   # Concealment of birth by secret disposal of dead body
+  - { ipc: "319", bns: "111", kind: "corresponds_to" }  # Hurt
+  - { ipc: "320", bns: "112", kind: "corresponds_to" }  # Grievous hurt
+  - { ipc: "321", bns: "113", kind: "corresponds_to" }  # Voluntarily causing hurt
+  - { ipc: "322", bns: "114", kind: "corresponds_to" }  # Voluntarily causing grievous hurt
+  - { ipc: "323", bns: "117", kind: "corresponds_to" }  # Punishment for voluntarily causing hurt
+  - { ipc: "324", bns: "118", kind: "corresponds_to" }  # Voluntarily causing hurt by dangerous weapons
+  - { ipc: "325", bns: "118", kind: "corresponds_to" }  # Punishment for voluntarily causing grievous hurt
+  - { ipc: "326", bns: "118", kind: "corresponds_to" }  # Voluntarily causing grievous hurt by dangerous weapons
+  - { ipc: "328", bns: "120", kind: "corresponds_to" }  # Causing hurt by means of poison
+  - { ipc: "351", bns: "122", kind: "corresponds_to" }  # Assault (new standalone)
+  - { ipc: "352", bns: "122", kind: "corresponds_to" }  # Punishment for assault
+  - { ipc: "354", bns: "74", kind: "corresponds_to" }   # Assault to outrage modesty
+  - { ipc: "354A", bns: "74", kind: "corresponds_to" }  # Sexual harassment
+  - { ipc: "354B", bns: "75", kind: "corresponds_to" }  # Assault with intent to disrobe
+  - { ipc: "354C", bns: "76", kind: "corresponds_to" }  # Voyeurism
+  - { ipc: "354D", bns: "77", kind: "corresponds_to" }  # Stalking
+  - { ipc: "370", bns: "138", kind: "corresponds_to" }  # Trafficking of persons
+  - { ipc: "372", bns: "138", kind: "corresponds_to" }  # Exploitation of a trafficked person
+  - { ipc: "376", bns: "64", kind: "corresponds_to" }    # Rape
+  - { ipc: "376A", bns: "66", kind: "corresponds_to" }  # Punishment for causing death or persistent vegetative state
+  - { ipc: "376B", bns: "67", kind: "corresponds_to" }  # Sexual intercourse by husband during separation
+  - { ipc: "376C", bns: "68", kind: "corresponds_to" }  # Sexual intercourse by person in authority
+  - { ipc: "376D", bns: "69", kind: "corresponds_to" }  # Gang rape
+  - { ipc: "376E", bns: "70", kind: "corresponds_to" }  # Punishment for repeat rape offenders
+  - { ipc: "377", bns: "—", kind: "repeals" }            # Unnatural offences (decriminalised for consensual adults)
+
+  # --- Offences against property ---
+  - { ipc: "378", bns: "303", kind: "corresponds_to" }   # Theft
+  - { ipc: "379", bns: "303", kind: "corresponds_to" }   # Punishment for theft
+  - { ipc: "380", bns: "303", kind: "corresponds_to" }   # Theft in dwelling house
+  - { ipc: "381", bns: "303", kind: "corresponds_to" }   # Theft by clerk/servant
+  - { ipc: "382", bns: "303", kind: "corresponds_to" }   # Theft after preparation for death/hurt/restraint
+  - { ipc: "383", bns: "308", kind: "corresponds_to" }   # Extortion
+  - { ipc: "384", bns: "308", kind: "corresponds_to" }   # Punishment for extortion
+  - { ipc: "385", bns: "308", kind: "corresponds_to" }   # Putting person in fear of injury to commit extortion
+  - { ipc: "386", bns: "308", kind: "corresponds_to" }   # Extortion by putting in fear of death/grievous hurt
+  - { ipc: "387", bns: "308", kind: "corresponds_to" }   # Putting person in fear of death/grievous hurt to commit extortion
+  - { ipc: "390", bns: "309", kind: "corresponds_to" }   # Robbery
+  - { ipc: "392", bns: "309", kind: "corresponds_to" }   # Punishment for robbery
+  - { ipc: "393", bns: "309", kind: "corresponds_to" }   # Attempt to commit robbery
+  - { ipc: "394", bns: "309", kind: "corresponds_to" }   # Voluntarily causing hurt in committing robbery
+  - { ipc: "395", bns: "310", kind: "corresponds_to" }   # Punishment for dacoity
+  - { ipc: "396", bns: "310", kind: "corresponds_to" }   # Dacoity with murder
+  - { ipc: "397", bns: "310", kind: "corresponds_to" }   # Robbery or dacoity with attempt to cause death/hurt
+  - { ipc: "399", bns: "311", kind: "corresponds_to" }   # Making preparation to commit dacoity
+  - { ipc: "400", bns: "311", kind: "corresponds_to" }   # Punishment for belonging to gang of dacoits
+  - { ipc: "405", bns: "314", kind: "corresponds_to" }   # Criminal breach of trust
+  - { ipc: "406", bns: "314", kind: "corresponds_to" }   # Punishment for criminal breach of trust
+  - { ipc: "415", bns: "316", kind: "corresponds_to" }   # Cheating
+  - { ipc: "417", bns: "316", kind: "corresponds_to" }   # Punishment for cheating
+  - { ipc: "418", bns: "316", kind: "corresponds_to" }   # Cheating with knowledge that wrongful loss may ensue
+  - { ipc: "419", bns: "316", kind: "corresponds_to" }   # Punishment for cheating by personation
+  - { ipc: "420", bns: "318", kind: "corresponds_to" }   # Cheating and dishonestly inducing delivery of property
+  - { ipc: "425", bns: "324", kind: "corresponds_to" }   # Mischief
+  - { ipc: "426", bns: "324", kind: "corresponds_to" }   # Punishment for mischief
+  - { ipc: "430", bns: "325", kind: "corresponds_to" }   # Mischief by injury to waterworks
+  - { ipc: "435", bns: "325", kind: "corresponds_to" }   # Mischief by fire or explosive substance
+  - { ipc: "436", bns: "325", kind: "corresponds_to" }   # Mischief by fire with intent to destroy house
+  - { ipc: "441", bns: "329", kind: "corresponds_to" }   # Criminal trespass
+  - { ipc: "442", bns: "329", kind: "corresponds_to" }   # Punishment for house-trespass
+  - { ipc: "447", bns: "329", kind: "corresponds_to" }   # Punishment for criminal trespass
+  - { ipc: "448", bns: "329", kind: "corresponds_to" }   # Punishment for house-trespass
+  - { ipc: "449", bns: "329", kind: "corresponds_to" }   # House-trespass in order to commit offence punishable with death
+  - { ipc: "450", bns: "329", kind: "corresponds_to" }   # House-trespass in order to commit offence punishable with imprisonment for life
+  - { ipc: "451", bns: "329", kind: "corresponds_to" }   # House-trespass in order to commit offence
+  - { ipc: "452", bns: "329", kind: "corresponds_to" }   # House-trespass after preparation for hurt/assault/wrongful restraint
+  - { ipc: "454", bns: "330", kind: "corresponds_to" }   # Lurking house-trespass or house-breaking by night
+  - { ipc: "457", bns: "330", kind: "corresponds_to" }   # Lurking house-trespass by night
+  - { ipc: "461", bns: "331", kind: "corresponds_to" }   # Dishonestly breaking open receptacle containing property
+  - { ipc: "462", bns: "331", kind: "corresponds_to" }   # Punishment for same
+  - { ipc: "463", bns: "336", kind: "corresponds_to" }   # Forgery
+  - { ipc: "464", bns: "336", kind: "corresponds_to" }   # Making a false document
+  - { ipc: "465", bns: "336", kind: "corresponds_to" }   # Punishment for forgery
+  - { ipc: "466", bns: "337", kind: "corresponds_to" }   # Forgery of record of court or public register
+  - { ipc: "467", bns: "337", kind: "corresponds_to" }   # Forgery of valuable security or will
+  - { ipc: "468", bns: "337", kind: "corresponds_to" }   # Forgery for purpose of cheating
+  - { ipc: "469", bns: "337", kind: "corresponds_to" }   # Forgery for purpose of harming reputation
+  - { ipc: "470", bns: "336", kind: "corresponds_to" }   # Forged document
+  - { ipc: "471", bns: "336", kind: "corresponds_to" }   # Using as genuine a forged document
+  - { ipc: "472", bns: "337", kind: "corresponds_to" }   # Making or marking counterfeit currency note or bank-note
+  - { ipc: "477", bns: "337", kind: "corresponds_to" }   # Fraudulent cancellation, destruction of will
+
+  # --- Offences against the state ---
+  - { ipc: "121", bns: "147", kind: "corresponds_to" }   # Waging war against the Government of India
+  - { ipc: "121A", bns: "148", kind: "corresponds_to" } # Conspiracy to commit offences punishable by s.121
+  - { ipc: "122", bns: "147", kind: "corresponds_to" }   # Collecting arms for waging war
+  - { ipc: "123", bns: "148", kind: "corresponds_to" }   # Concealing with intent to facilitate design to wage war
+  - { ipc: "124", bns: "149", kind: "corresponds_to" }   # Assaulting President/Governor with intent to compel exercise of power
+  - { ipc: "124A", bns: "152", kind: "corresponds_to" } # Sedition (re-enacted with modifications as "unlawful activities")
+  - { ipc: "125", bns: "150", kind: "corresponds_to" }   # Waging war against any Asiatic power in alliance with India
+  - { ipc: "130", bns: "151", kind: "corresponds_to" }   # Aiding escape of prisoner of state or war
+  - { ipc: "131", bns: "151", kind: "corresponds_to" }   # Abetting mutiny
+  - { ipc: "143", bns: "187", kind: "corresponds_to" }   # Punishment for unlawful assembly
+  - { ipc: "144", bns: "187", kind: "corresponds_to" }   # Joining unlawful assembly armed with deadly weapon
+  - { ipc: "147", bns: "186", kind: "corresponds_to" }   # Punishment for rioting
+  - { ipc: "148", bns: "186", kind: "corresponds_to" }   # Rioting armed with deadly weapon
+
+  # --- Offences against public tranquility ---
+  - { ipc: "153A", bns: "196", kind: "corresponds_to" }  # Promoting enmity between different groups
+  - { ipc: "153B", bns: "197", kind: "corresponds_to" }  # Imputations prejudicial to national integration
+  - { ipc: "295A", bns: "299", kind: "corresponds_to" } # Deliberate and malicious acts intended to outrage religious feelings
+  - { ipc: "298", bns: "299", kind: "corresponds_to" }  # Uttering words with deliberate intent to wound religious feelings
+
+  # --- Criminal conspiracy / abetment ---
+  - { ipc: "107", bns: "45", kind: "corresponds_to" }   # Abetment
+  - { ipc: "108", bns: "46", kind: "corresponds_to" }   # Abettor
+  - { ipc: "109", bns: "47", kind: "corresponds_to" }   # Punishment of abettor when act abetted is done
+  - { ipc: "110", bns: "48", kind: "corresponds_to" }   # Punishment of abettor when one act abetted and different act done
+  - { ipc: "111", bns: "49", kind: "corresponds_to" }   # Liability of abettor when act abetted is done by different person
+  - { ipc: "112", bns: "50", kind: "corresponds_to" }   # Abettor when one act abetted and different act done
+  - { ipc: "113", bns: "51", kind: "corresponds_to" }   # Liability of abettor for effect caused by act abetted different from intended
+  - { ipc: "114", bns: "52", kind: "corresponds_to" }   # Abettor present when offence is committed
+  - { ipc: "115", bns: "53", kind: "corresponds_to" }   # Abetment of offence punishable with death or imprisonment for life
+  - { ipc: "116", bns: "54", kind: "corresponds_to" }   # Abetment of offence punishable with imprisonment
+  - { ipc: "117", bns: "55", kind: "corresponds_to" }   # Abetting commission of offence by the public or by more than ten persons
+  - { ipc: "118", bns: "56", kind: "corresponds_to" }   # Concealing design to commit offence punishable with death or imprisonment for life
+  - { ipc: "119", bns: "57", kind: "corresponds_to" }   # Public servant concealing design to commit offence
+  - { ipc: "120A", bns: "61", kind: "corresponds_to" } # Criminal conspiracy
+  - { ipc: "120B", bns: "61", kind: "corresponds_to" }  # Punishment for criminal conspiracy
+
+  # --- Marriage / cruelty ---
+  - { ipc: "304B", bns: "80", kind: "corresponds_to" }  # Dowry death
+  - { ipc: "354", bns: "74", kind: "corresponds_to" }   # Assault to outrage modesty
+  - { ipc: "498A", bns: "85", kind: "corresponds_to" }  # Cruelty by husband or relatives
+
+  # --- Kidnapping / abduction ---
+  - { ipc: "363", bns: "137", kind: "corresponds_to" }  # Punishment for kidnapping
+  - { ipc: "364", bns: "137", kind: "corresponds_to" }  # Kidnapping or abducting in order to murder
+  - { ipc: "364A", bns: "140", kind: "corresponds_to" } # Kidnapping for ransom
+  - { ipc: "366", bns: "138", kind: "corresponds_to" }  # Kidnapping or abducting woman to compel marriage
+  - { ipc: "366A", bns: "138", kind: "corresponds_to" } # Procuration of minor girl
+  - { ipc: "366B", bns: "138", kind: "corresponds_to" } # Importation of girl from foreign country
+  - { ipc: "367", bns: "137", kind: "corresponds_to" }  # Kidnapping or abducting to subject to slavery
+  - { ipc: "368", bns: "137", kind: "corresponds_to" }  # Wrongfully concealing or keeping in confinement kidnapped/abducted person
+
+  # --- Forgery of coins / Government stamps ---
+  - { ipc: "230", bns: "178", kind: "corresponds_to" }  # Coin defined
+  - { ipc: "231", bns: "178", kind: "corresponds_to" }  # Counterfeiting coin
+  - { ipc: "232", bns: "178", kind: "corresponds_to" }  # Counterfeiting Indian coin
+  - { ipc: "233", bns: "178", kind: "corresponds_to" }  # Making or selling instrument for counterfeiting coin
+  - { ipc: "235", bns: "178", kind: "corresponds_to" }  # Possession of instrument for counterfeiting coin
+  - { ipc: "242", bns: "178", kind: "corresponds_to" }  # Possession of counterfeit coin by person who knew it to be counterfeit
+  - { ipc: "243", bns: "178", kind: "corresponds_to" }  # Possession of Indian counterfeit coin by person who knew it to be counterfeit
+  - { ipc: "249", bns: "178", kind: "corresponds_to" }  # Altering appearance of coin with intent that it may pass as coin of different description
+
+  # --- Criminal force / assault ---
+  - { ipc: "349", bns: "122", kind: "corresponds_to" }  # Force
+  - { ipc: "350", bns: "122", kind: "corresponds_to" }  # Criminal force
+  - { ipc: "351", bns: "122", kind: "corresponds_to" }  # Assault
+  - { ipc: "352", bns: "122", kind: "corresponds_to" }  # Punishment for assault or criminal force otherwise than on grave provocation
+
+  # --- Defamation ---
+  - { ipc: "499", bns: "356", kind: "corresponds_to" }  # Defamation
+  - { ipc: "500", bns: "356", kind: "corresponds_to" }  # Punishment for defamation
+
+  # --- Criminal intimidation / insult ---
+  - { ipc: "503", bns: "351", kind: "corresponds_to" }  # Criminal intimidation
+  - { ipc: "504", bns: "351", kind: "corresponds_to" }  # Intentional insult with intent to provoke breach of peace
+  - { ipc: "506", bns: "351", kind: "corresponds_to" }  # Punishment for criminal intimidation
+  - { ipc: "509", bns: "75", kind: "corresponds_to" }   # Word, gesture or act intended to insult modesty of woman
+
+  # --- Attempt ---
+  - { ipc: "511", bns: "351", kind: "corresponds_to" }  # Attempt to commit offence

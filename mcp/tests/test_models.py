@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+from pydantic import ValidationError
+
 from nyaya.models import (
     Act,
+    Amendment,
     Article,
     CrossRef,
     Judgment,
@@ -22,6 +26,11 @@ def test_act_basic():
     assert a.short_name == "IPC"
     assert a.kind == "criminal"
     assert a.source_license is None
+
+
+def test_act_kind_invalid_rejected():
+    with pytest.raises(ValidationError):
+        Act(short_name="X", full_name="Y", kind="bogus", source="t")
 
 
 def test_section_inherits_provenance():
@@ -48,16 +57,19 @@ def test_article_round_trip():
 
 def test_cross_ref_kind_constrained():
     CrossRef(from_act="IPC", from_section="302", to_act="BNS", to_section="103", kind="corresponds_to")
-    try:
+    with pytest.raises(ValidationError):
         CrossRef(from_act="IPC", from_section="302", to_act="BNS", to_section="103", kind="bogus")
-        assert False, "should have rejected invalid kind"
-    except Exception:
-        pass  # pydantic ValidationError
 
 
 def test_search_response():
     r = SearchResponse(query="murder", total=1, results=[SearchResult(act="IPC", ref="s. 302", snippet="…", rank=0.9)])
     assert r.results[0].act == "IPC"
+    assert r.source == "nyaya"
+
+
+def test_search_result_kind():
+    r = SearchResult(act="IPC", ref="s. 302", snippet="…", rank=0.9, kind="section")
+    assert r.kind == "section"
 
 
 def test_judgment_defaults():
@@ -66,6 +78,18 @@ def test_judgment_defaults():
     assert j.summary is None
 
 
-def test_schedule_and_amendment():
+def test_schedule():
     s = Schedule(number=1, title="States", text="…", source="x")
     assert s.number == 1
+
+
+def test_amendment():
+    a = Amendment(number=42, year=1976, title="The Constitution (Forty-second Amendment) Act", source="PRS")
+    assert a.number == 42
+    assert a.year == 1976
+
+
+def test_cross_ref_list_direction():
+    from nyaya.models import CrossRefList
+    crl = CrossRefList(from_act="IPC", from_section="302", references=[], direction="both")
+    assert crl.direction == "both"
