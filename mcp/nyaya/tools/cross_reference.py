@@ -18,7 +18,8 @@ def register(mcp) -> None:
             "relationships. Act names and section numbers are normalized. Use this when the "
             "user asks 'what replaced IPC 302?' or 'what references Article 21?'. The "
             "``direction`` field on the response tells you whether refs are outgoing, "
-            "incoming, or both."
+            "incoming, or both. Use ``direction='from'`` for outgoing-only or "
+            "``direction='to'`` for incoming-only."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Cross-reference a section"},
     )
@@ -31,9 +32,13 @@ def register(mcp) -> None:
             act: Act short name or alias, e.g. 'IPC', 'Constitution'.
             section: Section or article number, e.g. '302', '21'.
             direction: 'both' (default), 'from' (outgoing only), or 'to' (incoming only).
+                Invalid values raise a validation error.
         """
         if direction not in ("both", "from", "to"):
-            direction = "both"
+            from ..exceptions import SearchError
+            raise SearchError(
+                f"direction must be 'both', 'from', or 'to', got {direction!r}.",
+            )
         refs = db.get_cross_refs(act, section, direction=direction)
         return CrossRefList(
             from_act=act, from_section=section, references=refs, direction=direction,

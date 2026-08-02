@@ -137,3 +137,39 @@ async def test_schedule_template(fake_db):
     res = await app.get_resource_template("schedule://{number}")
     out = json.loads(res.fn(number="1"))
     assert out["number"] == 1
+
+
+async def test_amendment_template_missing(fake_db):
+    app = _make_app(fake_db)
+    res = await app.get_resource_template("amendment://{number}")
+    with pytest.raises(NotFound):
+        res.fn(number="99")
+
+
+async def test_amendment_template_non_integer(fake_db):
+    app = _make_app(fake_db)
+    res = await app.get_resource_template("amendment://{number}")
+    with pytest.raises(NotFound):
+        res.fn(number="abc")
+
+
+async def test_schedule_template_missing(fake_db):
+    app = _make_app(fake_db)
+    res = await app.get_resource_template("schedule://{number}")
+    with pytest.raises(NotFound):
+        res.fn(number="99")
+
+
+async def test_schedule_template_non_integer(fake_db):
+    app = _make_app(fake_db)
+    res = await app.get_resource_template("schedule://{number}")
+    with pytest.raises(NotFound):
+        res.fn(number="abc")
+
+
+async def test_corpus_as_of_value(fake_db):
+    """corpus:// as_of is the actual derived value, not just non-None."""
+    app = _make_app(fake_db)
+    res = await app.get_resource("corpus://")
+    out = json.loads(res.fn())
+    assert out["as_of"] == "2026-07-01"  # isoformat of the stub's corpus_as_of

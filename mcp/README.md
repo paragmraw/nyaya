@@ -6,7 +6,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 
 ## What it gives you
 
-- **17 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters` / `list_sections` / `list_articles`, `cross_reference` (bidirectional), `semantic_query`, `get_judgment`, `search_judgments`, `get_sections_by_range`, `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment`, `define`
+- **24 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `semantic_query`, `get_judgment`, `search_judgments`, `get_sections_by_range`, `get_chapter`, `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment` / `get_amendments_for_article`, `get_definition`, `corpus_stats`, `hybrid_search`, `resolve_citation`, `search_by_kind`
 - **13 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
 - **Full-text search** via Postgres `tsvector` + GIN indexes, with true total counts and `offset` pagination
 - **Semantic search** via `pgvector` + local `fastembed` embeddings (BAAI/bge-large-en-v1.5, 1024-d) — available in local dev and the slim-based image; **disabled in the Alpine image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants)). CUDAExecutionProvider is used on NVIDIA GPUs with automatic CPU fallback.
@@ -204,23 +204,30 @@ asyncio.run(main())
 
 | Tool | Args | Returns |
 |---|---|---|
-| `search_law` | `query: str`, `act: str?`, `limit: int=10`, `offset: int=0` | FTS hits with true total + pagination |
+| `search_law` | `query: str`, `act: str?`, `limit: int=10`, `offset: int=0` | FTS hits with true total + pagination (global offset across corpora) |
 | `get_section` | `act: str`, `section: str` | Full section text + provenance |
 | `get_article` | `article: str` | Constitution article + provenance |
 | `list_acts` | — | All acts in the corpus |
 | `list_chapters` | `act: str` | Chapters of an act |
-| `list_sections` | `act: str`, `chapter: int?`, `limit: int=100`, `offset: int=0` | Sections of an act (paginated) |
-| `list_articles` | `part: str?`, `limit: int=100`, `offset: int=0` | Constitution articles by Part |
+| `list_sections` | `act: str`, `chapter: int?`, `limit: int=100`, `offset: int=0` | Sections of an act (paginated, with total) |
+| `list_articles` | `part: str?`, `limit: int=100`, `offset: int=0` | Constitution articles by Part (paginated, with total) |
+| `list_judgments` | `limit: int=50`, `offset: int=0` | All landmark judgments (paginated, with total) |
 | `cross_reference` | `act: str`, `section: str`, `direction: str="both"` | Bidirectional cross-refs (from+to) |
 | `semantic_query` | `query: str`, `act: str?`, `limit: int=5` | Embedding-NN hits (raises `EmbeddingUnavailable` if disabled) |
 | `get_judgment` | `case_slug: str` | Full judgment by citation or slug |
-| `search_judgments` | `query: str`, `court: str?`, `date_from: str?`, `date_to: str?`, `limit: int=10`, `offset: int=0` | FTS over judgments |
+| `search_judgments` | `query: str`, `court: str?`, `date_from: str?`, `date_to: str?`, `limit: int=10`, `offset: int=0` | FTS over judgments (validates ISO dates) |
 | `get_sections_by_range` | `act: str`, `start: str`, `end: str`, `limit: int=500` | Sections in a numeric range |
+| `get_chapter` | `act: str`, `chapter: int` | Chapter + all its sections |
 | `list_schedules` | — | All 12 Constitution schedules |
 | `get_schedule` | `number: int` | A single schedule |
 | `list_amendments` | `year_from: int?`, `year_to: int?` | Constitutional amendments |
 | `get_amendment` | `number: int` | A single amendment |
-| `define` | `term: str`, `act: str?`, `limit: int=10` | Statutory definitions of a term |
+| `get_amendments_for_article` | `article: str` | Amendments that affected an article |
+| `get_definition` | `term: str`, `act: str?`, `limit: int=10` | Statutory definitions (targets definition-titled sections) |
+| `corpus_stats` | — | Corpus counts + as_of date |
+| `hybrid_search` | `query: str`, `act: str?`, `limit: int=10`, `offset: int=0` | RRF-fused FTS + semantic results (falls back to FTS) |
+| `resolve_citation` | `citation: str` | Parses 'IPC s.302'/'Art.21'/'AIR 1973 SC 1461' and fetches the provision |
+| `search_by_kind` | `query: str`, `kind: str="section"`, `act: str?`, `limit: int=10`, `offset: int=0` | FTS filtered to section/article/judgment |
 
 ### Resources
 

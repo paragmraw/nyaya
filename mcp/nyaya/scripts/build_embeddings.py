@@ -5,12 +5,13 @@ and document vectors share the same space. Run after all ingestion is done.
 
 The document text is *enriched* with an ``act | ref | title`` prefix before
 embedding, matching the hydration notebook's approach for better retrieval
-quality (vs embedding raw text). This keeps the CLI and notebook embeddings
-consistent.
+quality. The enrichment and truncation logic mirrors the notebook exactly so
+CLI and notebook embeddings are identical.
 
 To survive Supabase's idle-connection drops during the (slow) CPU embedding
-loop, embeddings are upserted in batches with a fresh connection per batch —
-mirroring the notebook's pattern.
+loop, embeddings are upserted in batches with a **fresh connection per batch**
+— mirroring the notebook's pattern. Each batch is committed independently so
+a mid-run failure preserves prior batches.
 """
 
 from __future__ import annotations
@@ -20,118 +21,108 @@ from psycopg.rows import dict_row
 
 from ..config import get_settings
 
+MAX_CHARS = 8000
+
 
 def _enrich_section(act: str, number: str, title: str | None, text: str) -> str:
-    prefix = f"Act: {act} | s. {number}"
+    head = f"Act: {act} | s. {number}"
     if title:
-        prefix += f" | {title}"
-    return f"{prefix}\n{(text or '')[:8000]}"
+        head += f" | {title}"
+    return (head + "\n" + (text or ""))[:MAX_CHARS]
 
 
 def _enrich_article(number: str, title: str | None, text: str) -> str:
-    prefix = f"art. {number}"
+    head = f"art. {number}"
     if title:
-        prefix += f" | {title}"
-    return f"{prefix}\n{(text or '')[:8000]}"
+        head += f" | {title}"
+    return (head + "\n" + (text or ""))[:MAX_CHARS]
 
 
 def _enrich_judgment(case_name: str, citation: str | None, summary: str | None, text: str) -> str:
-    prefix = case_name
+    parts = [case_name]
     if citation:
-        prefix += f" ({citation})"
+        parts.append(f"({citation})")
+    head = " ".join(parts)
     if summary:
-        prefix += f"\n{summary}"
-    return f"{prefix}\n{(text or '')[:8000]}"
+        head += f"\n{summary}"
+    return (head + "\n" + (text or ""))[:MAX_CHARS]
 
 
-def _embed_table(db, table: str, enrich_fn) -> int:
+def _embed_and_upsert(rows: list, enrich_fn, emb_table: str, db_url: str,
+                      batch_size: int = 64, desc: str = "embedding") -> int:
+    """Embed all rows and upsert in batches with a fresh connection per batch.
+
+    Phase 1: embed all texts in memory (fastembed handles batching internally).
+    Phase 2: upsert per batch with a fresh psycopg.connect, committing each.
+    This mirrors the notebook's two-phase pattern and survives Supabase idle drops.
+    """
     from ..embeddings import embed_texts
 
-    rows = db.fetch_all(f"select id, number, title, text from {table}")
     if not rows:
         return 0
+    texts = [enrich_fn(r) for r in rows]
+    vectors = embed_texts(texts)
 
-    # Embed in batches to bound memory and give the user progress.
-    BATCH = 64
-    emb_table = table.rstrip("s") if table.endswith("s") else table
-    total = 0
     try:
         from tqdm import tqdm
-        iterator = tqdm(range(0, len(rows), BATCH), desc=f"embedding {table}")
+        iterator = tqdm(range(0, len(rows), batch_size), desc=desc)
     except ImportError:
-        iterator = range(0, len(rows), BATCH)
+        iterator = range(0, len(rows), batch_size)
 
+    total = 0
     for start in iterator:
-        batch = rows[start:start + BATCH]
-        texts = [enrich_fn(r) for r in batch]
-        embeddings = embed_texts(texts)
-        for r, emb in zip(batch, embeddings):
-            db.upsert_embedding(table=emb_table, owner_id=str(r["id"]), embedding=emb)
-        total += len(batch)
+        batch_rows = rows[start:start + batch_size]
+        batch_vecs = vectors[start:start + batch_size]
+        # Fresh connection per batch — survives Supabase idle drops.
+        conn = psycopg.connect(db_url, row_factory=dict_row, connect_timeout=15)
+        try:
+            with conn.cursor() as cur:
+                for r, emb in zip(batch_rows, batch_vecs):
+                    cur.execute(
+                        f"insert into {emb_table}_embeddings ({emb_table}_id, embedding) "
+                        f"values (%s, %s::vector) "
+                        f"on conflict ({emb_table}_id) do update set embedding = excluded.embedding",
+                        (str(r["id"]), emb),
+                    )
+            conn.commit()
+            total += len(batch_rows)
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
     return total
 
 
 def build_embeddings(db) -> None:
     print("→ Building enriched embeddings (downloads the model on first run)…")
-
+    db_url = get_settings().database_url
     total = 0
+
     # Sections: enrich with act + number + title prefix.
-    rows = db.fetch_all(
+    sec_rows = db.fetch_all(
         "select s.id, s.number, s.title, s.text, a.short_name as act "
         "from sections s join acts a on a.id = s.act_id"
     )
-    if rows:
-        from ..embeddings import embed_texts
-        BATCH = 64
-        try:
-            from tqdm import tqdm
-            it = tqdm(range(0, len(rows), BATCH), desc="embedding sections")
-        except ImportError:
-            it = range(0, len(rows), BATCH)
-        n = 0
-        for start in it:
-            batch = rows[start:start + BATCH]
-            texts = [_enrich_section(r["act"], r["number"], r["title"], r["text"]) for r in batch]
-            embeddings = embed_texts(texts)
-            for r, emb in zip(batch, embeddings):
-                db.upsert_embedding(table="section", owner_id=str(r["id"]), embedding=emb)
-            n += len(batch)
-        print(f"  ✓ section: {n} embeddings.")
-        total += n
-    else:
-        print("  ✓ section: 0 (no rows).")
+    n = _embed_and_upsert(sec_rows, lambda r: _enrich_section(r["act"], r["number"], r["title"], r["text"]),
+                          "section", db_url, batch_size=64, desc="embedding sections")
+    print(f"  ✓ section: {n} embeddings.")
+    total += n
 
     # Articles: enrich with number + title prefix.
-    n = _embed_table(db, "articles", lambda r: _enrich_article(r["number"], r["title"], r["text"]))
+    art_rows = db.fetch_all("select id, number, title, text from articles")
+    n = _embed_and_upsert(art_rows, lambda r: _enrich_article(r["number"], r["title"], r["text"]),
+                          "article", db_url, batch_size=64, desc="embedding articles")
     print(f"  ✓ article: {n} embeddings.")
     total += n
 
     # Judgments: enrich with case_name + citation + summary prefix.
-    jrows = db.fetch_all("select id, number, title, text from judgments")
-    # judgments table has no number/title columns — use case_name/citation/summary.
-    jrows = db.fetch_all("select id, case_name, citation, summary, text from judgments")
-    if jrows:
-        from ..embeddings import embed_texts
-        BATCH = 32
-        try:
-            from tqdm import tqdm
-            it = tqdm(range(0, len(jrows), BATCH), desc="embedding judgments")
-        except ImportError:
-            it = range(0, len(jrows), BATCH)
-        n = 0
-        for start in it:
-            batch = jrows[start:start + BATCH]
-            texts = [_enrich_judgment(r["case_name"], r["citation"], r["summary"], r["text"]) for r in batch]
-            embeddings = embed_texts(texts)
-            for r, emb in zip(batch, embeddings):
-                db.upsert_embedding(table="judgment", owner_id=str(r["id"]), embedding=emb)
-            n += len(batch)
-        print(f"  ✓ judgment: {n} embeddings.")
-        total += n
-    else:
-        print("  ✓ judgment: 0 (no rows).")
+    jud_rows = db.fetch_all("select id, case_name, citation, summary, text from judgments")
+    n = _embed_and_upsert(jud_rows, lambda r: _enrich_judgment(r["case_name"], r["citation"], r["summary"], r["text"]),
+                          "judgment", db_url, batch_size=32, desc="embedding judgments")
+    print(f"  ✓ judgment: {n} embeddings.")
+    total += n
 
-    db.commit()
     print(f"✓ Embedding build complete ({total} total).")
 
 

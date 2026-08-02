@@ -54,10 +54,22 @@ CHAPTER_HEADING_RE = re.compile(r"^Chapter\s+(?P<num>[IVXLC]+)\s*[.\-—–]?\s*
 
 
 def _download_pdf(url: str) -> bytes:
-    with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-        r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
-        r.raise_for_status()
-        return r.content
+    import time
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(follow_redirects=True, timeout=60.0) as client:
+                r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
+                r.raise_for_status()
+                return r.content
+        except httpx.HTTPError as e:
+            last_err = e
+            if attempt < 2:
+                wait = 2 ** attempt
+                print(f"  ! PDF download failed (attempt {attempt + 1}/3): {e}; retrying in {wait}s…")
+                time.sleep(wait)
+            else:
+                raise
 
 
 def _extract_text(pdf_bytes: bytes) -> str:
@@ -126,8 +138,12 @@ def ingest_sanhitas(db: IngestDB) -> None:
         except httpx.HTTPError as e:
             print(f"  ! Failed to download {pdf['url']}: {e}")
             continue
-        text = _extract_text(pdf_bytes)
-        sections = _parse_sections(text)
+        try:
+            text = _extract_text(pdf_bytes)
+            sections = _parse_sections(text)
+        except Exception as e:
+            print(f"  ! Failed to extract/parse {pdf['short_name']} PDF: {e}; skipping.")
+            continue
         if not sections:
             print(f"  ! No sections parsed from {pdf['short_name']} PDF (text length {len(text)}); skipping.")
             continue

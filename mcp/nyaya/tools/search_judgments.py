@@ -2,9 +2,26 @@
 
 from __future__ import annotations
 
+from datetime import date as Date
+
 from .. import db
+from ..exceptions import SearchError
 from ..models import SearchResponse
 from ._util import run_sync
+
+
+def _validate_iso_date(s: str | None, name: str) -> str | None:
+    """Validate an ISO date string (YYYY-MM-DD), raising SearchError on bad input."""
+    if s is None:
+        return None
+    try:
+        Date.fromisoformat(s)
+    except ValueError:
+        raise SearchError(
+            f"{name} must be an ISO date (YYYY-MM-DD), got {s!r}.",
+            hint="Use the format 1973-04-24 for dates.",
+        )
+    return s
 
 
 def register(mcp) -> None:
@@ -36,12 +53,15 @@ def register(mcp) -> None:
             date_from: Optional ISO date (YYYY-MM-DD); only judgments on or after.
             date_to: Optional ISO date (YYYY-MM-DD); only judgments on or before.
             limit: Max hits (1–50, default 10).
-            offset: Pagination offset (default 0).
+            offset: Pagination offset (default 0, clamped to >= 0).
         """
+        limit = max(1, min(int(limit), 50))
+        offset = max(0, int(offset))
+        date_from = _validate_iso_date(date_from, "date_from")
+        date_to = _validate_iso_date(date_to, "date_to")
         if not query or not query.strip():
             return SearchResponse(query=query or "", total=0, returned=0, offset=offset,
-                                  results=[], limit=max(1, min(int(limit), 50)))
-        limit = max(1, min(int(limit), 50))
+                                  results=[], as_of=db.corpus_as_of(), limit=limit)
         results, total = db.search_judgments(
             query, court=court, date_from=date_from, date_to=date_to,
             limit=limit, offset=offset,

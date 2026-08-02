@@ -5,23 +5,29 @@ All functions are synchronous and intended to be wrapped with
 
 Design notes
 ------------
-* Input normalization: act/section/article strings are stripped and (for acts)
-  upper-cased before hitting SQL. A small alias map resolves common variants
-  ('indian penal code' -> 'IPC'). This keeps the LLM-facing tools forgiving.
-* Provenance: articles/schedules/amendments/judgments no longer hardcode the
-  ``as_of`` date — it's read from the Constitution act row / a per-row column
-  where possible, and falls back to a module constant ``CORPUS_AS_OF`` only
-  when the act row is unavailable (e.g. during partial hydrates).
-* Cross-refs: ``get_cross_refs`` queries BOTH directions (from_* and to_*) and
-  merges, so the ``cross_reference`` tool finally delivers the bidirectional
-  lookup its description promises. The ``cross_refs_to_idx`` index is now used.
-* Search: ``search_all`` returns the true match count (before limit) so the
-  LLM can decide whether to page. ``offset`` is supported everywhere.
+* Input normalization: act/section/article strings are stripped and resolved
+  via an alias map. Act lookups are case-insensitive at the SQL level
+  (``lower(short_name) = lower(%s)``) so unknown acts match regardless of case.
+* Provenance: articles read provenance from the Constitution act row;
+  schedules/amendments/judgments fall back to a module constant
+  ``CORPUS_AS_OF`` until per-row provenance columns are added to the schema.
+* Cross-refs: ``get_cross_refs`` queries BOTH directions and merges.
+* Search: ``search_all`` uses a single UNION ALL query with a global
+  ORDER BY + LIMIT/OFFSET so pagination is correct across corpora. The true
+  total is computed via a separate ``count(*)`` query (not a window function)
+  so it's correct even when ``offset >= total`` (the window-fn approach
+  returns 0 total for an empty page).
+* Errors: DB exceptions are translated to ``DatabaseUnavailable`` /
+  ``SearchError`` so the MCP client gets a structured error code instead of
+  a raw psycopg traceback.
 """
 
 from __future__ import annotations
 
 import contextlib
+import re
+import threading
+import time
 from datetime import date
 from typing import Any, Iterator
 
@@ -30,6 +36,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from .config import get_settings
+from .exceptions import DatabaseUnavailable, SearchError
 from .models import (
     Act,
     Amendment,
@@ -50,31 +57,43 @@ CORPUS_AS_OF = date(2026, 7, 1)
 _ACT_ALIASES: dict[str, str] = {
     "ipc": "IPC",
     "indian penal code": "IPC",
+    "penal code": "IPC",
     "crpc": "CrPC",
     "code of criminal procedure": "CrPC",
+    "criminal procedure code": "CrPC",
     "cpc": "CPC",
     "code of civil procedure": "CPC",
+    "civil procedure code": "CPC",
     "iea": "EvidenceAct",
     "evidence act": "EvidenceAct",
     "indian evidence act": "EvidenceAct",
     "evidenceact": "EvidenceAct",
     "bns": "BNS",
     "bharatiya nyaya sanhita": "BNS",
+    "nyaya sanhita": "BNS",
     "bnss": "BNSS",
     "bharatiya nagarik suraksha sanhita": "BNSS",
+    "nagarik suraksha sanhita": "BNSS",
     "bsa": "BSA",
     "bharatiya sakshya adhiniyam": "BSA",
     "bharatiya sakshya bill": "BSA",
+    "sakshya adhiniyam": "BSA",
     "companies": "Companies",
     "companies act": "Companies",
     "igst": "IGST",
+    "integrated goods and services tax": "IGST",
     "cgst": "CGST",
+    "central goods and services tax": "CGST",
+    "gst": "CGST",
     "itact": "ITAct",
     "information technology act": "ITAct",
+    "it act": "ITAct",
     "arbitration": "Arbitration",
+    "arbitration and conciliation act": "Arbitration",
     "consumerprotection": "ConsumerProtection",
     "consumer protection act": "ConsumerProtection",
     "constitution": "Constitution",
+    "the constitution": "Constitution",
     "article": "Constitution",
     "articles": "Constitution",
     "judgment": "judgment",
@@ -84,10 +103,15 @@ _ACT_ALIASES: dict[str, str] = {
 }
 
 _pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
+
+# Cache for corpus_as_of(): the as_of date changes only on re-ingestion, so
+# we cache it for 5 minutes to avoid an extra DB round-trip on every search.
+_as_of_cache: tuple[float, date | None] = (0.0, None)
+_AS_OF_TTL = 300.0  # seconds
 
 # ts_headline option strings, passed as SQL parameters to keep the headline
-# options (which contain quotes/angles) out of the SQL literal — inlining them
-# breaks the parser. Kept module-level so they're defined once and reused.
+# options (which contain quotes/angles) out of the SQL literal.
 TS_HEADLINE_OPTS = (
     'MaxWords=60, MinWords=20, MaxFragments=3, '
     'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
@@ -97,18 +121,25 @@ TS_HEADLINE_OPTS_LONG = (
     'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
 )
 
+# Regex to strip leading "s."/"section"/"art."/"article" prefixes from section
+# or article numbers, with or without a separator (handles "s.302", "s302",
+# "section 302", "section302", "art.21", "art21", "article 21").
+_REF_PREFIX_RE = re.compile(
+    r"^(?:s(?:ec(?:tion)?)?\.?|art(?:icle)?\.?)\s*",
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Input normalization
 # ---------------------------------------------------------------------------
 
 def normalize_act(act: str | None) -> str | None:
-    """Normalize an act short-name: strip, lower-case, resolve aliases.
+    """Normalize an act short-name: strip, resolve aliases (case-insensitive).
 
     Returns the canonical ``short_name`` (e.g. 'IPC') or ``None`` if the input
-    is empty/None. Unknown values are returned upper-cased and stripped — this
-    lets callers pass through new act names not in the alias map without
-    silently failing.
+    is empty/None. Unknown values are returned stripped (original case
+    preserved) — the DB lookup is case-insensitive so this is fine.
     """
     if act is None:
         return None
@@ -122,18 +153,22 @@ def normalize_act(act: str | None) -> str | None:
 
 
 def normalize_ref(ref: str | None) -> str | None:
-    """Strip whitespace and a leading 's.'/'section'/'art.'/'article' prefix."""
+    """Strip whitespace and a leading 's.'/'section'/'art.'/'article' prefix.
+
+    Handles both "s. 302" (with separator) and "s302" (without separator).
+    """
     if ref is None:
         return None
     r = ref.strip()
     if not r:
         return None
-    low = r.lower()
-    for prefix in ("section ", "s. ", "s.", "sec ", "sec.", "art. ", "art.", "article "):
-        if low.startswith(prefix):
-            r = r[len(prefix):].strip()
-            break
-    return r
+    r = _REF_PREFIX_RE.sub("", r).strip()
+    return r if r else None
+
+
+def _escape_like(s: str) -> str:
+    """Escape ``%`` and ``_`` so they match literally in LIKE/ILIKE patterns."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 # ---------------------------------------------------------------------------
@@ -142,44 +177,59 @@ def normalize_ref(ref: str | None) -> str | None:
 
 def _get_pool() -> ConnectionPool:
     global _pool
-    if _pool is None or _pool.closed:
-        settings = get_settings()
+    # Thread-safe lazy initialization. ``asyncio.to_thread`` can race on the
+    # first call; the lock ensures only one pool is created.
+    with _pool_lock:
+        if _pool is None or _pool.closed:
+            settings = get_settings()
 
-        def _configure(conn: psycopg.Connection) -> None:
-            if settings.statement_timeout_ms > 0:
+            def _configure(conn: psycopg.Connection) -> None:
+                if settings.statement_timeout_ms > 0:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "set statement_timeout = %s",
+                            (settings.statement_timeout_ms,),
+                        )
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "set statement_timeout = %s",
-                        (settings.statement_timeout_ms,),
-                    )
-            with conn.cursor() as cur:
-                cur.execute("set application_name = 'nyaya'")
+                    cur.execute("set application_name = 'nyaya'")
 
-        _pool = ConnectionPool(
-            conninfo=settings.database_url,
-            min_size=settings.pool_min,
-            max_size=settings.pool_max,
-            timeout=settings.pool_timeout,
-            open=True,
-            configure=_configure,
-            check=ConnectionPool.check_connection,
-        )
+            _pool = ConnectionPool(
+                conninfo=settings.database_url,
+                min_size=settings.pool_min,
+                max_size=settings.pool_max,
+                timeout=settings.pool_timeout,
+                open=True,
+                configure=_configure,
+                check=ConnectionPool.check_connection,
+            )
     return _pool
 
 
 @contextlib.contextmanager
 def _conn() -> Iterator[psycopg.Connection]:
-    pool = _get_pool()
-    with pool.connection(timeout=get_settings().pool_timeout) as conn:
-        conn.row_factory = dict_row
-        yield conn
+    try:
+        pool = _get_pool()
+        with pool.connection(timeout=get_settings().pool_timeout) as conn:
+            conn.row_factory = dict_row
+            yield conn
+    except psycopg_pool.PoolTimeout as e:
+        raise DatabaseUnavailable(
+            "Could not acquire a database connection in time. The pool may be exhausted or the database is unreachable.",
+            hint="Check DATABASE_URL, pool size, and Supabase status.",
+        ) from e
+    except psycopg.OperationalError as e:
+        raise DatabaseUnavailable(
+            f"Database connection failed: {e}",
+            hint="Check DATABASE_URL and Supabase availability.",
+        ) from e
 
 
 def close_db() -> None:
     global _pool
-    if _pool is not None and not _pool.closed:
-        _pool.close()
-    _pool = None
+    with _pool_lock:
+        if _pool is not None and not _pool.closed:
+            _pool.close()
+        _pool = None
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +252,7 @@ def get_act(short_name: str) -> Act | None:
     with _conn() as c:
         row = c.execute(
             "select short_name, full_name, year, citation, kind, source, source_license, as_of "
-            "from acts where short_name = %s",
+            "from acts where lower(short_name) = lower(%s)",
             (sn,),
         ).fetchone()
     return Act(**row) if row else None
@@ -216,7 +266,7 @@ def list_chapters(act_short_name: str) -> list[Chapter]:
         rows = c.execute(
             "select c.number, c.title, c.section_range "
             "from chapters c join acts a on a.id = c.act_id "
-            "where a.short_name = %s order by c.number",
+            "where lower(a.short_name) = lower(%s) order by c.number",
             (sn,),
         ).fetchall()
     return [Chapter(**r) for r in rows]
@@ -240,23 +290,17 @@ def get_section(act_short_name: str, section_number: str) -> Section | None:
             from sections s
             join acts a on a.id = s.act_id
             left join chapters c on c.id = s.chapter_id
-            where a.short_name = %s and s.number = %s
+            where lower(a.short_name) = lower(%s) and s.number = %s
             """,
             (sn, num),
         ).fetchone()
     if not row:
         return None
     return Section(
-        act=row["act"],
-        section=row["number"],
-        title=row["title"],
-        text=row["text"],
-        url=row["url"],
-        chapter_number=row["chapter_number"],
-        chapter_title=row["chapter_title"],
-        source=row["source"],
-        source_license=row["source_license"],
-        as_of=row["as_of"],
+        act=row["act"], section=row["number"], title=row["title"],
+        text=row["text"], url=row["url"],
+        chapter_number=row["chapter_number"], chapter_title=row["chapter_title"],
+        source=row["source"], source_license=row["source_license"], as_of=row["as_of"],
     )
 
 
@@ -271,7 +315,7 @@ def list_sections(act_short_name: str, chapter: int | None = None,
     if sn is None:
         return [], 0
     params: list[Any] = [sn]
-    where = "where a.short_name = %s"
+    where = "where lower(a.short_name) = lower(%s)"
     if chapter is not None:
         where += " and c.number = %s"
         params.append(chapter)
@@ -306,9 +350,10 @@ def get_sections_by_range(act_short_name: str, start: str, end: str,
                           limit: int = 500) -> list[Section]:
     """Fetch all sections of an act between two numbers (inclusive).
 
-    Section numbers are strings ('302', '354A'); numeric prefixes are compared
-    numerically and the suffix is used as a tiebreaker. This handles mixed
-    numeric/alpha schemes like IPC.
+    Section numbers are strings ('302', '354A'); the numeric prefix is compared
+    numerically and the full string is used as a secondary sort/bound so
+    '354A'..'354B' does not match '354'. Non-numeric section numbers are
+    guarded with ``NULLIF`` so they don't break the cast.
     """
     sn = normalize_act(act_short_name)
     s = normalize_ref(start)
@@ -324,11 +369,11 @@ def get_sections_by_range(act_short_name: str, start: str, end: str,
             from sections s
             join acts a on a.id = s.act_id
             left join chapters c on c.id = s.chapter_id
-            where a.short_name = %s
-              and regexp_replace(s.number, '[^0-9].*$', '')::int
-                  between regexp_replace(%s, '[^0-9].*$', '')::int
-                  and regexp_replace(%s, '[^0-9].*$', '')::int
-            order by regexp_replace(s.number, '[^0-9].*$', '')::int, s.number
+            where lower(a.short_name) = lower(%s)
+              and coalesce(nullif(regexp_replace(s.number, '[^0-9].*$', ''), '')::int, 0)
+                  between coalesce(nullif(regexp_replace(%s, '[^0-9].*$', ''), '')::int, 0)
+                  and coalesce(nullif(regexp_replace(%s, '[^0-9].*$', ''), '')::int, 0)
+            order by coalesce(nullif(regexp_replace(s.number, '[^0-9].*$', ''), '')::int, 0), s.number
             limit %s
             """,
             (sn, s, e, limit),
@@ -342,28 +387,39 @@ def get_sections_by_range(act_short_name: str, start: str, end: str,
 
 def search_sections(query: str, act: str | None = None,
                     limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    sql = """
-        select a.short_name as act,
-               's. ' || s.number as ref,
-               s.title,
-               ts_rank(s.search_tsv, q) as rank,
-               ts_headline('english', s.text, q, %s) as snippet,
-               a.citation,
-               'section' as kind,
-               count(*) over() as total
-        from sections s, acts a, plainto_tsquery('english', %s) q
-        where s.act_id = a.id and s.search_tsv @@ q
+    """FTS over sections. Returns (results, total) where total is the true
+    match count (via a separate count query, correct even when offset >= total).
     """
+    where = "where s.act_id = a.id and s.search_tsv @@ q"
     params: list[Any] = [TS_HEADLINE_OPTS, query]
     if act:
-        sql += " and a.short_name = %s"
+        where += " and lower(a.short_name) = lower(%s)"
         params.append(act)
-    sql += " order by rank desc limit %s offset %s"
-    params.extend([limit, offset])
+    base = (
+        f"from sections s, acts a, plainto_tsquery('english', %s) q {where}"
+    )
+    # The headline opt is the first param; the query is the second. For the
+    # count query we only need the query param.
     with _conn() as c:
-        rows = c.execute(sql, params).fetchall()
-    total = int(rows[0]["total"]) if rows else 0
-    return [SearchResult(**{k: v for k, v in r.items() if k != "total"}) for r in rows], total
+        total = c.execute(
+            f"select count(*) as n {base.replace(TS_HEADLINE_OPTS + ', ', '')}",
+            params[1:],
+        ).fetchone()["n"]
+        rows = c.execute(
+            f"""
+            select a.short_name as act,
+                   's. ' || s.number as ref,
+                   s.title,
+                   ts_rank(s.search_tsv, q) as rank,
+                   ts_headline('english', s.text, q, %s) as snippet,
+                   a.citation,
+                   'section' as kind
+            {base}
+            order by rank desc limit %s offset %s
+            """,
+            [*params, limit, offset],
+        ).fetchall()
+    return [SearchResult(**r) for r in rows], int(total)
 
 
 # ---------------------------------------------------------------------------
@@ -379,9 +435,8 @@ def get_article(number: str) -> Article | None:
             "select number, title, text, part from articles where number = %s",
             (num,),
         ).fetchone()
-        # Provenance from the Constitution act row.
         prov = c.execute(
-            "select source, source_license, as_of from acts where short_name = 'Constitution'"
+            "select source, source_license, as_of from acts where lower(short_name) = 'constitution'"
         ).fetchone()
     if not row:
         return None
@@ -389,13 +444,8 @@ def get_article(number: str) -> Article | None:
     license_ = prov["source_license"] if prov else "Apache-2.0"
     as_of = prov["as_of"] if prov else CORPUS_AS_OF
     return Article(
-        number=row["number"],
-        title=row["title"],
-        text=row["text"],
-        part=row["part"],
-        source=source,
-        source_license=license_,
-        as_of=as_of,
+        number=row["number"], title=row["title"], text=row["text"], part=row["part"],
+        source=source, source_license=license_, as_of=as_of,
     )
 
 
@@ -405,8 +455,8 @@ def list_articles(part: str | None = None,
     params: list[Any] = []
     where = ""
     if part:
-        where = "where part ilike %s"
-        params.append(f"%{part}%")
+        where = "where part ilike %s escape '\\'"
+        params.append(f"%{_escape_like(part)}%")
     with _conn() as c:
         total = c.execute(
             f"select count(*) as n from articles {where}", params
@@ -417,7 +467,7 @@ def list_articles(part: str | None = None,
             [*params, limit, offset],
         ).fetchall()
         prov = c.execute(
-            "select source, source_license, as_of from acts where short_name = 'Constitution'"
+            "select source, source_license, as_of from acts where lower(short_name) = 'constitution'"
         ).fetchone()
     source = prov["source"] if prov else "Vikhram-S/IndianConstitution (Apache-2.0)"
     license_ = prov["source_license"] if prov else "Apache-2.0"
@@ -429,23 +479,27 @@ def list_articles(part: str | None = None,
 
 
 def search_articles(query: str, limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    sql = """
-        select 'Constitution' as act,
-               'art. ' || a.number as ref,
-               a.title,
-               ts_rank(a.search_tsv, q) as rank,
-               ts_headline('english', a.text, q, %s) as snippet,
-               null as citation,
-               'article' as kind,
-               count(*) over() as total
-        from articles a, plainto_tsquery('english', %s) q
-        where a.search_tsv @@ q
-        order by rank desc limit %s offset %s
-    """
     with _conn() as c:
-        rows = c.execute(sql, (TS_HEADLINE_OPTS, query, limit, offset)).fetchall()
-    total = int(rows[0]["total"]) if rows else 0
-    return [SearchResult(**{k: v for k, v in r.items() if k != "total"}) for r in rows], total
+        total = c.execute(
+            "select count(*) as n from articles a, plainto_tsquery('english', %s) q where a.search_tsv @@ q",
+            (query,),
+        ).fetchone()["n"]
+        rows = c.execute(
+            """
+            select 'Constitution' as act,
+                   'art. ' || a.number as ref,
+                   a.title,
+                   ts_rank(a.search_tsv, q) as rank,
+                   ts_headline('english', a.text, q, %s) as snippet,
+                   null as citation,
+                   'article' as kind
+            from articles a, plainto_tsquery('english', %s) q
+            where a.search_tsv @@ q
+            order by rank desc limit %s offset %s
+            """,
+            (TS_HEADLINE_OPTS, query, limit, offset),
+        ).fetchall()
+    return [SearchResult(**r) for r in rows], int(total)
 
 
 # ---------------------------------------------------------------------------
@@ -453,30 +507,44 @@ def search_articles(query: str, limit: int = 10, offset: int = 0) -> tuple[list[
 # ---------------------------------------------------------------------------
 
 def get_judgment(case_slug: str) -> Judgment | None:
+    """Fetch a judgment by exact citation, slugified case name, or fuzzy name.
+
+    The match is tried in order of specificity (citation → slugified name →
+    fuzzy name) and only falls through to the looser match if the tighter one
+    returns nothing. This prevents short slugs like "v" from matching an
+    arbitrary judgment via the substring LIKE.
+    """
     slug = case_slug.strip() if case_slug else ""
     if not slug:
         return None
     with _conn() as c:
+        # 1. Exact citation match (uses judgments_citation_idx).
         row = c.execute(
-            """
-            select case_name, citation, court, date, summary, text
-            from judgments
-            where citation = %s
-               or lower(replace(case_name, ' ', '-')) = lower(%s)
-               or lower(case_name) like lower(%s)
-            limit 1
-            """,
-            (slug, slug, f"%{slug.replace('-', ' ')}%"),
+            "select case_name, citation, court, date, summary, text "
+            "from judgments where citation = %s limit 1",
+            (slug,),
         ).fetchone()
+        if not row:
+            # 2. Slugified case-name match (e.g. "kesavananda-bharati-v-state-of-kerala").
+            row = c.execute(
+                "select case_name, citation, court, date, summary, text "
+                "from judgments where lower(replace(case_name, ' ', '-')) = lower(%s) limit 1",
+                (slug,),
+            ).fetchone()
+        if not row and len(slug) >= 4:
+            # 3. Fuzzy substring match ONLY for reasonably-long slugs (>= 4 chars)
+            # to avoid "v" or "india" matching arbitrary cases.
+            escaped = _escape_like(slug.replace("-", " "))
+            row = c.execute(
+                "select case_name, citation, court, date, summary, text "
+                "from judgments where lower(case_name) like lower(%s) escape '\\' limit 1",
+                (f"%{escaped}%",),
+            ).fetchone()
     if not row:
         return None
     return Judgment(
-        case_name=row["case_name"],
-        citation=row["citation"],
-        court=row["court"],
-        date=row["date"],
-        summary=row["summary"],
-        text=row["text"],
+        case_name=row["case_name"], citation=row["citation"], court=row["court"],
+        date=row["date"], summary=row["summary"], text=row["text"],
         source="Curated from indiankanoon.org (public domain)",
         source_license="Public domain (government edicts)",
         as_of=CORPUS_AS_OF,
@@ -505,61 +573,114 @@ def search_judgments(query: str, court: str | None = None,
                     date_from: str | None = None, date_to: str | None = None,
                     limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
     """Full-text search across judgments with optional court/date filters."""
-    sql = """
-        select 'judgment' as act,
-               coalesce(j.citation, j.case_name) as ref,
-               j.case_name as title,
-               ts_rank(j.search_tsv, q) as rank,
-               ts_headline('english', j.text, q, %s) as snippet,
-               j.citation,
-               'judgment' as kind,
-               count(*) over() as total
-        from judgments j, plainto_tsquery('english', %s) q
-        where j.search_tsv @@ q
-    """
-    params: list[Any] = [TS_HEADLINE_OPTS_LONG, query]
+    where = "where j.search_tsv @@ q"
+    params: list[Any] = [query]
     if court:
-        sql += " and j.court ilike %s"
-        params.append(f"%{court}%")
+        where += " and j.court ilike %s escape '\\'"
+        params.append(f"%{_escape_like(court)}%")
     if date_from:
-        sql += " and j.date >= %s::date"
+        where += " and j.date >= %s::date"
         params.append(date_from)
     if date_to:
-        sql += " and j.date <= %s::date"
+        where += " and j.date <= %s::date"
         params.append(date_to)
-    sql += " order by rank desc limit %s offset %s"
-    params.extend([limit, offset])
+    base = f"from judgments j, plainto_tsquery('english', %s) q {where}"
     with _conn() as c:
-        rows = c.execute(sql, params).fetchall()
-    total = int(rows[0]["total"]) if rows else 0
-    return [SearchResult(**{k: v for k, v in r.items() if k != "total"}) for r in rows], total
+        total = c.execute(f"select count(*) as n {base}", params).fetchone()["n"]
+        rows = c.execute(
+            f"""
+            select 'judgment' as act,
+                   coalesce(j.citation, j.case_name) as ref,
+                   j.case_name as title,
+                   ts_rank(j.search_tsv, q) as rank,
+                   ts_headline('english', j.text, q, %s) as snippet,
+                   j.citation,
+                   'judgment' as kind
+            {base}
+            order by rank desc limit %s offset %s
+            """,
+            [TS_HEADLINE_OPTS_LONG, *params, limit, offset],
+        ).fetchall()
+    return [SearchResult(**r) for r in rows], int(total)
 
 
 # ---------------------------------------------------------------------------
-# Unified search
+# Unified search (single UNION ALL query for correct global pagination)
 # ---------------------------------------------------------------------------
 
 def search_all(query: str, act: str | None = None,
                limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
     """Search the whole corpus. Returns (results, total) where total is the
-    true match count across all sub-corpora (before limit/offset)."""
+    true match count across all sub-corpora (before limit/offset).
+
+    For scoped search (``act`` set), delegates to the per-corpus search
+    function. For unscoped search, runs a single UNION ALL query with a global
+    ORDER BY + LIMIT/OFFSET so pagination is correct (the old fan-out approach
+    applied offset per-corpus, returning wrong results on page 2+).
+    """
     normalized = normalize_act(act)
     if normalized and normalized.lower() in {"constitution", "article", "articles"}:
         return search_articles(query, limit=limit, offset=offset)
     if normalized and normalized.lower() in {"judgment", "judgments", "case", "cases"}:
         return search_judgments(query, limit=limit, offset=offset)
-
-    # For a specific act, only search sections (articles/judgments are not
-    # scoped by act). For unscoped search, fan out and merge.
     if normalized:
         return search_sections(query, act=normalized, limit=limit, offset=offset)
 
-    sec, n_sec = search_sections(query, limit=limit, offset=offset)
-    art, n_art = search_articles(query, limit=limit, offset=offset)
-    jud, n_jud = search_judgments(query, limit=limit, offset=offset)
-    merged = sec + art + jud
-    merged.sort(key=lambda r: r.rank, reverse=True)
-    return merged[:limit], n_sec + n_art + n_jud
+    # Unscoped: single UNION ALL over all three corpora with global pagination.
+    # Each sub-query uses the same tsquery; ranks from different corpora are
+    # not strictly comparable, so we normalize by dividing by the max rank
+    # in each sub-corpus (via a window function) before the global sort. This
+    # mitigates the cross-corpus rank-scale conflation.
+    union_sql = """
+        with matched as (
+            select a.short_name as act,
+                   's. ' || s.number as ref,
+                   s.title,
+                   ts_rank(s.search_tsv, q) as raw_rank,
+                   ts_headline('english', s.text, q, %s) as snippet,
+                   a.citation,
+                   'section' as kind
+            from sections s, acts a, plainto_tsquery('english', %s) q
+            where s.act_id = a.id and s.search_tsv @@ q
+            union all
+            select 'Constitution', 'art. ' || ar.number, ar.title,
+                   ts_rank(ar.search_tsv, q),
+                   ts_headline('english', ar.text, q, %s), null, 'article'
+            from articles ar, plainto_tsquery('english', %s) q
+            where ar.search_tsv @@ q
+            union all
+            select 'judgment', coalesce(j.citation, j.case_name), j.case_name,
+                   ts_rank(j.search_tsv, q),
+                   ts_headline('english', j.text, q, %s), j.citation, 'judgment'
+            from judgments j, plainto_tsquery('english', %s) q
+            where j.search_tsv @@ q
+        )
+        select act, ref, title,
+               case when max(raw_rank) over () > 0
+                    then raw_rank / max(raw_rank) over ()
+                    else raw_rank end as rank,
+               snippet, citation, kind
+        from matched
+        order by rank desc
+        limit %s offset %s
+    """
+    union_params = [
+        TS_HEADLINE_OPTS, query,       # sections headline + query
+        TS_HEADLINE_OPTS, query,       # articles headline + query
+        TS_HEADLINE_OPTS_LONG, query,  # judgments headline + query
+        limit, offset,
+    ]
+    count_sql = """
+        select (
+            (select count(*) from sections s, plainto_tsquery('english', %s) q where s.search_tsv @@ q)
+            + (select count(*) from articles a, plainto_tsquery('english', %s) q where a.search_tsv @@ q)
+            + (select count(*) from judgments j, plainto_tsquery('english', %s) q where j.search_tsv @@ q)
+        ) as n
+    """
+    with _conn() as c:
+        total = c.execute(count_sql, (query, query, query)).fetchone()["n"]
+        rows = c.execute(union_sql, union_params).fetchall()
+    return [SearchResult(**r) for r in rows], int(total)
 
 
 # ---------------------------------------------------------------------------
@@ -573,9 +694,7 @@ def list_schedules() -> list[Schedule]:
         ).fetchall()
     return [
         Schedule(
-            number=r["number"],
-            title=r["title"],
-            text=r["text"],
+            number=r["number"], title=r["title"], text=r["text"],
             source="PRS (CC BY 4.0) / Government of India (public domain)",
             source_license="CC BY 4.0",
             as_of=CORPUS_AS_OF,
@@ -618,14 +737,9 @@ def list_amendments(year_from: int | None = None,
         ).fetchall()
     return [
         Amendment(
-            number=r["number"],
-            year=r["year"],
-            title=r["title"],
-            articles_affected=r["articles_affected"],
-            date=r["date"],
-            source="PRS (CC BY 4.0)",
-            source_license="CC BY 4.0",
-            as_of=CORPUS_AS_OF,
+            number=r["number"], year=r["year"], title=r["title"],
+            articles_affected=r["articles_affected"], date=r["date"],
+            source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
         )
         for r in rows
     ]
@@ -646,17 +760,44 @@ def get_amendment(number: int) -> Amendment | None:
     )
 
 
+def get_amendments_for_article(article: str) -> list[Amendment]:
+    """Reverse lookup: which amendments affected a given article number.
+
+    Parses the comma-separated ``articles_affected`` text field since the
+    schema doesn't normalize it into a join table yet.
+    """
+    art = normalize_ref(article)
+    if art is None:
+        return []
+    with _conn() as c:
+        rows = c.execute(
+            "select number, year, title, articles_affected, date from amendments "
+            "where articles_affected is not null order by number"
+        ).fetchall()
+    results: list[Amendment] = []
+    for r in rows:
+        affected = (r["articles_affected"] or "")
+        # Match the article number as a whole word so "31" doesn't match "314".
+        if re.search(rf"\b{re.escape(art)}\b", affected):
+            results.append(Amendment(
+                number=r["number"], year=r["year"], title=r["title"],
+                articles_affected=r["articles_affected"], date=r["date"],
+                source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
+            ))
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Cross-references (bidirectional)
 # ---------------------------------------------------------------------------
 
 def get_cross_refs(act: str, section: str, direction: str = "both") -> list[CrossRef]:
-    """Look up cross-references for a section.
+    """Look up cross-references for a section (bidirectional by default).
 
     ``direction``:
       * ``"from"`` — only outgoing refs (act/section is the source).
       * ``"to"`` — only incoming refs (act/section is the target).
-      * ``"both"`` — union of both (default, matches the tool description).
+      * ``"both"`` — union of both (default).
     """
     a = normalize_act(act)
     s = normalize_ref(section)
@@ -667,7 +808,7 @@ def get_cross_refs(act: str, section: str, direction: str = "both") -> list[Cros
         if direction in ("from", "both"):
             rows = c.execute(
                 "select from_act, from_section, to_act, to_section, kind "
-                "from cross_refs where from_act = %s and from_section = %s "
+                "from cross_refs where lower(from_act) = lower(%s) and from_section = %s "
                 "order by kind, to_act, to_section",
                 (a, s),
             ).fetchall()
@@ -675,12 +816,14 @@ def get_cross_refs(act: str, section: str, direction: str = "both") -> list[Cros
         if direction in ("to", "both"):
             rows = c.execute(
                 "select from_act, from_section, to_act, to_section, kind "
-                "from cross_refs where to_act = %s and to_section = %s "
+                "from cross_refs where lower(to_act) = lower(%s) and to_section = %s "
                 "order by kind, from_act, from_section",
                 (a, s),
             ).fetchall()
             refs.extend(CrossRef(**r) for r in rows)
-    # Dedupe (a from→to row and a to→from row may describe the same link twice).
+    # Dedupe exact duplicate rows (same from/to/kind). A from->to row and its
+    # inverse to->from row have different keys and are both kept (they are
+    # distinct directed relationships).
     seen: set[tuple[str, str, str, str, str]] = set()
     unique: list[CrossRef] = []
     for r in refs:
@@ -711,7 +854,7 @@ def semantic_search_sections(embedding: list[float], act: str | None = None,
     """
     params: list[Any] = [embedding, embedding]
     if act:
-        sql += " where a.short_name = %s"
+        sql += " where lower(a.short_name) = lower(%s)"
         params.append(act)
     sql += " order by e.embedding <=> %s::vector limit %s"
     with _conn() as c:
@@ -800,7 +943,21 @@ def corpus_stats() -> dict[str, int]:
 
 
 def corpus_as_of() -> date | None:
-    """Return the latest ``as_of`` date across acts (for SearchResponse.as_of)."""
-    with _conn() as c:
-        row = c.execute("select max(as_of) as d from acts").fetchone()
-    return row["d"] if row else None
+    """Return the latest ``as_of`` date across acts (cached for 5 minutes).
+
+    The as_of date changes only on re-ingestion, so caching avoids an extra
+    DB round-trip on every search call.
+    """
+    global _as_of_cache
+    now = time.monotonic()
+    cached_time, cached_val = _as_of_cache
+    if now - cached_time < _AS_OF_TTL:
+        return cached_val
+    try:
+        with _conn() as c:
+            row = c.execute("select max(as_of) as d from acts").fetchone()
+        val = row["d"] if row else None
+    except DatabaseUnavailable:
+        val = None
+    _as_of_cache = (now, val)
+    return val

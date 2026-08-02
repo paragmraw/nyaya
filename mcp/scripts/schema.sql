@@ -48,6 +48,9 @@ create table if not exists sections (
     unique (act_id, number)
 );
 create index if not exists sections_search_idx on sections using gin (search_tsv);
+-- Functional index for get_sections_by_range: numeric-prefix comparison.
+create index if not exists sections_act_numval_idx
+    on sections (act_id, (coalesce(nullif(regexp_replace(number, '[^0-9].*$', ''), '')::int, 0)));
 -- The unique (act_id, number) constraint already creates a btree index that
 -- covers act_id-prefix lookups, so we no longer add the redundant
 -- sections_act_number_idx / sections_act_id_idx.
@@ -59,6 +62,9 @@ create table if not exists articles (
     title       text not null,
     text        text not null,
     part        text,
+    source      text,                         -- provenance (optional; falls back to Python constant)
+    source_license text,
+    as_of       date,
     search_tsv  tsvector generated always as (
         to_tsvector('english', coalesce(title, '') || ' ' || coalesce(text, ''))
     ) stored
@@ -71,7 +77,10 @@ create table if not exists schedules (
     id          uuid primary key default gen_random_uuid(),
     number      int not null unique,
     title       text not null,
-    text        text not null
+    text        text not null,
+    source      text,
+    source_license text,
+    as_of       date
 );
 
 -- Constitution amendments -----------------------------------------------------
@@ -81,7 +90,10 @@ create table if not exists amendments (
     year              int not null,
     title             text not null,
     articles_affected text,
-    date              date
+    date              date,
+    source            text,
+    source_license    text,
+    as_of             date
 );
 
 -- Judgments -------------------------------------------------------------------
@@ -93,6 +105,9 @@ create table if not exists judgments (
     date        date,
     summary     text,
     text        text not null,
+    source      text,
+    source_license text,
+    as_of       date,
     search_tsv  tsvector generated always as (
         to_tsvector('english',
             coalesce(case_name, '') || ' ' ||
@@ -142,27 +157,29 @@ create table if not exists judgment_embeddings (
 -- data the way ivfflat does, so it's safe to create before loading data and
 -- gives good recall at any corpus size. For very small corpora (<10k rows)
 -- brute-force is also fine — these indexes are a bonus, not a requirement.
--- Fall back to ivfflat if HNSW is unavailable (older pgvector).
+-- Fall back to ivfflat if HNSW is unavailable (older pgvector < 0.5.0).
+-- Note: ivfflat created here (before data load) will have suboptimal centroids;
+-- re-run `nyaya-ingest embeddings` after data load to rebuild, or use HNSW.
 do $$
 begin
     begin
         create index if not exists section_embeddings_idx
             on section_embeddings using hnsw (embedding vector_cosine_ops);
-    exception when others then
+    exception when feature_not_supported then
         create index if not exists section_embeddings_idx
             on section_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
     end;
     begin
         create index if not exists article_embeddings_idx
             on article_embeddings using hnsw (embedding vector_cosine_ops);
-    exception when others then
+    exception when feature_not_supported then
         create index if not exists article_embeddings_idx
             on article_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
     end;
     begin
         create index if not exists judgment_embeddings_idx
             on judgment_embeddings using hnsw (embedding vector_cosine_ops);
-    exception when others then
+    exception when feature_not_supported then
         create index if not exists judgment_embeddings_idx
             on judgment_embeddings using ivfflat (embedding vector_cosine_ops) with (lists = 100);
     end;

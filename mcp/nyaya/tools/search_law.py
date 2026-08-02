@@ -38,13 +38,13 @@ def register(mcp) -> None:
                 like 'ipc', 'Indian Penal Code', 'Constitution', 'judgment'. When
                 omitted, all acts + articles + judgments are searched.
             limit: Maximum number of hits to return (1–50, default 10).
-            offset: Number of hits to skip for pagination (default 0). Use with
-                ``limit`` to page through large result sets.
+            offset: Number of hits to skip for pagination (default 0, clamped to >= 0).
         """
+        limit = max(1, min(int(limit), 50))
+        offset = max(0, int(offset))
         if not query or not query.strip():
             return SearchResponse(query=query or "", total=0, returned=0, offset=offset,
-                                  results=[], limit=max(1, min(int(limit), 50)))
-        limit = max(1, min(int(limit), 50))
+                                  results=[], as_of=db.corpus_as_of(), limit=limit)
         results, total = db.search_all(query, act=act, limit=limit, offset=offset)
         return SearchResponse(
             query=query, total=total, returned=len(results), offset=offset,

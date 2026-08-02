@@ -9,6 +9,14 @@ providers list to onnxruntime, which picks the first usable one.
 
 The model name is configurable via ``NYAYA_EMBEDDING_MODEL`` but must produce
 ``EXPECTED_DIM``-dimensional vectors to match the pgvector columns.
+
+Raises:
+    EmbeddingUnavailable: when fastembed is not installed or the model fails
+        to load. This is a *system* condition — the build/runtime lacks the
+        embedding engine. The ``semantic_query`` tool surfaces this as a
+        distinct error code so the LLM knows to fall back to ``search_law``.
+    SearchError: when a query is empty (client input error) or the produced
+        vector has the wrong dimensionality (configuration mismatch).
 """
 
 from __future__ import annotations
@@ -16,7 +24,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from .exceptions import EmbeddingUnavailable
+from .exceptions import EmbeddingUnavailable, SearchError
 
 # CUDA first (NVIDIA GPU), CPU as the universal fallback. ORT picks the
 # first usable provider in the list, so CUDA-capable machines use the GPU
@@ -49,23 +57,24 @@ def embed_query(text: str) -> list[float]:
     """Embed a single query string. Results are cached per query string.
 
     Raises EmbeddingUnavailable if fastembed is missing or the model fails to
-    load, and SearchError if the produced vector has the wrong dimensionality.
+    load, and SearchError if the query is empty or the produced vector has
+    the wrong dimensionality.
     """
     if not text or not text.strip():
-        raise EmbeddingUnavailable(
+        raise SearchError(
             "Cannot embed an empty query.",
             hint="Provide a non-empty query string to semantic_query.",
         )
     model = _model()
     embeddings = list(model.embed([text]))
     if not embeddings:
-        raise EmbeddingUnavailable(
+        raise SearchError(
             "The embedding model returned no vector for the query.",
             hint="This is unexpected; check the model installation.",
         )
     vec = embeddings[0].tolist()
     if len(vec) != EXPECTED_DIM:
-        raise EmbeddingUnavailable(
+        raise SearchError(
             f"Embedding dimension mismatch: expected {EXPECTED_DIM}, got {len(vec)}.",
             hint=f"Re-build embeddings with a {EXPECTED_DIM}-d model, or update EXPECTED_DIM.",
         )
@@ -73,6 +82,20 @@ def embed_query(text: str) -> list[float]:
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts (used by the ingestion CLI). Not cached."""
+    """Embed a batch of texts (used by the ingestion CLI). Not cached.
+
+    Guards: skips empty/whitespace-only texts (fastembed returns a zero
+    vector for them, which pollutes the embedding space) and asserts the
+    dimensionality of the first non-empty result.
+    """
     model = _model()
-    return [e.tolist() for e in model.embed(texts)]
+    clean = [t if t and t.strip() else " " for t in texts]
+    vectors = [e.tolist() for e in model.embed(clean)]
+    if vectors:
+        first = vectors[0]
+        if len(first) != EXPECTED_DIM:
+            raise SearchError(
+                f"Embedding dimension mismatch: expected {EXPECTED_DIM}, got {len(first)}.",
+                hint=f"Re-build embeddings with a {EXPECTED_DIM}-d model.",
+            )
+    return vectors

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .. import db
-from ..exceptions import EmbeddingUnavailable
+from ..exceptions import EmbeddingUnavailable, SearchError
 from ..models import SearchResponse
 from ._util import run_sync
 
@@ -36,14 +36,17 @@ def register(mcp) -> None:
                 'judgment'). When omitted, searches sections + articles + judgments.
             limit: Maximum number of hits (1–20, default 5).
         """
+        limit = max(1, min(int(limit), 20))
+        if not query or not query.strip():
+            return SearchResponse(query=query or "", total=0, returned=0, offset=0,
+                                  results=[], as_of=db.corpus_as_of(), limit=limit)
         try:
             from ..embeddings import embed_query
-            limit = max(1, min(int(limit), 20))
             embedding = embed_query(query)
             results = db.semantic_search_all(embedding, act=act, limit=limit)
         except EmbeddingUnavailable:
-            # Re-raise so the MCP client gets a structured error code instead of
-            # an empty result that looks like "no matches".
+            raise
+        except SearchError:
             raise
         return SearchResponse(
             query=query, total=len(results), returned=len(results), offset=0,

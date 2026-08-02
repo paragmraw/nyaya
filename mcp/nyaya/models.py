@@ -128,10 +128,16 @@ class CrossRefList(BaseModel):
 class SectionsList(BaseModel):
     act: str
     sections: list[Section]
+    total: int = Field(default=0, description="Total sections matching the query (before limit/offset). Use to decide whether to page.")
+    offset: int = Field(default=0, description="Offset of the first result in this response.")
+    limit: int = Field(default=100, description="The limit applied to this query.")
 
 
 class ArticlesList(BaseModel):
     articles: list[Article]
+    total: int = Field(default=0, description="Total articles matching the query (before limit/offset).")
+    offset: int = Field(default=0, description="Offset of the first result in this response.")
+    limit: int = Field(default=100, description="The limit applied to this query.")
 
 
 class SchedulesList(BaseModel):
@@ -144,3 +150,28 @@ class AmendmentsList(BaseModel):
 
 class JudgmentsList(BaseModel):
     judgments: list[Judgment]
+    total: int = Field(default=0, description="Total judgments in the corpus (before limit/offset).")
+    offset: int = Field(default=0, description="Offset of the first result in this response.")
+    limit: int = Field(default=50, description="The limit applied to this query.")
+
+
+class CorpusStats(BaseModel):
+    """Corpus counts returned by the corpus_stats tool."""
+    acts: int
+    sections: int
+    articles: int
+    judgments: int
+    amendments: int
+    schedules: int
+    chapters: int
+    cross_refs: int
+    as_of: Date | None = None
+
+
+class ChapterWithSections(BaseModel):
+    """A chapter with its full section list — returned by get_chapter."""
+    act: str
+    number: int
+    title: str
+    section_range: str | None = None
+    sections: list[Section]
