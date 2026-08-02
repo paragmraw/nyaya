@@ -1,0 +1,51 @@
+# The Docker build context is the repo root, so paths here are repo-relative.
+# The Dockerfile only copies from mcp/, so we exclude everything else.
+
+# --- Version control / CI ---
+.git
+.github
+
+# --- Python caches / build artifacts (anywhere in the repo) ---
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/htmlcov
+**/.coverage
+**/.coverage.*
+**/coverage.xml
+**/dist
+**/build
+**/*.egg-info
+**/.eggs
+
+# --- Virtualenvs ---
+.venv
+**/.venv
+**/venv
+
+# --- Secrets ---
+.env
+.env.local
+.env.*.local
+mcp/.env
+mcp/.env.local
+
+# --- Test / notebook files (not needed in the runtime image) ---
+mcp/tests
+mcp/notebooks
+
+# --- Large / transient data (keep manual YAML, ignore raw dumps + caches) ---
+mcp/data/raw
+mcp/data/hf_cache
+mcp/data/cache
+
+# --- Other languages / OS ---
+node_modules
+**/node_modules
+.DS_Store
+Thumbs.db
+*.log
+docs/_build/
