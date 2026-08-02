@@ -82,6 +82,12 @@ class CrossRef(BaseModel):
     kind: Literal["repeals", "replaced_by", "references", "corresponds_to", "amends"] = Field(description="How the source relates to the target.")
 
 
+# Discriminator for the kind of document a search hit refers to. Lets clients
+# route to the right resource template (section://, article://, judgment://)
+# without guessing from the ``act`` field.
+HitKind = Literal["section", "article", "judgment"]
+
+
 class SearchResult(BaseModel):
     act: str
     ref: str = Field(description="Section/article identifier, e.g. 's. 302' or 'art. 21'.")
@@ -89,14 +95,18 @@ class SearchResult(BaseModel):
     snippet: str = Field(description="Relevance-ordered snippet of the matching text.")
     rank: float = Field(description="Relevance score. Higher = more relevant. Scale differs between FTS and semantic.")
     citation: str | None = None
+    kind: HitKind | None = Field(default=None, description="Whether this hit is a section, article, or judgment. Lets clients route to the right resource template.")
 
 
 class SearchResponse(BaseModel):
     query: str
-    total: int
+    total: int = Field(description="Total number of matches found (before limit/offset). Use this to decide whether to page further.")
+    returned: int = Field(default=0, description="Number of results actually returned in this response (<= limit).")
+    offset: int = Field(default=0, description="Offset of the first result in this response. 0 for the first page.")
     results: list[SearchResult]
     source: str = "nyaya"
     as_of: Date | None = None
+    limit: int = Field(default=10, description="The limit applied to this query. Useful for paging.")
 
 
 class ActsList(BaseModel):
@@ -112,3 +122,56 @@ class CrossRefList(BaseModel):
     from_act: str
     from_section: str
     references: list[CrossRef]
+    direction: Literal["from", "to", "both"] = Field(default="both", description="Whether the references are outgoing (from), incoming (to), or both.")
+
+
+class SectionsList(BaseModel):
+    act: str
+    sections: list[Section]
+    total: int = Field(default=0, description="Total sections matching the query (before limit/offset). Use to decide whether to page.")
+    offset: int = Field(default=0, description="Offset of the first result in this response.")
+    limit: int = Field(default=100, description="The limit applied to this query.")
+
+
+class ArticlesList(BaseModel):
+    articles: list[Article]
+    total: int = Field(default=0, description="Total articles matching the query (before limit/offset).")
+    offset: int = Field(default=0, description="Offset of the first result in this response.")
+    limit: int = Field(default=100, description="The limit applied to this query.")
+
+
+class SchedulesList(BaseModel):
+    schedules: list[Schedule]
+
+
+class AmendmentsList(BaseModel):
+    amendments: list[Amendment]
+
+
+class JudgmentsList(BaseModel):
+    judgments: list[Judgment]
+    total: int = Field(default=0, description="Total judgments in the corpus (before limit/offset).")
+    offset: int = Field(default=0, description="Offset of the first result in this response.")
+    limit: int = Field(default=50, description="The limit applied to this query.")
+
+
+class CorpusStats(BaseModel):
+    """Corpus counts returned by the corpus_stats tool."""
+    acts: int
+    sections: int
+    articles: int
+    judgments: int
+    amendments: int
+    schedules: int
+    chapters: int
+    cross_refs: int
+    as_of: Date | None = None
+
+
+class ChapterWithSections(BaseModel):
+    """A chapter with its full section list — returned by get_chapter."""
+    act: str
+    number: int
+    title: str
+    section_range: str | None = None
+    sections: list[Section]

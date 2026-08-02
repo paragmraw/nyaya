@@ -59,9 +59,23 @@ def _load_rows():
         raise RuntimeError(
             "datasets not installed. Install with: pip install 'nyaya[ingest]'"
         ) from e
-    ds = load_dataset("mratanusarkar/Indian-Laws", split="train")
-    for row in ds:
-        yield row
+    # Retry the dataset download to survive transient HuggingFace outages.
+    import time
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            ds = load_dataset("mratanusarkar/Indian-Laws", split="train")
+            for row in ds:
+                yield row
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                wait = 2 ** attempt
+                print(f"  ! HuggingFace download failed (attempt {attempt + 1}/3): {e}; retrying in {wait}s…")
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"Could not load HuggingFace dataset after 3 attempts: {last_err}") from last_err
 
 
 def ingest_bare_acts(db: IngestDB) -> None:
@@ -72,40 +86,43 @@ def ingest_bare_acts(db: IngestDB) -> None:
     counts: dict[str, int] = {}
 
     for row in rows:
-        act_title = row["act_title"]
-        match = _match_act(act_title)
-        if match is None:
-            continue
-        short, full, year, kind = match
-        if short not in act_ids:
-            act_ids[short] = db.upsert_act(
-                short_name=short,
-                full_name=full,
-                year=year,
-                citation=f"Act No. of {year}" if year else None,
-                kind=kind,
-                source=SOURCE,
-                source_license=LICENSE,
-                as_of=AS_OF,
-            )
-            counts[short] = 0
+        try:
+            act_title = row["act_title"]
+            match = _match_act(act_title)
+            if match is None:
+                continue
+            short, full, year, kind = match
+            if short not in act_ids:
+                act_ids[short] = db.upsert_act(
+                    short_name=short,
+                    full_name=full,
+                    year=year,
+                    citation=f"Act of {year}" if year else None,
+                    kind=kind,
+                    source=SOURCE,
+                    source_license=LICENSE,
+                    as_of=AS_OF,
+                )
+                counts[short] = 0
 
-        section = str(row["section"]).strip()
-        text = CONTENT_PREFIX_RE.sub("", str(row["law"]).strip())
-        if not section or not text:
+            section = str(row["section"]).strip()
+            text = CONTENT_PREFIX_RE.sub("", str(row["law"]).strip())
+            if not section or not text:
+                continue
+            title: str | None = None
+            m = re.match(r"^(\d+[A-Z]?)\.?\s*(.*)$", section)
+            if m and m.group(2):
+                section = m.group(1)
+                title = m.group(2).strip()
+            db.upsert_section(
+                act_id=act_ids[short],
+                number=section,
+                title=title,
+                text=text,
+            )
+            counts[short] = counts.get(short, 0) + 1
+        except (KeyError, ValueError, TypeError) as e:
             continue
-        title: str | None = None
-        m = re.match(r"^(\d+[A-Z]?)\.?\s*(.*)$", section)
-        if m and m.group(2):
-            section = m.group(1)
-            title = m.group(2).strip()
-        db.upsert_section(
-            act_id=act_ids[short],
-            number=section,
-            title=title,
-            text=text,
-        )
-        counts[short] = counts.get(short, 0) + 1
 
     db.commit()
     print("✓ Bare-act ingestion complete:")

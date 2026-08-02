@@ -201,6 +201,7 @@ class IngestDB:
                 insert into judgments (case_name, citation, court, date, summary, text)
                 values (%s, %s, %s, %s, %s, %s)
                 on conflict (case_name) do update set
+                    citation = excluded.citation,
                     court = excluded.court,
                     date = excluded.date,
                     summary = excluded.summary,
@@ -260,7 +261,11 @@ class IngestDB:
             union all select 'judgments', count(*) from judgments
             union all select 'amendments', count(*) from amendments
             union all select 'schedules', count(*) from schedules
+            union all select 'chapters', count(*) from chapters
             union all select 'cross_refs', count(*) from cross_refs
+            union all select 'section_embeddings', count(*) from section_embeddings
+            union all select 'article_embeddings', count(*) from article_embeddings
+            union all select 'judgment_embeddings', count(*) from judgment_embeddings
             """
         )
         return {r["k"]: int(r["n"]) for r in rows}

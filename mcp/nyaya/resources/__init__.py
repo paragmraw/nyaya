@@ -17,13 +17,14 @@ def register(mcp) -> None:
     )
     def corpus_overview() -> str:
         stats = db.corpus_stats()
+        as_of = db.corpus_as_of()
         return json.dumps(
             {
                 "name": "nyaya",
                 "description": "Indian law MCP server",
-                "as_of": "2026-07-01",
+                "as_of": as_of.isoformat() if as_of else None,
                 "counts": stats,
-                "acts_url": "act://",
+                "acts_url": "acts://",
             },
             indent=2,
         )
@@ -59,6 +60,16 @@ def register(mcp) -> None:
         return json.dumps([a.model_dump(mode="json") for a in ams], indent=2)
 
     @mcp.resource(
+        "judgments://",
+        name="All landmark judgments",
+        description="List of all landmark Supreme Court judgments in the corpus.",
+        mime_type="application/json",
+    )
+    def all_judgments() -> str:
+        juds, _ = db.list_judgments(limit=1000)
+        return json.dumps([j.model_dump(mode="json") for j in juds], indent=2)
+
+    @mcp.resource(
         "act://{short_name}",
         name="Act metadata + table of contents",
         description="Metadata and chapter listing for a single act, by short name (e.g. 'IPC', 'BNS').",
@@ -67,7 +78,11 @@ def register(mcp) -> None:
     def act_metadata(short_name: str) -> str:
         act = db.get_act(short_name)
         if act is None:
-            raise NotFound(f"Act {short_name!r} not found in corpus.")
+            raise NotFound(
+                f"Act {short_name!r} not found in corpus.",
+                kind="act",
+                hint="Call acts:// or the list_acts tool to enumerate the corpus.",
+            )
         chapters = db.list_chapters(short_name)
         return json.dumps(
             {
@@ -86,7 +101,11 @@ def register(mcp) -> None:
     def section_resource(act: str, number: str) -> str:
         sec = db.get_section(act, number)
         if sec is None:
-            raise NotFound(f"Section {number} of {act} not found in corpus.")
+            raise NotFound(
+                f"Section {number} of {act} not found in corpus.",
+                kind="section",
+                hint="Call search_law or list_chapters to find the right section.",
+            )
         return sec.model_dump_json(indent=2)
 
     @mcp.resource(
@@ -98,7 +117,11 @@ def register(mcp) -> None:
     def article_resource(number: str) -> str:
         art = db.get_article(number)
         if art is None:
-            raise NotFound(f"Article {number!r} not found in corpus.")
+            raise NotFound(
+                f"Article {number!r} not found in corpus.",
+                kind="article",
+                hint="Call search_law or list_articles to find the right article.",
+            )
         return art.model_dump_json(indent=2)
 
     @mcp.resource(
@@ -110,5 +133,57 @@ def register(mcp) -> None:
     def judgment_resource(case_slug: str) -> str:
         jud = db.get_judgment(case_slug)
         if jud is None:
-            raise NotFound(f"Judgment {case_slug!r} not found in corpus.")
+            raise NotFound(
+                f"Judgment {case_slug!r} not found in corpus.",
+                kind="judgment",
+                hint="Call judgments:// or search_judgments to find cases.",
+            )
         return jud.model_dump_json(indent=2)
+
+    @mcp.resource(
+        "amendment://{number}",
+        name="Constitution amendment",
+        description="A specific Constitutional amendment by number, e.g. amendment://42.",
+        mime_type="application/json",
+    )
+    def amendment_resource(number: str) -> str:
+        try:
+            num = int(number)
+        except ValueError:
+            raise NotFound(
+                f"Amendment {number!r} is not a valid number.",
+                kind="amendment",
+                hint="Amendment numbers are integers, e.g. amendment://42.",
+            )
+        am = db.get_amendment(num)
+        if am is None:
+            raise NotFound(
+                f"Amendment {number!r} not found in corpus.",
+                kind="amendment",
+                hint="Call amendments:// to list all amendments.",
+            )
+        return am.model_dump_json(indent=2)
+
+    @mcp.resource(
+        "schedule://{number}",
+        name="Constitution schedule",
+        description="A specific Constitution Schedule by number (1-12), e.g. schedule://9.",
+        mime_type="application/json",
+    )
+    def schedule_resource(number: str) -> str:
+        try:
+            num = int(number)
+        except ValueError:
+            raise NotFound(
+                f"Schedule {number!r} is not a valid number.",
+                kind="schedule",
+                hint="Schedule numbers are integers 1-12, e.g. schedule://9.",
+            )
+        sched = db.get_schedule(num)
+        if sched is None:
+            raise NotFound(
+                f"Schedule {number!r} not found in corpus.",
+                kind="schedule",
+                hint="Call schedules:// to list all schedules.",
+            )
+        return sched.model_dump_json(indent=2)

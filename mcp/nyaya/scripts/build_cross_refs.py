@@ -38,6 +38,8 @@ ACT_ALIASES = {
     "information technology act": "ITAct",
     "arbitration and conciliation act": "Arbitration",
     "consumer protection act": "ConsumerProtection",
+    "central goods and services tax": "CGST",
+    "integrated goods and services tax": "IGST",
 }
 
 
@@ -58,11 +60,26 @@ def _load_manual_map(db: IngestDB) -> int:
     n = 0
     for m in mappings:
         ipc = str(m["ipc"])
-        bns = str(m["bns"])
+        bns = str(m["bns"]).strip()
         kind = m.get("kind", "corresponds_to")
+        # Skip placeholder entries (e.g. bns: "—") that would otherwise insert
+        # garbage rows pointing at a nonexistent BNS section.
+        if not bns or bns in {"—", "-", "n/a", "na", ""}:
+            if kind == "repeals":
+                # A repealed section with no BNS successor still gets a forward
+                # "repeals" row, but no reverse (nothing replaced it).
+                db.add_cross_ref(from_act="IPC", from_section=ipc, to_act="BNS",
+                                  to_section="", kind="repeals")
+                n += 1
+            continue
         db.add_cross_ref(from_act="IPC", from_section=ipc, to_act="BNS", to_section=bns, kind=kind)
-        db.add_cross_ref(from_act="BNS", from_section=bns, to_act="IPC", to_section=ipc, kind="replaced_by")
-        n += 2
+        # Reverse direction: only add "replaced_by" when there is an actual
+        # BNS successor. For "repeals" the reverse kind would be misleading.
+        if kind == "corresponds_to":
+            db.add_cross_ref(from_act="BNS", from_section=bns, to_act="IPC", to_section=ipc, kind="replaced_by")
+            n += 2
+        else:
+            n += 1
     return n
 
 

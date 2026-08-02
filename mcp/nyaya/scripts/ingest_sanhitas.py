@@ -41,7 +41,7 @@ PDFS: list[dict] = [
         "full_name": "The Bharatiya Sakshya Adhiniyam, 2023",
         "year": 2023,
         "kind": "civil",
-        "url": "https://prsindia.org/files/bills_acts/acts_parliament/2023/The Bharatiya Sakshya Bill, 2023.pdf",
+        "url": "https://prsindia.org/files/bills_acts/acts_parliament/2023/The Bharatiya Sakshya Adhiniyam, 2023.pdf",
         "citation": "Act 47 of 2023",
     },
 ]
@@ -54,10 +54,22 @@ CHAPTER_HEADING_RE = re.compile(r"^Chapter\s+(?P<num>[IVXLC]+)\s*[.\-—–]?\s*
 
 
 def _download_pdf(url: str) -> bytes:
-    with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-        r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
-        r.raise_for_status()
-        return r.content
+    import time
+    last_err: Exception | None = None
+    for attempt in range(3):
+        try:
+            with httpx.Client(follow_redirects=True, timeout=60.0) as client:
+                r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
+                r.raise_for_status()
+                return r.content
+        except httpx.HTTPError as e:
+            last_err = e
+            if attempt < 2:
+                wait = 2 ** attempt
+                print(f"  ! PDF download failed (attempt {attempt + 1}/3): {e}; retrying in {wait}s…")
+                time.sleep(wait)
+            else:
+                raise
 
 
 def _extract_text(pdf_bytes: bytes) -> str:
@@ -75,7 +87,15 @@ def _parse_sections(text: str) -> list[dict]:
     sections: list[dict] = []
     current: dict | None = None
     current_chapter: tuple[int, str] | None = None
-    roman_to_int = {"I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12}
+    # BNS has 21 chapters; the previous map only covered I-XII, silently
+    # dropping chapters 13-21. Extend to XXI (and beyond via computation).
+    roman_to_int = {
+        "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7,
+        "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12, "XIII": 13,
+        "XIV": 14, "XV": 15, "XVI": 16, "XVII": 17, "XVIII": 18,
+        "XIX": 19, "XX": 20, "XXI": 21, "XXII": 22, "XXIII": 23,
+        "XXIV": 24, "XXV": 25,
+    }
 
     for line in lines:
         stripped = line.strip()
@@ -118,8 +138,12 @@ def ingest_sanhitas(db: IngestDB) -> None:
         except httpx.HTTPError as e:
             print(f"  ! Failed to download {pdf['url']}: {e}")
             continue
-        text = _extract_text(pdf_bytes)
-        sections = _parse_sections(text)
+        try:
+            text = _extract_text(pdf_bytes)
+            sections = _parse_sections(text)
+        except Exception as e:
+            print(f"  ! Failed to extract/parse {pdf['short_name']} PDF: {e}; skipping.")
+            continue
         if not sections:
             print(f"  ! No sections parsed from {pdf['short_name']} PDF (text length {len(text)}); skipping.")
             continue
