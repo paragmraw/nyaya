@@ -34,7 +34,7 @@ def _get_pool() -> ConnectionPool:
             conninfo=settings.database_url,
             min_size=1,
             max_size=8,
-            open=False,
+            open=True,
         )
     return _pool
 

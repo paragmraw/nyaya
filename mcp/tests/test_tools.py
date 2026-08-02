@@ -95,7 +95,12 @@ async def test_cross_reference_tool(fake_db):
     assert r.references[0].kind == "corresponds_to"
 
 
-async def test_semantic_query_disabled(fake_db):
+async def test_semantic_query_disabled(fake_db, monkeypatch):
+    # Simulate the "semantic search unavailable" path (fastembed not installed
+    # or model load failed) so the tool returns empty without touching the
+    # network or DB. Keeps the test suite fully offline.
+    from nyaya import embeddings
+    monkeypatch.setattr(embeddings, "embed_query", lambda _q: (_ for _ in ()).throw(RuntimeError("disabled in tests")))
     app = _make_app(fake_db)
     r = await _tool(app, "semantic_query", query="right to privacy")
     assert r.total == 0

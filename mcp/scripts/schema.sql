@@ -100,6 +100,7 @@ create table if not exists judgments (
     ) stored
 );
 create index if not exists judgments_search_idx on judgments using gin (search_tsv);
+create unique index if not exists judgments_case_name_idx on judgments (case_name);
 
 -- Cross-references ------------------------------------------------------------
 -- Stores relationships like "IPC s.302 corresponds_to BNS s.103",
@@ -116,18 +117,18 @@ create index if not exists cross_refs_from_idx on cross_refs (from_act, from_sec
 create index if not exists cross_refs_to_idx on cross_refs (to_act, to_section);
 
 -- Embeddings (pgvector) -------------------------------------------------------
--- 384 dims matches BAAI/bge-small-en-v1.5 and all-MiniLM-L6-v2.
+-- 1024 dims matches BAAI/bge-large-en-v1.5 (the nyaya embedding model).
 create table if not exists section_embeddings (
     section_id uuid primary key references sections(id) on delete cascade,
-    embedding  vector(384)
+    embedding  vector(1024)
 );
 create table if not exists article_embeddings (
     article_id uuid primary key references articles(id) on delete cascade,
-    embedding  vector(384)
+    embedding  vector(1024)
 );
 create table if not exists judgment_embeddings (
     judgment_id uuid primary key references judgments(id) on delete cascade,
-    embedding   vector(384)
+    embedding   vector(1024)
 );
 
 -- ivfflat indexes need to be built after data is loaded; we create them with

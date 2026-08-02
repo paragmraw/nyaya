@@ -29,9 +29,15 @@ def _load_articles() -> list[dict]:
             "indianconstitution not installed. Install with: pip install 'nyaya[ingest]'"
         ) from e
 
+    import tempfile, os
     c = Constitution()
-    raw = c.to_json()
-    data = json.loads(raw) if isinstance(raw, str) else raw
+    tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False, mode="w", encoding="utf-8")
+    tmp_path = tmp.name
+    tmp.close()
+    c.export("json", tmp_path)
+    with open(tmp_path, encoding="utf-8") as f:
+        data = json.load(f)
+    os.unlink(tmp_path)
     if isinstance(data, dict) and "articles" in data:
         data = data["articles"]
     return data
@@ -61,15 +67,15 @@ def ingest_constitution(db: IngestDB) -> None:
     current_part: str | None = None
     n = 0
     for art in articles:
-        number = str(art.get("article") or art.get("number") or "").strip()
+        number = str(art.get("number") or "").strip()
         title = (art.get("title") or "").strip()
-        text = (art.get("description") or art.get("text") or "").strip()
+        text = (art.get("content") or art.get("text") or "").strip()
         if not number or not text:
             continue
         if number == "0":
             number = "Preamble"
             title = title or "Preamble"
-        part = _article_part(title, current_part)
+        part = art.get("part") or _article_part(title, current_part)
         if part:
             current_part = part
         db.upsert_article(
