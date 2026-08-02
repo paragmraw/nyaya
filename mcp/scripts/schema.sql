@@ -111,7 +111,10 @@ create table if not exists cross_refs (
     from_section  text not null,
     to_act        text not null,
     to_section    text not null,
-    kind          text not null check (kind in ('repeals','replaced_by','references','corresponds_to','amends'))
+    kind          text not null check (kind in ('repeals','replaced_by','references','corresponds_to','amends')),
+    -- Dedupe so re-running build_cross_refs is idempotent: the same
+    -- from→to relationship of a given kind is inserted once, not N times.
+    unique (from_act, from_section, to_act, to_section, kind)
 );
 create index if not exists cross_refs_from_idx on cross_refs (from_act, from_section);
 create index if not exists cross_refs_to_idx on cross_refs (to_act, to_section);

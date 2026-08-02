@@ -9,7 +9,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 - **6 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters`, `cross_reference`, `semantic_query`
 - **5 resource templates**: `corpus://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`
 - **Full-text search** via Postgres `tsvector` + GIN indexes
-- **Semantic search** via `pgvector` + local `fastembed` embeddings — available in local dev and the slim-based image; **disabled in the Alpine image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants))
+- **Semantic search** via `pgvector` + local `fastembed` embeddings (BAAI/bge-large-en-v1.5, 1024-d) — available in local dev and the slim-based image; **disabled in the Alpine image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants)). CUDAExecutionProvider is used on NVIDIA GPUs with automatic CPU fallback.
 - **Provenance on every result**: source, license, and `as_of` date
 
 ## Corpus and sources
@@ -60,7 +60,8 @@ From the `mcp/` directory:
 # Install with semantic + dev extras
 pip install -e ".[semantic,dev]"
 
-# Run ingestion (one-time; populates Supabase)
+# Hydrate Supabase (one-time) — see "Hydrate via notebook" below for the
+# recommended interactive path, or use the CLI:
 nyaya-ingest all
 
 # Start the server
@@ -70,9 +71,26 @@ nyaya
 # → Health check at http://localhost:8000/health
 ```
 
-### 4. Ingest the corpus
+### 4. Hydrate the corpus (notebook — recommended)
 
-The ingestion scripts pull from HuggingFace, PRS, and the bundled Constitution JSON. Run them in order:
+`mcp/notebooks/hydrate.ipynb` is the primary hydration path. Open it from the
+`mcp/` directory (so `data/manual/...` and `scripts/schema.sql` relative paths
+resolve) and run all cells. It:
+
+1. Applies the schema (idempotent), confirming the embedding columns are `vector(1024)`.
+2. Ingests the Constitution, bare acts (HuggingFace), Sanhitas (PRS PDFs), judgments, and cross-references — reusing the same `nyaya.scripts.ingest_*` functions as the CLI.
+3. Builds **enriched** pgvector embeddings (sections/articles/judgments get an `act | ref | title` prefix before the text) with `BAAI/bge-large-en-v1.5`, using `CUDAExecutionProvider` on NVIDIA GPUs with automatic `CPUExecutionProvider` fallback. Progress bars via `tqdm`.
+4. Runs sanity checks: counts match, `vector_dims(embedding) = 1024`, a semantic query (`right to privacy` → Puttaswamy), and an FTS query (`murder` → IPC/BNS).
+
+The notebook is idempotent — every ingest step upserts on conflict, and `cross_refs`
+has a unique constraint so re-runs don't accumulate duplicates. Run it whenever the
+corpus changes.
+
+### 5. Hydrate via CLI (non-interactive alternative)
+
+The `nyaya-ingest` CLI wraps the same ingestion functions and is useful for
+scripts/CI. The ingestion scripts pull from HuggingFace, PRS, and the bundled
+Constitution JSON. Run them in order:
 
 ```bash
 nyaya-ingest schema           # apply schema.sql (idempotent)
@@ -81,11 +99,13 @@ nyaya-ingest bare-acts        # IPC, CrPC, CPC, Evidence, commercial statutes
 nyaya-ingest sanhitas         # BNS, BNSS, BSA from PRS PDFs
 nyaya-ingest judgments        # landmark SC judgments from data/manual/judgments.yaml
 nyaya-ingest cross-refs       # IPC↔BNS mapping + inline references
-nyaya-ingest embeddings       # pgvector embeddings (~130MB model download on first run)
+nyaya-ingest embeddings       # pgvector embeddings (~520MB model download on first run)
 nyaya-ingest counts           # show row counts
 ```
 
-`nyaya-ingest all` runs everything in order.
+`nyaya-ingest all` runs everything in order. The CLI embeds the raw text column
+(simpler than the notebook's enriched text); for the best retrieval quality, use
+the notebook.
 
 > **Manual data**: `data/manual/judgments.yaml` ships with placeholder judgment text. Replace the `text:` fields with full judgment text pasted from [indiankanoon.org](https://indiankanoon.org) (free browse, no API needed). Same for `data/manual/ipc_bns_map.yaml` (extend the mapping) and `data/manual/schedules/*.md` (fill in schedule text from the official Constitution PDF).
 
@@ -241,7 +261,9 @@ nyaya/                          # repo root
     │   ├── tools/              # 6 MCP tools
     │   └── resources/          # MCP resources + templates
     ├── scripts/
-    │   └── schema.sql          # Supabase DDL (idempotent)
+    │   └── schema.sql          # Supabase DDL (idempotent, vector(1024) embeddings)
+    ├── notebooks/
+    │   └── hydrate.ipynb       # end-to-end hydration (ingest + embeddings + sanity)
     ├── data/manual/            # curated YAML + schedule text
     └── tests/                  # offline unit + integration tests
 ```

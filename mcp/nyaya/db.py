@@ -25,6 +25,18 @@ from .models import (
 
 _pool: ConnectionPool | None = None
 
+# ts_headline option strings, passed as SQL parameters to keep the headline
+# options (which contain quotes/angles) out of the SQL literal — inlining them
+# breaks the parser. Kept module-level so they're defined once and reused.
+TS_HEADLINE_OPTS = (
+    'MaxWords=60, MinWords=20, MaxFragments=3, '
+    'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
+)
+TS_HEADLINE_OPTS_LONG = (
+    'MaxWords=80, MinWords=20, MaxFragments=3, '
+    'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
+)
+
 
 def _get_pool() -> ConnectionPool:
     global _pool
@@ -120,14 +132,12 @@ def search_sections(query: str, act: str | None = None, limit: int = 10) -> list
                's. ' || s.number as ref,
                s.title,
                ts_rank(s.search_tsv, q) as rank,
-               ts_headline('english', s.text, q,
-                   'MaxWords=60, MinWords=20, MaxFragments=3,
-                    FragmentDelimiter=" … ", StartSel="<<", StopSel=">>") as snippet,
-                a.citation
+               ts_headline('english', s.text, q, %s) as snippet,
+               a.citation
         from sections s, acts a, plainto_tsquery('english', %s) q
         where s.act_id = a.id and s.search_tsv @@ q
     """
-    params: list[Any] = [query]
+    params: list[Any] = [TS_HEADLINE_OPTS, query]
     if act:
         sql += " and a.short_name = %s"
         params.append(act)
@@ -163,16 +173,14 @@ def search_articles(query: str, limit: int = 10) -> list[SearchResult]:
                'art. ' || a.number as ref,
                a.title,
                ts_rank(a.search_tsv, q) as rank,
-               ts_headline('english', a.text, q,
-                   'MaxWords=60, MinWords=20, MaxFragments=3,
-                    FragmentDelimiter=" … ", StartSel="<<", StopSel=">>") as snippet,
+               ts_headline('english', a.text, q, %s) as snippet,
                null as citation
         from articles a, plainto_tsquery('english', %s) q
         where a.search_tsv @@ q
         order by rank desc limit %s
     """
     with _conn() as c:
-        rows = c.execute(sql, (query, limit)).fetchall()
+        rows = c.execute(sql, (TS_HEADLINE_OPTS, query, limit)).fetchall()
     return [SearchResult(**r) for r in rows]
 
 
@@ -210,16 +218,14 @@ def search_judgments(query: str, limit: int = 10) -> list[SearchResult]:
                coalesce(j.citation, j.case_name) as ref,
                j.case_name as title,
                ts_rank(j.search_tsv, q) as rank,
-               ts_headline('english', j.text, q,
-                   'MaxWords=80, MinWords=20, MaxFragments=3,
-                    FragmentDelimiter=" … ", StartSel="<<", StopSel=">>") as snippet,
+               ts_headline('english', j.text, q, %s) as snippet,
                j.citation
         from judgments j, plainto_tsquery('english', %s) q
         where j.search_tsv @@ q
         order by rank desc limit %s
     """
     with _conn() as c:
-        rows = c.execute(sql, (query, limit)).fetchall()
+        rows = c.execute(sql, (TS_HEADLINE_OPTS_LONG, query, limit)).fetchall()
     return [SearchResult(**r) for r in rows]
 
 
