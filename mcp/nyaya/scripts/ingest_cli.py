@@ -3,7 +3,8 @@
 Usage:
     nyaya-ingest schema           # apply schema.sql
     nyaya-ingest constitution     # ingest Constitution articles/schedules/amendments
-    nyaya-ingest bare-acts        # ingest IPC/CrPC/CPC/Evidence/commercial from HF
+    nyaya-ingest bare-acts        # ingest CrPC + commercial statutes from HF
+    nyaya-ingest civictech        # ingest IPC/IEA/CPC from civictech JSON (full text)
     nyaya-ingest sanhitas         # ingest BNS/BNSS/BSA from PRS PDFs
     nyaya-ingest judgments        # ingest landmark SC judgments from YAML
     nyaya-ingest cross-refs       # build cross-references
@@ -36,6 +37,9 @@ def main() -> None:
         elif cmd == "bare_acts":
             from .ingest_bare_acts import ingest_bare_acts
             ingest_bare_acts(db)
+        elif cmd == "civictech":
+            from .ingest_civictech import ingest_civictech
+            ingest_civictech(db)
         elif cmd == "sanhitas":
             from .ingest_sanhitas import ingest_sanhitas
             ingest_sanhitas(db)
@@ -54,6 +58,8 @@ def main() -> None:
             ingest_constitution(db)
             from .ingest_bare_acts import ingest_bare_acts
             ingest_bare_acts(db)
+            from .ingest_civictech import ingest_civictech
+            ingest_civictech(db)
             from .ingest_sanhitas import ingest_sanhitas
             ingest_sanhitas(db)
             from .ingest_judgments import ingest_judgments

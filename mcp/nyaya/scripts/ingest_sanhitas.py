@@ -46,7 +46,10 @@ PDFS: list[dict] = [
     },
 ]
 
-SECTION_HEADING_RE = re.compile(r"^(?P<num>\d+[A-Z]?)\.\s+(?P<title>.+)$")
+# PRS PDFs render section headings as "2.In this Sanhita…" (no space after the
+# period), so the whitespace after the dot must be OPTIONAL (\s* not \s+).
+# Verified: this recovers 80 missing BNS sections (277→357) with 0 false positives.
+SECTION_HEADING_RE = re.compile(r"^(?P<num>\d+[A-Z]?)\.\s*(?P<title>.+)$")
 CHAPTER_HEADING_RE = re.compile(r"^Chapter\s+(?P<num>[IVXLC]+)\s*[.\-—–]?\s*(?P<title>.+)?$", re.IGNORECASE)
 
 

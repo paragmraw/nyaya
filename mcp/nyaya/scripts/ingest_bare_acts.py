@@ -1,5 +1,16 @@
-"""Ingest old bare acts (IPC, CrPC, CPC, Evidence) and commercial statutes
-from the `mratanusarkar/Indian-Laws` HuggingFace dataset.
+"""Ingest bare acts and commercial statutes from the `mratanusarkar/Indian-Laws`
+HuggingFace dataset.
+
+IPC, Indian Evidence Act, and CPC are NOT in ACT_MAP: the HF dataset is sparse
+for those (IPC has only 12 of ~511 sections). They are ingested from the
+civictech-India JSON repo instead — see `ingest_civictech.py`. Sourcing each
+act from exactly one place keeps the upsert order irrelevant: whichever ingest
+runs last no longer overwrites better data with worse.
+
+The remaining acts here (CrPC, commercial statutes) are well-covered in the HF
+dataset. `_match_act` uses word-boundary matching so "Code of Criminal Procedure"
+does NOT also match "Code of Criminal Procedure (Amendment) Act, 1980" or the
+Goa CPC-extension act (a substring `in` match would wrongly ingest those).
 """
 
 from __future__ import annotations
@@ -14,10 +25,7 @@ SOURCE = "mratanusarkar/Indian-Laws (HuggingFace) sourced from indiankanoon.org 
 LICENSE = "Public domain (government edicts)"
 
 ACT_MAP: list[tuple[str, str, str, int | None, str]] = [
-    ("indian penal code", "IPC", "The Indian Penal Code", 1860, "criminal"),
     ("code of criminal procedure", "CrPC", "The Code of Criminal Procedure", 1973, "criminal"),
-    ("code of civil procedure", "CPC", "The Code of Civil Procedure", 1908, "civil"),
-    ("indian evidence act", "EvidenceAct", "The Indian Evidence Act", 1872, "civil"),
     ("companies act", "Companies", "The Companies Act", 2013, "commercial"),
     ("integrated goods and services tax", "IGST", "The Integrated Goods and Services Tax Act", 2017, "commercial"),
     ("central goods and services tax", "CGST", "The Central Goods and Services Tax Act", 2017, "commercial"),
@@ -32,8 +40,15 @@ CONTENT_PREFIX_RE = re.compile(r"^\s*Content\s*:\s*", re.IGNORECASE)
 def _match_act(act_title: str) -> tuple[str, str, int | None, str] | None:
     low = act_title.lower()
     for needle, short, full, year, kind in ACT_MAP:
-        if needle in low:
-            return short, full, year, kind
+        # The needle must be followed by end-of-string, a comma, or " act" —
+        # NOT by "(" (which signals an amendment/extension act, e.g.
+        # "Code of Criminal Procedure (Amendment) Act, 1980" or the Goa
+        # CPC-extension act). Strip the leading space so " (" is caught.
+        m = re.search(re.escape(needle) + r"\b", low)
+        if m:
+            tail = low[m.end():].lstrip()
+            if tail == "" or tail.startswith(",") or tail.startswith("act"):
+                return short, full, year, kind
     return None
 
 
