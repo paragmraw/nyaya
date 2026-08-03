@@ -1,5 +1,6 @@
-# The Docker build context is the repo root, so paths here are repo-relative.
-# The Dockerfile only copies from mcp/, so we exclude everything else.
+# The Docker build context is the repo root. The root Dockerfile builds two
+# stages: web/ (Node SPA) and mcp/ (Python server). We exclude everything
+# else, plus the build artifacts that should not enter the image.
 
 # --- Version control / CI ---
 .git
@@ -42,6 +43,12 @@ mcp/data/raw
 mcp/data/hf_cache
 mcp/data/cache
 
+# --- Frontend build artifacts (rebuilt inside the image) ---
+web/node_modules
+web/.next
+web/out
+web/.git
+
 # --- Other languages / OS ---
 node_modules
 **/node_modules
@@ -49,3 +56,6 @@ node_modules
 Thumbs.db
 *.log
 docs/_build/
+
+# --- Scratch design files (gitignored anyway, never in the image) ---
+scratch

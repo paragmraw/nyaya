@@ -1,8 +1,8 @@
 [build]
-# The Dockerfile lives under mcp/ (the MCP server is one component of a
-# larger monorepo). Railway's build context is the repo root, so the
-# Dockerfile's COPY paths are prefixed with mcp/.
-dockerfilePath = "mcp/Dockerfile"
+# Multi-stage root Dockerfile: builds the Next.js SPA (Node stage) and the
+# Python MCP server (Alpine stage), then serves both from one container.
+# The build context is the repo root.
+dockerfilePath = "Dockerfile"
 
 [deploy]
 # Healthcheck: poll /health on the internal port.
