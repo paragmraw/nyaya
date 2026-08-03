@@ -32,6 +32,7 @@ from datetime import date
 from typing import Any, Iterator
 
 import psycopg
+import psycopg_pool
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -184,14 +185,23 @@ def _get_pool() -> ConnectionPool:
             settings = get_settings()
 
             def _configure(conn: psycopg.Connection) -> None:
-                if settings.statement_timeout_ms > 0:
+                # The configure callback runs once per new connection. SET
+                # commands start a transaction in psycopg's default
+                # autocommit=False mode; we must commit (or use autocommit)
+                # so the pool doesn't see the connection left in INTRANS
+                # status and discard it as broken.
+                conn.autocommit = True
+                try:
+                    if settings.statement_timeout_ms > 0:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "set statement_timeout = %s",
+                                (settings.statement_timeout_ms,),
+                            )
                     with conn.cursor() as cur:
-                        cur.execute(
-                            "set statement_timeout = %s",
-                            (settings.statement_timeout_ms,),
-                        )
-                with conn.cursor() as cur:
-                    cur.execute("set application_name = 'nyaya'")
+                        cur.execute("set application_name = 'nyaya'")
+                finally:
+                    conn.autocommit = False
 
             _pool = ConnectionPool(
                 conninfo=settings.database_url,
@@ -526,9 +536,11 @@ def get_judgment(case_slug: str) -> Judgment | None:
         ).fetchone()
         if not row:
             # 2. Slugified case-name match (e.g. "kesavananda-bharati-v-state-of-kerala").
+            #    Strip periods from the case name so "v." -> "v" matches the
+            #    common slug form without punctuation.
             row = c.execute(
                 "select case_name, citation, court, date, summary, text "
-                "from judgments where lower(replace(case_name, ' ', '-')) = lower(%s) limit 1",
+                "from judgments where lower(replace(replace(case_name, ' ', '-'), '.', '')) = lower(replace(%s, '.', '')) limit 1",
                 (slug,),
             ).fetchone()
         if not row and len(slug) >= 4:
