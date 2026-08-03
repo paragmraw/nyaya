@@ -1,0 +1,31 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env files
+.env*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# The root .gitignore has a top-level `lib/` pattern (Python build artifact).
+# Un-ignore the SPA's src/lib barrel so api.ts/swr.ts/index.ts are tracked.
+!src/lib/

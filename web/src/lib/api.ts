@@ -1,0 +1,82 @@
+// API client + SWR hooks for the Nyaya SPA.
+//
+// All data is fetched client-side against same-origin REST endpoints (see
+// mcp/nyaya/rest.py). In dev, next.config.mjs rewrites /api/* to localhost:8000;
+// in production (static export) the Python container serves everything from
+// one origin, so the URLs are identical.
+
+// ─── Types ────────────────────────────────────────────────────────
+export type CorpusStats = {
+  counts: Record<string, number>;
+  as_of: string | null;
+};
+
+export type Act = {
+  short_name: string;
+  full_name: string;
+  year: number | null;
+  citation: string | null;
+  kind: "constitution" | "criminal" | "civil" | "commercial" | "judgment";
+  source: string;
+  source_license: string | null;
+  as_of: string | null;
+};
+
+export type Judgment = {
+  case_name: string;
+  citation: string | null;
+  court: string;
+  date: string | null;
+  summary: string | null;
+  text: string;
+  source: string;
+  source_license: string | null;
+  as_of: string | null;
+};
+
+export type JudgmentsResponse = {
+  items: Judgment[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export type ToolInfo = {
+  name: string;
+  description: string;
+};
+
+export type ToolsResponse = {
+  items: ToolInfo[];
+  total: number;
+};
+
+export type HealthSummary = {
+  status: string;
+  counts: Record<string, number>;
+  as_of: string | null;
+};
+
+// ─── Fetch helpers ────────────────────────────────────────────────
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    throw new Error(`${res.status} ${res.statusText} on ${url}`);
+  }
+  return (await res.json()) as T;
+}
+
+export const api = {
+  corpusStats: () => fetchJson<CorpusStats>("/api/corpus-stats"),
+  acts: () => fetchJson<Act[]>("/api/acts"),
+  judgments: (limit = 50, offset = 0) =>
+    fetchJson<JudgmentsResponse>(`/api/judgments?limit=${limit}&offset=${offset}`),
+  tools: () => fetchJson<ToolsResponse>("/api/tools"),
+  healthSummary: () => fetchJson<HealthSummary>("/api/health-summary"),
+};
+
+// ─── Format helpers ───────────────────────────────────────────────
+export function formatNumber(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return n.toLocaleString("en-IN");
+}

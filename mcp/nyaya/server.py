@@ -35,8 +35,8 @@ def _build_app() -> FastMCP:
         lifespan=nyaya_lifespan,
     )
 
-    from .tools import register as register_tools
     from .resources import register as register_resources
+    from .tools import register as register_tools
 
     register_tools(mcp)
     register_resources(mcp)
@@ -81,6 +81,28 @@ try:
     )
 except Exception:  # pragma: no cover — middleware is optional
     log.warning("Could not add CORS middleware; continuing without it.", exc_info=True)
+
+
+# REST endpoints for the web frontend (see rest.py). Mounted before the static
+# catch-all so /api/* takes precedence over SPA routes.
+from . import rest as _rest  # noqa: E402
+
+_rest.register(app, mcp_instance)
+
+
+# Serve the built Next.js static export (web/out/) from the same origin so the
+# SPA, REST, and MCP endpoints share one domain and one healthcheck. The mount
+# is optional: local `nyaya` dev without a built SPA still works — the route
+# simply 404s. In the Railway image the Dockerfile copies web/out/ here.
+import os  # noqa: E402
+
+_WEB_OUT = os.environ.get("NYAYA_WEB_OUT", "web/out")
+if os.path.isdir(_WEB_OUT):
+    from starlette.staticfiles import StaticFiles  # noqa: E402
+
+    # html=True enables SPA-style fallback: /corpus resolves to /corpus/index.html,
+    # unknown paths resolve to /404.html (or a 404 response).
+    app.mount("/", StaticFiles(directory=_WEB_OUT, html=True), name="web")
 
 
 def main() -> None:

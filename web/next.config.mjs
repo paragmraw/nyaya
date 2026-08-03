@@ -1,0 +1,28 @@
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Static HTML/CSS/JS export — no Node server at runtime.
+  // The Python MCP container serves the built `out/` via Starlette StaticFiles.
+  output: "export",
+
+  // No image optimization in static export — serve images as-is.
+  images: {
+    unoptimized: true,
+  },
+
+  // App Router pages are statically generated at build time. Live data is
+  // fetched client-side against the same-origin REST endpoints.
+  trailingSlash: true,
+
+  // Dev-only rewrites so the SPA can proxy /api/* and /mcp to the local
+  // uvicorn server during `npm run dev`. Next strips rewrites from the
+  // `output: 'export'` production build (a benign warning is emitted), so
+  // this only affects local dev.
+  async rewrites() {
+    return [
+      { source: "/api/:path*", destination: "http://localhost:8000/api/:path*" },
+      { source: "/mcp", destination: "http://localhost:8000/mcp" },
+    ];
+  },
+};
+
+export default nextConfig;
