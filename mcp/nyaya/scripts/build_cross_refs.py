@@ -1,9 +1,9 @@
 """Build cross-references between sections and acts.
 
-Two sources of cross-references:
-  1. A manual IPC↔BNS mapping file (data/manual/ipc_bns_map.yaml).
-  2. Regex over all section text for phrases like "section 65 of the Indian
-     Evidence Act" or "Article 21 of the Constitution".
+Two sources:
+  1. A manual IPC↔BNS mapping file (``data/manual/ipc_bns_map.yaml``).
+  2. Regex over all section text for phrases like "section 65 of the
+     Indian Evidence Act" or "Article 21 of the Constitution".
 """
 
 from __future__ import annotations
@@ -15,8 +15,12 @@ import yaml
 
 from .db import IngestDB
 
-IPC_BNS_MAP_FILE = Path("data/manual/ipc_bns_map.yaml")
+# Resolve data paths relative to the package root, not the CWD.
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "manual"
+IPC_BNS_MAP_FILE = _DATA_DIR / "ipc_bns_map.yaml"
 
+# Matches "section 65 of the Indian Evidence Act", "s. 41A of the Code of
+# Criminal Procedure Act, 1973" — captures the section number and act name.
 CROSS_REF_RE = re.compile(
     r"(?:section|s\.?)\s*(?P<num>\d+[A-Z]?)\s+of\s+(?:the\s+)?(?P<act>[A-Z][^.,;]+?)(?:\s+Act)?(?:[.,;]|$)",
     re.IGNORECASE,
@@ -62,19 +66,19 @@ def _load_manual_map(db: IngestDB) -> int:
         ipc = str(m["ipc"])
         bns = str(m["bns"]).strip()
         kind = m.get("kind", "corresponds_to")
-        # Skip placeholder entries (e.g. bns: "—") that would otherwise insert
-        # garbage rows pointing at a nonexistent BNS section.
+        # Skip placeholder entries (e.g. bns: "—") that would otherwise
+        # insert garbage rows pointing at a nonexistent BNS section.
         if not bns or bns in {"—", "-", "n/a", "na", ""}:
             if kind == "repeals":
-                # A repealed section with no BNS successor still gets a forward
-                # "repeals" row, but no reverse (nothing replaced it).
+                # A repealed section with no BNS successor still gets a
+                # forward "repeals" row, but no reverse (nothing replaced it).
                 db.add_cross_ref(from_act="IPC", from_section=ipc, to_act="BNS",
                                   to_section="", kind="repeals")
                 n += 1
             continue
         db.add_cross_ref(from_act="IPC", from_section=ipc, to_act="BNS", to_section=bns, kind=kind)
-        # Reverse direction: only add "replaced_by" when there is an actual
-        # BNS successor. For "repeals" the reverse kind would be misleading.
+        # Reverse direction: only add "replaced_by" when there is a real BNS
+        # successor. For "repeals" the reverse kind would be misleading.
         if kind == "corresponds_to":
             db.add_cross_ref(from_act="BNS", from_section=bns, to_act="IPC", to_section=ipc, kind="replaced_by")
             n += 2

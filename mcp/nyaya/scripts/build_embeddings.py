@@ -1,17 +1,18 @@
 """Build embeddings for all sections, articles, and judgments.
 
-Uses the same fastembed model as the runtime semantic_query tool so query
-and document vectors share the same space. Run after all ingestion is done.
+Uses the same fastembed model as the runtime ``semantic_query`` tool so
+query and document vectors share the same space. Run after all ingestion
+is done.
 
-The document text is *enriched* with an ``act | ref | title`` prefix before
+Documents are enriched with an ``act | ref | title`` prefix before
 embedding, matching the hydration notebook's approach for better retrieval
-quality. The enrichment and truncation logic mirrors the notebook exactly so
-CLI and notebook embeddings are identical.
+quality. Enrichment and truncation mirror the notebook exactly so CLI
+and notebook embeddings are identical.
 
-To survive Supabase's idle-connection drops during the (slow) CPU embedding
-loop, embeddings are upserted in batches with a **fresh connection per batch**
-— mirroring the notebook's pattern. Each batch is committed independently so
-a mid-run failure preserves prior batches.
+Embeddings are upserted in batches with a fresh connection per batch
+(mirroring the notebook) to survive Supabase's idle-connection drops
+during the CPU-bound embedding loop. Each batch is committed independently
+so a mid-run failure preserves prior batches.
 """
 
 from __future__ import annotations
@@ -52,9 +53,9 @@ def _embed_and_upsert(rows: list, enrich_fn, emb_table: str, db_url: str,
                       batch_size: int = 64, desc: str = "embedding") -> int:
     """Embed all rows and upsert in batches with a fresh connection per batch.
 
-    Phase 1: embed all texts in memory (fastembed handles batching internally).
-    Phase 2: upsert per batch with a fresh psycopg.connect, committing each.
-    This mirrors the notebook's two-phase pattern and survives Supabase idle drops.
+    Phase 1 embeds all texts in memory (fastembed batches internally).
+    Phase 2 upserts per batch with a fresh ``psycopg.connect``, committing
+    each batch independently.
     """
     from ..embeddings import embed_texts
 

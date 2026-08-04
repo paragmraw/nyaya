@@ -1,7 +1,7 @@
 """Runtime configuration from environment variables.
 
-Env vars
---------
+Environment variables
+---------------------
 ``DATABASE_URL`` (required)
     Postgres/Supabase connection string.
 ``PORT`` (optional, default 8000)
@@ -10,8 +10,8 @@ Env vars
     Connection-pool size bounds for the read layer.
 ``NYAYA_POOL_TIMEOUT`` (optional, default 3.0 seconds)
     Seconds to wait when acquiring a pooled connection before failing.
-``NYAYA_STATEMENT_TIMEOUT`` (optional, default 0 = off)
-    Postgres ``statement_timeout`` (ms) applied to each pooled connection.
+``NYAYA_STATEMENT_TIMEOUT`` (optional, default 15000 ms)
+    Postgres ``statement_timeout`` applied to each pooled connection.
 ``NYAYA_LOG_LEVEL`` (optional, default INFO)
     Logging level for the root logger.
 ``NYAYA_EMBEDDING_MODEL`` (optional)
@@ -67,9 +67,22 @@ def _float_env(name: str, default: float) -> float:
 def _redact_url(url: str) -> str:
     """Strip userinfo from a database URL for safe logging.
 
+    Handles URL-encoded passwords (e.g. ``%40`` for ``@``) via
+    ``urllib.parse``: split the netloc and reassemble with a redacted marker.
+
     ``postgresql://user:secret@host:5432/db`` -> ``postgresql://***@host:5432/db``
+
+    URLs without userinfo pass through unchanged.
     """
-    return re.sub(r"://[^@/]+@", "://***:***@", url)
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    if parts.hostname and (parts.username or parts.password):
+        netloc = f"***@{parts.hostname}"
+        if parts.port:
+            netloc += f":{parts.port}"
+        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    return url
 
 
 @dataclass(frozen=True)
@@ -104,13 +117,43 @@ def get_settings() -> Settings:
     except ValueError:
         raise ConfigurationError(f"PORT must be an integer, got {port_raw!r}") from None
 
+    if not 1 <= port <= 65535:
+        raise ConfigurationError(f"PORT must be in range 1-65535, got {port}")
+
+    pool_min = _int_env("NYAYA_POOL_MIN", 1)
+    pool_max = _int_env("NYAYA_POOL_MAX", 8)
+    if pool_min > pool_max:
+        raise ConfigurationError(
+            f"NYAYA_POOL_MIN ({pool_min}) must be <= NYAYA_POOL_MAX ({pool_max})"
+        )
+
     return Settings(
         database_url=_required("DATABASE_URL"),
         port=port,
-        pool_min=_int_env("NYAYA_POOL_MIN", 1),
-        pool_max=_int_env("NYAYA_POOL_MAX", 8),
+        pool_min=pool_min,
+        pool_max=pool_max,
         pool_timeout=_float_env("NYAYA_POOL_TIMEOUT", 3.0),
-        statement_timeout_ms=_int_env("NYAYA_STATEMENT_TIMEOUT", 0),
+        statement_timeout_ms=_int_env("NYAYA_STATEMENT_TIMEOUT", 15000),
         log_level=os.environ.get("NYAYA_LOG_LEVEL", "INFO"),
         embedding_model=os.environ.get("NYAYA_EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5"),
     )
+
+
+@dataclass(frozen=True)
+class RateLimitSettings:
+    """Rate-limit configuration. Edit defaults here to tune; not env-driven.
+
+    All rates are requests-per-minute per client IP.
+    """
+
+    # Read tools (get_section, search_law, etc.): generous for a public corpus.
+    read_per_min: int = 120
+    # Embedding tools (semantic_query, hybrid_search): expensive pgvector queries.
+    embedding_per_min: int = 10
+    # Maximum request body size in bytes (1 MB).
+    body_size_max_bytes: int = 1_048_576
+
+
+@lru_cache(maxsize=1)
+def get_rate_limit_settings() -> RateLimitSettings:
+    return RateLimitSettings()

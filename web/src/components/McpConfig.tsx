@@ -6,7 +6,6 @@ type Variant = "promo" | "block";
 
 function buildMcpJson(origin: string): string {
   // Streamable HTTP form — the real config for the deployed HTTP MCP server.
-  // Replaces the placeholder `npx -y @nyaya/mcp` from the design export.
   return JSON.stringify(
     {
       mcpServers: {
@@ -52,14 +51,32 @@ const CopyIcon = () => (
 
 export default function McpConfig({ variant = "promo" }: { variant?: Variant }) {
   // Read window.location.origin once, lazily — avoids setState-in-effect
-  // (the new react-hooks/set-state-in-effect rule) and avoids an extra render.
-  // SSR renders with the placeholder; the client hydrates with the real origin.
+  // (the new react-hooks/set-state-in-effect rule) and skips an extra render.
+  // SSR renders with the placeholder; the client hydrates with the real
+  // origin. Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
   const [origin] = useState<string | null>(() =>
     typeof window !== "undefined" ? window.location.origin : null,
   );
   const [copied, setCopied] = useState(false);
 
-  const json = useMemo(() => buildMcpJson(origin ?? "https://nyaya.example"), [origin]);
+  // In production, fail-closed if the origin is not HTTPS (prevent the user
+  // from connecting their editor to an insecure MCP endpoint).
+  const json = useMemo(() => {
+    const fallback = process.env.NEXT_PUBLIC_MCP_URL ?? "https://nyaya.example";
+    const effectiveOrigin = origin ?? fallback;
+    if (
+      process.env.NODE_ENV === "production" &&
+      effectiveOrigin.startsWith("http:") &&
+      !effectiveOrigin.includes("localhost")
+    ) {
+      return JSON.stringify(
+        { error: "INSECURE_ORIGIN", message: "MCP URL must be HTTPS in production." },
+        null,
+        2,
+      );
+    }
+    return buildMcpJson(effectiveOrigin);
+  }, [origin]);
 
   const onCopy = useCallback(async () => {
     const text = json;
@@ -76,10 +93,10 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
     setTimeout(() => setCopied(false), 1500);
   }, [json]);
 
-  // Render the JSON with light syntax highlighting (keys accent, strings muted).
+  // Render the JSON with light syntax highlighting: keys in --accent,
+  // string values in --muted.
   const rendered = useMemo(() => {
     return json.split("\n").map((line, i) => {
-      // crude but stable highlight: keys in --accent, string values in --muted
       const parts: React.ReactNode[] = [];
       const re = /("[^"]+")(\s*:)?(\s*("[^"]*"))?/g;
       let last = 0;

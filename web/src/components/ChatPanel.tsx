@@ -1,9 +1,9 @@
 "use client";
 
-// The chat panel is out of scope (per the build brief). We preserve the shell
-// so the home-page layout matches the exported design, but lock the body and
-// footer behind a CSS blur + pointer-events:none. The header stays visible and
-// shows a "Coming soon" pill instead of the "Online" status.
+// Chat is out of scope (per the build brief). We preserve the shell so the
+// home-page layout matches the exported design, but lock the body and footer
+// behind a CSS blur + pointer-events:none. The header stays visible and shows
+// a "Coming soon" pill instead of the "Online" status.
 export default function ChatPanel() {
   return (
     <div className="chat-shell chat-locked">

@@ -6,8 +6,10 @@ transport. Each endpoint calls the same synchronous ``db.*`` layer the MCP
 tools use, wrapped in ``asyncio.to_thread`` so the event loop stays
 responsive during Postgres round-trips.
 
-All endpoints are read-only and inherit the permissive CORS middleware
-added in ``server.py``.
+All endpoints are read-only and inherit the permissive CORS middleware added
+in ``server.py``. Error responses never leak internal exception details:
+the full exception is logged server-side with a ``request_id``; the client
+receives only ``{"error": "...", "request_id": "..."}``.
 """
 
 from __future__ import annotations
@@ -29,10 +31,26 @@ def _safe(fn: Any, *args: Any) -> Any:
     return asyncio.to_thread(fn, *args)
 
 
-def _error_response(exc: Exception) -> JSONResponse:
+def _error_response(exc: Exception, request: Request | None = None) -> JSONResponse:
+    """Build a safe error response without leaking internal details.
+
+    The full exception is logged server-side with the request_id; the client
+    only sees a generic error code and the request_id for correlation.
+    """
+    request_id = getattr(getattr(request, "state", None), "request_id", None) if request else None
+
     if isinstance(exc, db.DatabaseUnavailable) or "DatabaseUnavailable" in type(exc).__name__:
-        return JSONResponse({"error": "database_unavailable", "detail": str(exc)}, status_code=503)
-    return JSONResponse({"error": "internal_error", "detail": str(exc)}, status_code=500)
+        log.warning("Database unavailable (request_id=%s)", request_id, exc_info=True)
+        body: dict[str, Any] = {"error": "database_unavailable"}
+        if request_id:
+            body["request_id"] = request_id
+        return JSONResponse(body, status_code=503)
+
+    log.error("Internal error (request_id=%s)", request_id, exc_info=True)
+    body = {"error": "internal_error"}
+    if request_id:
+        body["request_id"] = request_id
+    return JSONResponse(body, status_code=500)
 
 
 async def corpus_stats_endpoint(_request: Request) -> JSONResponse:
@@ -48,7 +66,7 @@ async def corpus_stats_endpoint(_request: Request) -> JSONResponse:
         )
     except Exception as exc:
         log.warning("corpus_stats endpoint failed", exc_info=True)
-        return _error_response(exc)
+        return _error_response(exc, _request)
 
 
 async def acts_endpoint(_request: Request) -> JSONResponse:
@@ -58,7 +76,7 @@ async def acts_endpoint(_request: Request) -> JSONResponse:
         return JSONResponse([a.model_dump(mode="json") for a in acts])
     except Exception as exc:
         log.warning("acts endpoint failed", exc_info=True)
-        return _error_response(exc)
+        return _error_response(exc, _request)
 
 
 async def judgments_endpoint(request: Request) -> JSONResponse:
@@ -80,15 +98,11 @@ async def judgments_endpoint(request: Request) -> JSONResponse:
         )
     except Exception as exc:
         log.warning("judgments endpoint failed", exc_info=True)
-        return _error_response(exc)
+        return _error_response(exc, request)
 
 
 async def tools_endpoint(request: Request) -> JSONResponse:
-    """GET /api/tools -> [{name, description}] introspected from the FastMCP app.
-
-    The MCP app instance is stashed on ``request.app.state.mcp`` by
-    ``server.py`` so the REST layer can call ``await mcp.list_tools()``.
-    """
+    """GET /api/tools -> introspected [{name, description}] list."""
     mcp = getattr(request.app.state, "mcp", None)
     if mcp is None:
         return JSONResponse({"error": "mcp_unavailable", "detail": "MCP app not registered on app.state"}, status_code=500)
@@ -105,21 +119,23 @@ async def tools_endpoint(request: Request) -> JSONResponse:
         return JSONResponse({"items": items, "total": len(items)})
     except Exception as exc:
         log.warning("tools endpoint failed", exc_info=True)
-        return _error_response(exc)
+        return _error_response(exc, request)
 
 
 async def health_summary_endpoint(_request: Request) -> JSONResponse:
-    """GET /api/health-summary -> {status, counts, as_of} -- a richer summary
-    used by the home page stat band. Falls back to degraded if the DB is down
-    so the SPA renders partial numbers instead of a blank."""
+    """GET /api/health-summary -> richer summary for the home stat band.
+
+    Falls back to ``degraded`` if the DB is down so the SPA renders partial
+    numbers instead of a blank.
+    """
     try:
         stats = await _safe(db.corpus_stats)
         as_of = await _safe(db.corpus_as_of)
         status = "healthy"
-    except Exception as exc:
+    except Exception:
         stats = {}
         as_of = None
-        status = f"degraded: {exc}"
+        status = "degraded"
     return JSONResponse(
         {
             "status": status,

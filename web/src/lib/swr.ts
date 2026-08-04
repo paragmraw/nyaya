@@ -3,8 +3,8 @@
 import useSWR from "swr";
 import { api, type Act, type CorpusStats, type JudgmentsResponse, type ToolsResponse, type HealthSummary } from "./api";
 
-// SWR defaults: 5-min dedup, 10s error retry, no revalidate on focus (static
-// info pages don't need to react to tab focus).
+// SWR defaults: 5-min dedup, 10s error retry, no revalidate on focus.
+// Static info pages don't need to react to tab focus.
 const SWR_OPTS = {
   dedupingInterval: 300_000,
   errorRetryInterval: 10_000,

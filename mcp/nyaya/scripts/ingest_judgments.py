@@ -13,8 +13,11 @@ from pathlib import Path
 import yaml
 
 from .db import IngestDB
+from ..sanitize import sanitize_text
 
-DEFAULT_FILE = Path("data/manual/judgments.yaml")
+# Resolve data paths relative to the package root, not the CWD.
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "manual"
+DEFAULT_FILE = _DATA_DIR / "judgments.yaml"
 
 
 def ingest_judgments(db: IngestDB, path: Path = DEFAULT_FILE) -> None:
@@ -36,7 +39,7 @@ def ingest_judgments(db: IngestDB, path: Path = DEFAULT_FILE) -> None:
                 court=j.get("court", "Supreme Court of India"),
                 date=date_val,
                 summary=j.get("summary"),
-                text=j["text"],
+                text=sanitize_text(j["text"]),
             )
             n += 1
         except (KeyError, ValueError, TypeError) as e:

@@ -1,9 +1,9 @@
 """Ingest the Constitution of India.
 
-Source: the `indianconstitution` PyPI package (Apache-2.0), which bundles
-Articles 1–395 as a JSON file. Schedules and amendments are loaded from
-data/manual/ (curated from PRS PDFs, CC BY 4.0, and the official MoLJ PDF,
-which is public domain).
+Articles come from the ``indianconstitution`` PyPI package (Apache-2.0),
+which bundles Articles 1–395 as a JSON file. Schedules and amendments are
+loaded from ``data/manual/`` (curated from PRS PDFs, CC BY 4.0, and the
+official MoLJ PDF, which is public domain).
 """
 
 from __future__ import annotations
@@ -14,6 +14,10 @@ from datetime import date
 from pathlib import Path
 
 from .db import IngestDB
+from ..sanitize import sanitize_text
+
+# Resolve data paths relative to the package root, not the CWD.
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "manual"
 
 AS_OF = date(2026, 7, 1)
 SOURCE_ARTICLES = "Vikhram-S/IndianConstitution (Apache-2.0)"
@@ -41,7 +45,7 @@ def _load_articles() -> list[dict]:
         with open(tmp_path, encoding="utf-8") as f:
             data = json.load(f)
     finally:
-        # Ensure the temp file is cleaned up even if export/json.load raises.
+        # Clean up the temp file even if export/json.load raises.
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -78,6 +82,7 @@ def ingest_constitution(db: IngestDB) -> None:
         number = str(art.get("number") or "").strip()
         title = (art.get("title") or "").strip()
         text = (art.get("content") or art.get("text") or "").strip()
+        text = sanitize_text(text)
         if not number or not text:
             continue
         if number == "0":
@@ -95,7 +100,7 @@ def ingest_constitution(db: IngestDB) -> None:
         n += 1
     print(f"  ✓ {n} articles ingested (Preamble + Articles 1–395).")
 
-    schedules_dir = Path("data/manual/schedules")
+    schedules_dir = _DATA_DIR / "schedules"
     if schedules_dir.is_dir():
         print("→ Ingesting Constitution schedules…")
         ns = 0
@@ -107,14 +112,14 @@ def ingest_constitution(db: IngestDB) -> None:
             except (ValueError, IndexError):
                 continue
             title = parts[1].replace("_", " ").title() if len(parts) > 1 else f"Schedule {num}"
-            text = path.read_text(encoding="utf-8").strip()
+            text = sanitize_text(path.read_text(encoding="utf-8").strip())
             db.upsert_schedule(number=num, title=title, text=text)
             ns += 1
         print(f"  ✓ {ns} schedules ingested.")
     else:
         print(f"  ! No schedules directory at {schedules_dir}; skipping schedules.")
 
-    amendments_file = Path("data/manual/amendments.json")
+    amendments_file = _DATA_DIR / "amendments.json"
     if amendments_file.is_file():
         print("→ Ingesting Constitution amendments…")
         items = json.loads(amendments_file.read_text(encoding="utf-8"))

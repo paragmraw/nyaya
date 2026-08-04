@@ -1,36 +1,41 @@
 """Embedding helper for the semantic_query tool.
 
-Model: BAAI/bge-large-en-v1.5 (1024-d) by default. Matches the model used by
-the hydration notebook so query and document vectors share the same space.
+Default model: BAAI/bge-large-en-v1.5 (1024-d). Matches the hydration
+notebook so query and document vectors share the same space.
 
 Uses CUDAExecutionProvider when available (NVIDIA GPU), falling back to
-CPUExecutionProvider. The fallback is automatic: fastembed passes the
-providers list to onnxruntime, which picks the first usable one.
+CPUExecutionProvider. onnxruntime picks the first usable provider from
+the list, so CUDA-capable machines use the GPU and everything else
+transparently uses CPU.
 
-The model name is configurable via ``NYAYA_EMBEDDING_MODEL`` but must produce
-``EXPECTED_DIM``-dimensional vectors to match the pgvector columns.
+The model name is configurable via ``NYAYA_EMBEDDING_MODEL`` but must
+produce ``EXPECTED_DIM``-dimensional vectors to match the pgvector columns.
 
 Raises:
-    EmbeddingUnavailable: when fastembed is not installed or the model fails
-        to load. This is a *system* condition — the build/runtime lacks the
-        embedding engine. The ``semantic_query`` tool surfaces this as a
-        distinct error code so the LLM knows to fall back to ``search_law``.
-    SearchError: when a query is empty (client input error) or the produced
+    EmbeddingUnavailable: fastembed is not installed or the model fails
+        to load — a *system* condition that the ``semantic_query`` tool
+        surfaces as a distinct error code so the LLM can fall back to
+        ``search_law``.
+    SearchError: query is empty (client input error) or the produced
         vector has the wrong dimensionality (configuration mismatch).
 """
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any
+
+from cachetools import TTLCache, cached
 
 from .exceptions import EmbeddingUnavailable, SearchError
 
-# CUDA first (NVIDIA GPU), CPU as the universal fallback. ORT picks the
-# first usable provider in the list, so CUDA-capable machines use the GPU
-# and everything else transparently uses CPU.
+# CUDA first (NVIDIA GPU), then CPU as the universal fallback.
 _PROVIDERS: tuple[str, ...] = ("CUDAExecutionProvider", "CPUExecutionProvider")
 EXPECTED_DIM = 1024
+
+# Model: one entry, 1-hour TTL. Queries: 256 entries, 1-hour TTL.
+# The TTL ensures model updates propagate without a process restart.
+_model_cache: TTLCache = TTLCache(maxsize=1, ttl=3600)
+_query_cache: TTLCache = TTLCache(maxsize=256, ttl=3600)
 
 
 def _model_name() -> str:
@@ -39,7 +44,7 @@ def _model_name() -> str:
     return get_settings().embedding_model
 
 
-@lru_cache(maxsize=1)
+@cached(_model_cache)
 def _model() -> Any:
     try:
         from fastembed import TextEmbedding
@@ -52,7 +57,7 @@ def _model() -> Any:
     return TextEmbedding(model_name=_model_name(), providers=list(_PROVIDERS))
 
 
-@lru_cache(maxsize=256)
+@cached(_query_cache)
 def embed_query(text: str) -> list[float]:
     """Embed a single query string. Results are cached per query string.
 

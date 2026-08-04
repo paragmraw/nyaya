@@ -1,8 +1,8 @@
 """Ingest the 2023 Sanhitas (BNS, BNSS, BSA) from PRS PDFs.
 
-PRS hosts the enacted acts as static PDFs under CC BY 4.0. We download them,
-extract text with pypdf, and split into sections using heading-based
-heuristics.
+PRS hosts the enacted acts as static PDFs under CC BY 4.0. We download
+them, extract text with pypdf, and split into sections using
+heading-based heuristics.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from datetime import date
 import httpx
 
 from .db import IngestDB
+from ..sanitize import sanitize_text
 
 AS_OF = date(2026, 7, 1)
 SOURCE = "PRS Legislative Research (CC BY 4.0)"
@@ -46,22 +47,35 @@ PDFS: list[dict] = [
     },
 ]
 
-# PRS PDFs render section headings as "2.In this Sanhita…" (no space after the
-# period), so the whitespace after the dot must be OPTIONAL (\s* not \s+).
-# Verified: this recovers 80 missing BNS sections (277→357) with 0 false positives.
+# PRS PDFs render section headings as "2.In this Sanhita…" with no space
+# after the period, so the whitespace after the dot must be OPTIONAL.
+# Verified: this recovers 80 missing BNS sections (277→357) with 0 false
+# positives.
 SECTION_HEADING_RE = re.compile(r"^(?P<num>\d+[A-Z]?)\.\s*(?P<title>.+)$")
 CHAPTER_HEADING_RE = re.compile(r"^Chapter\s+(?P<num>[IVXLC]+)\s*[.\-—–]?\s*(?P<title>.+)?$", re.IGNORECASE)
 
 
 def _download_pdf(url: str) -> bytes:
+    """Download a PDF with a 25 MB size cap to prevent DoS via huge files."""
     import time
+    MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB
     last_err: Exception | None = None
     for attempt in range(3):
         try:
             with httpx.Client(follow_redirects=True, timeout=60.0) as client:
-                r = client.get(url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"})
-                r.raise_for_status()
-                return r.content
+                # Stream to enforce the size cap without loading the full file first
+                with client.stream("GET", url, headers={"User-Agent": "nyaya-ingest/0.1 (+https://github.com/your-org/nyaya)"}) as r:
+                    r.raise_for_status()
+                    chunks: list[bytes] = []
+                    total = 0
+                    for chunk in r.iter_bytes(chunk_size=65536):
+                        total += len(chunk)
+                        if total > MAX_PDF_BYTES:
+                            raise ValueError(
+                                f"PDF exceeds size cap ({total} > {MAX_PDF_BYTES} bytes): {url}"
+                            )
+                        chunks.append(chunk)
+                    return b"".join(chunks)
         except httpx.HTTPError as e:
             last_err = e
             if attempt < 2:
@@ -88,7 +102,7 @@ def _parse_sections(text: str) -> list[dict]:
     current: dict | None = None
     current_chapter: tuple[int, str] | None = None
     # BNS has 21 chapters; the previous map only covered I-XII, silently
-    # dropping chapters 13-21. Extend to XXI (and beyond via computation).
+    # dropping chapters 13-21. Extend to XXI and beyond via explicit numerals.
     roman_to_int = {
         "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5, "VI": 6, "VII": 7,
         "VIII": 8, "IX": 9, "X": 10, "XI": 11, "XII": 12, "XIII": 13,
@@ -173,7 +187,7 @@ def ingest_sanhitas(db: IngestDB) -> None:
                 act_id=act_id,
                 number=sec["number"],
                 title=sec.get("title"),
-                text=sec["text"].strip(),
+                text=sanitize_text(sec["text"].strip()),
                 chapter_id=chapter_ids.get(ch[0]) if ch else None,
             )
             n += 1

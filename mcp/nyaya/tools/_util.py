@@ -8,14 +8,32 @@ from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
 
+# Hard cap on user-supplied query strings; prevents DoS via expensive
+# ts_headline / embedding operations on huge inputs.
+MAX_QUERY_LENGTH = 4096
+
+
+def validate_query_length(query: str) -> str:
+    """Validate that a query string is within the allowed length.
+
+    Raises SearchError if the query exceeds MAX_QUERY_LENGTH.
+    """
+    from ..exceptions import SearchError
+
+    if len(query) > MAX_QUERY_LENGTH:
+        raise SearchError(
+            f"Query too long ({len(query)} chars); maximum is {MAX_QUERY_LENGTH}.",
+            hint="Shorten the query or use a more specific search term.",
+        )
+    return query
+
 
 def run_sync(func: Callable[..., T]) -> Callable[..., Any]:
-    """Decorator: wrap a synchronous DB-bound function so it can be awaited
-    from an async tool handler without blocking the event loop.
+    """Decorator: run ``func`` in a worker thread so it can be awaited.
 
-    The wrapped function becomes a coroutine that runs ``func`` in a worker
-    thread via ``asyncio.to_thread``. This keeps the FastMCP event loop
-    responsive while Postgres queries are in flight (Supabase RTT is 50-200 ms).
+    Wraps a synchronous DB-bound function so the FastMCP event loop stays
+    responsive while Postgres queries are in flight (Supabase RTT is
+    50-200 ms).
 
     Usage::
 

@@ -1,9 +1,8 @@
 """get_definition: look up the statutory definition of a legal term.
 
-Unlike a generic keyword search, this tool targets sections whose **title**
-contains "definition"/"interpretation" and extracts the sentence that defines
-the term. This is far more precise than appending " definition" to a search
-query.
+Targets sections whose **title** contains "definition"/"interpretation" and
+promotes them to the top of the result list. Far more precise than appending
+" definition" to a generic search query.
 """
 
 from __future__ import annotations
@@ -42,12 +41,9 @@ def register(mcp) -> None:
             return SearchResponse(query=term or "", total=0, returned=0, offset=0,
                                   results=[], as_of=db.corpus_as_of(), limit=limit)
 
-        # Search for the term within definition-titled sections first, then
-        # fall back to a general search. The FTS query includes the term; we
-        # rely on ts_rank to surface definition-heavy sections because section
-        # titles like "Definitions" are indexed in search_tsv.
+        # Search for the term; promote hits whose title contains
+        # "definition"/"interpretation" via a custom sort key.
         results, total = db.search_all(term, act=act, limit=limit, offset=0)
-        # Promote results whose title contains "definition"/"interpretation".
         def _is_def(r):
             return bool(r.title and re.search(r"defin|interpret", r.title, re.I))
         results.sort(key=lambda r: (0 if _is_def(r) else 1, -r.rank))

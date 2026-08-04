@@ -2,9 +2,11 @@
 
 # --- Build stage ------------------------------------------------------------
 # Alpine-based build. Compiles psycopg (no musllinux wheel — needs libpq + gcc).
-# The semantic extra (fastembed + onnxruntime) is NOT installed: onnxruntime has
-# no musllinux wheels (glibc-only). semantic_query is unavailable in this image.
-FROM python:3.12-alpine AS builder
+# The semantic extra (fastembed + onnxruntime) is NOT installed: onnxruntime
+# has no musllinux wheels (glibc-only). semantic_query is unavailable in
+# this image.
+# python:3.12-alpine pinned by digest for reproducible builds (amd64).
+FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -20,15 +22,17 @@ RUN apk add --no-cache \
         postgresql-dev \
         curl
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# uv pinned by digest for supply-chain integrity.
+COPY --from=ghcr.io/astral-sh/uv:0.11.25-alpine@sha256:18a2499e97102ccb684f4d19fe4cdd598feb20582dccb65fe086fcadc7c9b81a /uv /usr/local/bin/uv
 
-COPY mcp/pyproject.toml mcp/README.md ./
+COPY mcp/pyproject.toml mcp/uv.lock mcp/README.md ./
 
-RUN uv pip install --system --no-cache \
-        "."
+# Export pinned requirements from the lockfile and install into system site-packages.
+RUN uv export --frozen --no-dev --no-emit-project --no-editable --format requirements-txt > requirements.txt \
+    && uv pip install --system --no-cache -r requirements.txt
 
 # --- Runtime stage ----------------------------------------------------------
-FROM python:3.12-alpine AS runtime
+FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

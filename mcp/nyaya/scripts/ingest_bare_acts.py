@@ -1,16 +1,17 @@
-"""Ingest bare acts and commercial statutes from the `mratanusarkar/Indian-Laws`
-HuggingFace dataset.
+"""Ingest bare acts and commercial statutes from the
+``mratanusarkar/Indian-Laws`` HuggingFace dataset.
 
-IPC, Indian Evidence Act, and CPC are NOT in ACT_MAP: the HF dataset is sparse
-for those (IPC has only 12 of ~511 sections). They are ingested from the
-civictech-India JSON repo instead — see `ingest_civictech.py`. Sourcing each
-act from exactly one place keeps the upsert order irrelevant: whichever ingest
-runs last no longer overwrites better data with worse.
+IPC, Indian Evidence Act, and CPC are NOT in ``ACT_MAP``: the HF dataset is
+sparse for those (IPC has only 12 of ~511 sections). They are ingested from
+the ``civictech-India`` JSON repo instead — see ``ingest_civictech.py``.
+Sourcing each act from exactly one place keeps the upsert order irrelevant:
+whichever ingest runs last no longer overwrites better data with worse.
 
-The remaining acts here (CrPC, commercial statutes) are well-covered in the HF
-dataset. `_match_act` uses word-boundary matching so "Code of Criminal Procedure"
-does NOT also match "Code of Criminal Procedure (Amendment) Act, 1980" or the
-Goa CPC-extension act (a substring `in` match would wrongly ingest those).
+The remaining acts here (CrPC, commercial statutes) are well-covered in the
+HF dataset. ``_match_act`` uses word-boundary matching so "Code of Criminal
+Procedure" does NOT also match "Code of Criminal Procedure (Amendment) Act,
+1980" or the Goa CPC-extension act (a substring ``in`` match would wrongly
+ingest those).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import re
 from datetime import date
 
 from .db import IngestDB
+from ..sanitize import sanitize_text
 
 AS_OF = date(2026, 7, 1)
 SOURCE = "mratanusarkar/Indian-Laws (HuggingFace) sourced from indiankanoon.org (public domain)"
@@ -41,9 +43,9 @@ def _match_act(act_title: str) -> tuple[str, str, int | None, str] | None:
     low = act_title.lower()
     for needle, short, full, year, kind in ACT_MAP:
         # The needle must be followed by end-of-string, a comma, or " act" —
-        # NOT by "(" (which signals an amendment/extension act, e.g.
-        # "Code of Criminal Procedure (Amendment) Act, 1980" or the Goa
-        # CPC-extension act). Strip the leading space so " (" is caught.
+        # NOT by "(" (amendment/extension acts like "Code of Criminal Procedure
+        # (Amendment) Act, 1980" or the Goa CPC-extension act). A simple
+        # substring "in" match would wrongly ingest those.
         m = re.search(re.escape(needle) + r"\b", low)
         if m:
             tail = low[m.end():].lstrip()
@@ -59,7 +61,7 @@ def _load_rows():
         raise RuntimeError(
             "datasets not installed. Install with: pip install 'nyaya[ingest]'"
         ) from e
-    # Retry the dataset download to survive transient HuggingFace outages.
+    # Retry to survive transient HuggingFace outages.
     import time
     last_err: Exception | None = None
     for attempt in range(3):
@@ -107,6 +109,7 @@ def ingest_bare_acts(db: IngestDB) -> None:
 
             section = str(row["section"]).strip()
             text = CONTENT_PREFIX_RE.sub("", str(row["law"]).strip())
+            text = sanitize_text(text)
             if not section or not text:
                 continue
             title: str | None = None
