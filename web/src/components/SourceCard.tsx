@@ -13,28 +13,20 @@ type Source = {
 
 const SOURCES: Source[] = [
   {
-    id: "sc-crpc",
-    name: "Code of Criminal Procedure, 1973",
-    ref: "§ 41 & § 41A, CrPC 1973",
-    desc: "Arrest without warrant — safeguards and notice of appearance.",
-    url: "https://indiacode.nic.in",
-    urlLabel: "indiacode.nic.in → CrPC S.41",
-  },
-  {
-    id: "sc-arnesh",
-    name: "Arnesh Kumar v. State of Bihar",
-    ref: "(2014) 8 SCC 273",
-    desc: "Supreme Court — prior notice under S. 41A CrPC mandatory before arrest for offences punishable ≤7 years.",
-    url: "https://scr.sci.gov.in",
-    urlLabel: "scr.sci.gov.in → (2014) 8 SCC 273",
+    id: "sc-puttaswamy",
+    name: "K.S. Puttaswamy v. Union of India",
+    ref: "(2017) 10 SCC 1",
+    desc: "Supreme Court — right to privacy is a fundamental right under Article 21, read with Articles 14 and 19.",
+    url: "https://indiankanoon.org",
+    urlLabel: "indiankanoon.org → (2017) 10 SCC 1",
   },
   {
     id: "sc-constitution",
     name: "Constitution of India",
-    ref: "Art. 22(3)–(7), Constitution of India, 1950",
-    desc: "Preventive detention safeguards — Advisory Board review and maximum detention period.",
-    url: "https://legislative.gov.in",
-    urlLabel: "legislative.gov.in → Art. 22",
+    ref: "Art. 21, Constitution of India, 1950",
+    desc: "Right to life and personal liberty — the source of the privacy guarantee read into Part III.",
+    url: "https://github.com/Vikhram-S/IndianConstitution",
+    urlLabel: "Vikhram-S/IndianConstitution → Art. 21",
   },
 ];
 
@@ -64,7 +56,7 @@ export default function SourceCard({ highlightedId }: { highlightedId?: string |
           >
             <div className="sc-head">
               <span className="sc-name">{s.name}</span>
-              <span className="sc-verified"><span className="status-dot" />Verified</span>
+              <span className="sc-verified"><span className="status-dot" />Sourced</span>
             </div>
             <div className="sc-body">
               <div className="sc-ref">{s.ref}</div>

@@ -20,7 +20,7 @@ const STAGES: Stage[] = [
       <>
         <strong>Input:</strong> natural-language legal question.<br />
         <strong>Output:</strong> normalised query + embedding vector.<br />
-        <strong>Model:</strong> bge-m3 (multilingual, 1024-dim).<br />
+        <strong>Model:</strong> bge-large-en-v1.5 (1024-dim).<br />
         <strong>Latency target:</strong> &lt; 80ms p95.
       </>
     ),
@@ -33,9 +33,9 @@ const STAGES: Stage[] = [
     detail: (
       <>
         <strong>Store:</strong> pgvector (pgvector extension on PostgreSQL).<br />
-        <strong>k:</strong> top-20 passages, reranked to top-8.<br />
-        <strong>Reranker:</strong> bge-reranker-v2.<br />
-        <strong>Corpus:</strong> Constitution, BNS/BNSS/IPC/CrPC, SC judgments.
+        <strong>k:</strong> top-k passages (default 5, max 20).<br />
+        <strong>Reranker:</strong> planned — not yet implemented.<br />
+        <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA/IPC/CrPC, SC judgments.
       </>
     ),
   },
@@ -56,11 +56,11 @@ const STAGES: Stage[] = [
     id: "pipe-mcp",
     num: "04",
     title: "MCP",
-    desc: "Citation verifier checks each reference against the corpus before display; MCP exposes the pipeline to editors.",
+    desc: "Citation resolver fetches each reference from the corpus; MCP exposes the pipeline to editors.",
     detail: (
       <>
-        <strong>Verifier:</strong> parse → match → verify → link (see Citations).<br />
-        <strong>MCP server:</strong> HTTP endpoint at /mcp — exposes search_law, get_article, verify_citation.<br />
+        <strong>Resolver:</strong> parse → match → fetch (see Citations).<br />
+        <strong>MCP server:</strong> HTTP endpoint at /mcp — exposes search_law, get_article, resolve_citation.<br />
         <strong>Clients:</strong> Claude, Cursor, Windsurf.
       </>
     ),

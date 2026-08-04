@@ -13,7 +13,7 @@ RUN npm ci --no-audit --no-fund
 # Build the app (next.config.mjs has output: 'export' -> emits static HTML)
 COPY web/ .
 RUN npm run build
-# Output: /web/out/ (static HTML/CSS/JS + assets + logo.png)
+# Output: /web/out/ (static HTML/CSS/JS + assets + logo.svg)
 
 # ─── Stage 2: build the Python package (Alpine, no semantic search) ─────────
 FROM python:3.12-alpine AS py-builder

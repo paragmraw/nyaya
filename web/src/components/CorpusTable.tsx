@@ -18,14 +18,14 @@ type CuratedRow = {
 };
 
 const CURATED: CuratedRow[] = [
-  { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 470 articles + 12 schedules", status: "live", fallback_date: "" },
+  { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 395 articles + 12 schedules", status: "live", fallback_date: "" },
   { short_name: "BNS", name: "Bharatiya Nyaya Sanhita, 2023", type: "Statute", coverage: "All 358 sections", status: "live", fallback_date: "" },
   { short_name: "BNSS", name: "Bharatiya Nagarik Suraksha Sanhita, 2023", type: "Statute", coverage: "All 531 sections", status: "live", fallback_date: "" },
+  { short_name: "BSA", name: "Bharatiya Sakshya Adhiniyam, 2023", type: "Statute", coverage: "All sections (replaces Evidence Act)", status: "live", fallback_date: "" },
   { short_name: "IPC", name: "Indian Penal Code, 1860", type: "Statute", coverage: "All 511 sections (legacy reference)", status: "live", fallback_date: "" },
   { short_name: "CrPC", name: "Code of Criminal Procedure, 1973", type: "Statute", coverage: "All 484 sections (legacy reference)", status: "live", fallback_date: "" },
-  { short_name: "", name: "Supreme Court reported judgments", type: "Case law", coverage: "~38,400 judgments (SCR 1950–2025)", status: "live", fallback_date: "2025-07-30" },
-  { short_name: "", name: "High Court reported judgments", type: "Case law", coverage: "~12,100 judgments (selected HCs)", status: "beta", fallback_date: "2025-07-22" },
-  { short_name: "BSA", name: "Bharatiya Sakshya Adhiniyam, 2023", type: "Statute", coverage: "Indexing in progress", status: "coming", fallback_date: "" },
+  { short_name: "", name: "Supreme Court landmark judgments", type: "Case law", coverage: "5 curated judgments (Kesavananda, Maneka, Puttaswamy, Shah Bano, Navtej Johar)", status: "live", fallback_date: "2026-07-01" },
+  { short_name: "", name: "High Court reported judgments", type: "Case law", coverage: "Planned", status: "coming", fallback_date: "" },
   { short_name: "", name: "Subordinate legislation & rules", type: "Regulation", coverage: "Planned", status: "coming", fallback_date: "" },
   { short_name: "", name: "Pre-1950 Privy Council decisions", type: "Case law", coverage: "Planned", status: "coming", fallback_date: "" },
 ];
@@ -107,7 +107,7 @@ export default function CorpusTable({ acts }: { acts: Act[] | undefined }) {
           </button>
         ))}
       </div>
-      <div className="corpus-wrap" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", background: "var(--surface)" }}>
+      <div className="corpus-wrap" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)" }}>
         <table className="corpus-table">
           <thead>
             <tr>

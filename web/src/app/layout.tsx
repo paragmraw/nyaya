@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   description:
     "A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment.",
-  icons: { icon: "/logo.png" },
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({

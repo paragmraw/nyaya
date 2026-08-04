@@ -6,7 +6,7 @@ A monorepo for Indian-law tooling. The first component is an MCP server; other t
 
 | Path | Status | Description |
 |---|---|---|
-| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 24 tools and 13 resources over HTTP. Deployable to Railway via Docker. |
+| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 24 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
 | [`web/`](web/) | alpha | Next.js 16 (App Router, static export) frontend — Home, Corpus, Citations, Architecture pages. Served from the same container as the MCP server via Starlette `StaticFiles`; live data fetched client-side from `/api/*` REST endpoints. |
 
 See [`mcp/README.md`](mcp/README.md) for setup, deployment, and client-configuration instructions.
@@ -23,7 +23,7 @@ A single Railway service serves the SPA, the REST API, and the MCP endpoint from
 6. Smoke checks against the deployed domain:
    - `GET /` → SPA home renders, chat panel blurred ("Coming soon").
    - `GET /corpus/` → live numbers from `/api/corpus-stats`.
-   - `GET /architecture/` → `mcp.json` copy button yields `{ "url": "https://<domain>/mcp", "transport": "http" }`.
+   - `GET /architecture/` → `mcp.json` copy button yields `{ "mcpServers": { "nyaya": { "url": "https://<domain>/mcp", "transport": "http" } } }`.
    - `POST /mcp` with an MCP initialize envelope → succeeds.
 
 ## Local development
