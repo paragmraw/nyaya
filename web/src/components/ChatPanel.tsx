@@ -23,7 +23,7 @@ export default function ChatPanel() {
           <div className="avatar">§</div>
           <div className="bubble">
             Namaste. I&apos;m Nyaya — I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I&apos;ll cite the exact provision.
-            <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC &amp; HC judgments</span>
+            <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
           </div>
         </div>
       </div>

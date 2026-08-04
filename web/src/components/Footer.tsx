@@ -20,7 +20,7 @@ export default function Footer() {
   return (
     <footer className="footer">
       <div className="container footer-inner">
-        <span className="meta">Nyaya · indexed legal corpus · v0.9 beta</span>
+        <span className="meta">Nyaya · indexed legal corpus · v0.1 alpha</span>
         <button type="button" className="back-to-top" onClick={backToTop}>
           Back to top ↑
         </button>

@@ -37,7 +37,7 @@ export default function Topnav() {
           })}
         </nav>
         <div className="nav-right">
-          <span className="meta">v0.9 · beta</span>
+          <span className="meta">v0.1 · alpha</span>
         </div>
       </div>
     </header>

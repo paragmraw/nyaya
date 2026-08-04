@@ -2,22 +2,22 @@
 
 import CorpusTable from "@/components/CorpusTable";
 import StatCard from "@/components/StatCard";
-import { useCorpusStats, useActs, formatNumber } from "@/lib";
+import { useCorpusStats, useActs, formatNumber, type CorpusCounts } from "@/lib";
 
 export default function CorpusPage() {
   const { data } = useCorpusStats();
   const { data: acts } = useActs();
-  const counts = data?.counts ?? {};
+  const counts: Partial<CorpusCounts> = data?.counts ?? {};
 
   return (
     <main className="page">
       <div className="container">
         {/* hero */}
         <section>
-          <p className="eyebrow">Corpus · v0.9</p>
+          <p className="eyebrow">Corpus · v0.1</p>
           <h1>What Nyaya has indexed</h1>
           <p className="lead">
-            Constitution, statutes, and reported case law — refreshed weekly from official sources. Every number below is traceable to the source it was drawn from.
+            Constitution, statutes, and reported case law — ingested from openly-licensed sources. Every number below is traceable to the source it was drawn from.
           </p>
         </section>
 
@@ -25,25 +25,24 @@ export default function CorpusPage() {
         <section className="section">
           <div className="stat-grid">
             <StatCard
-              num={counts.articles ?? 470}
+              num={counts.articles ?? 395}
               label="Constitution of India, 1950"
-              source="Articles + Schedules · legislative.gov.in"
+              source="Articles · Vikhram-S/IndianConstitution (Apache-2.0)"
             />
             <StatCard
-              num={counts.sections ?? 358}
+              num={358}
               label="Bharatiya Nyaya Sanhita, 2023"
-              source="Sections · indiacode.nic.in"
+              source="Sections · PRS Legislative Research (CC BY 4.0)"
             />
             <StatCard
-              num={counts.sections ?? 531}
+              num={531}
               label="Bharatiya Nagarik Suraksha Sanhita, 2023"
-              source="Sections (replaces CrPC) · indiacode.nic.in"
+              source="Sections (replaces CrPC) · PRS Legislative Research (CC BY 4.0)"
             />
             <StatCard
-              num={counts.judgments ?? 38400}
-              label="Supreme Court reported judgments"
-              source="SCR 1950–present · scr.sci.gov.in"
-              prefix="~"
+              num={counts.judgments ?? 5}
+              label="Supreme Court landmark judgments"
+              source="Curated from indiankanoon.org (public domain)"
             />
           </div>
         </section>
@@ -61,20 +60,20 @@ export default function CorpusPage() {
         <section className="section">
           <div className="section-head">
             <h2>Refresh cadence</h2>
-            <p className="sec-desc">How often each source is re-pulled and re-indexed.</p>
+            <p className="sec-desc">How the corpus is kept current. Ingestion is currently manual via the <code>nyaya-ingest</code> CLI.</p>
           </div>
           <div className="cadence">
             <div className="cadence-row">
-              <span className="cad-when">Weekly</span>
-              <span className="cad-what">Constitution + BNS/BNSS/IPC/CrPC — full re-pull from official gazette sources, diff-merged into the index.</span>
+              <span className="cad-when">Manual</span>
+              <span className="cad-what">Constitution + BNS/BNSS/BSA/IPC/CrPC — re-pulled from openly-licensed sources (Vikhram-S/IndianConstitution, PRS, HuggingFace) and diff-merged into the index on demand.</span>
             </div>
             <div className="cadence-row">
-              <span className="cad-when">Nightly</span>
-              <span className="cad-what">New Supreme Court reported judgments — fetched from scr.sci.gov.in and embedded within 24 hours of publication.</span>
+              <span className="cad-when">Manual</span>
+              <span className="cad-what">Landmark Supreme Court judgments — curated from indiankanoon.org and embedded on ingestion. Not yet automated.</span>
             </div>
             <div className="cadence-row">
-              <span className="cad-when">Quarterly</span>
-              <span className="cad-what">High Court reported judgments (beta) — selected High Courts, expanded each quarter. Roadmap: daily by Q1 2026.</span>
+              <span className="cad-when">Planned</span>
+              <span className="cad-what">High Court reported judgments — selected High Courts. Roadmap: automated nightly fetch once the pipeline is in place.</span>
             </div>
           </div>
         </section>
@@ -87,18 +86,18 @@ export default function CorpusPage() {
           </div>
           <div className="roadmap">
             <div className="roadmap-item">
-              <div className="ri-name">Bharatiya Sakshya Adhiniyam, 2023</div>
-              <div className="ri-desc">New evidence Act replacing the Indian Evidence Act, 1872. All 170 sections being parsed and cross-linked.</div>
-              <div className="ri-eta">Q4 2025</div>
-            </div>
-            <div className="roadmap-item">
               <div className="ri-name">All High Court reported judgments</div>
-              <div className="ri-desc">Expanding beyond the current beta set to cover all 25 High Courts with neutral citations.</div>
-              <div className="ri-eta">2026</div>
+              <div className="ri-desc">Expanding beyond the current landmark-SC set to cover all 25 High Courts with neutral citations.</div>
+              <div className="ri-eta">Planned</div>
             </div>
             <div className="roadmap-item">
               <div className="ri-name">Subordinate legislation &amp; rules</div>
               <div className="ri-desc">Rules, notifications, and subordinate legislation under major statutes — the long tail of regulatory text.</div>
+              <div className="ri-eta">Planned</div>
+            </div>
+            <div className="roadmap-item">
+              <div className="ri-name">Pre-1950 Privy Council decisions</div>
+              <div className="ri-desc">Judgments of the Privy Council (the apex court for British India until 1950) — the historical layer of Indian case law.</div>
               <div className="ri-eta">Planned</div>
             </div>
           </div>

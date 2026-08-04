@@ -1,5 +1,8 @@
 // Capabilities table — static content ported from the home page design.
 // The 6 modules are product copy, not live data, so they stay hardcoded.
+// Coverage numbers reflect the real corpus (395 articles, 511 IPC / 358 BNS
+// sections, 484 CrPC sections, 5 landmark SC judgments). Drafting assist and
+// the citation verifier are marked as planned — no such tool ships yet.
 
 type Cap = {
   code: string;
@@ -9,12 +12,12 @@ type Cap = {
 };
 
 const CAPS: Cap[] = [
-  { code: "CON-01", name: "Constitutional lookup", desc: "Parts I–XXII, Fundamental Rights & DPSP, with amendment history.", coverage: "448 arts" },
+  { code: "CON-01", name: "Constitutional lookup", desc: "Parts I–XXII, Fundamental Rights & DPSP, with amendment history.", coverage: "395 arts" },
   { code: "CRP-02", name: "CrPC procedure tracer", desc: "Bail, FIR, charge, trial stages — maps a query to the exact section.", coverage: "484 secs" },
-  { code: "PEN-03", name: "Penal code (IPC / BNS)", desc: "Legacy IPC + new BNS, 2023 — offence → section → punishment range.", coverage: "358 / 356" },
-  { code: "PRC-04", name: "Precedent retrieval", desc: "Supreme Court & High Court rulings, cited inline with neutral citations.", coverage: "61.3k" },
-  { code: "DFT-05", name: "Drafting assist", desc: "Notices, affidavits, vakalatnama skeletons from a one-line brief.", coverage: "14 tmpl" },
-  { code: "CTR-06", name: "Citation verifier", desc: "Paste a citation — get live/overruled status and citing cases.", coverage: "realtime" },
+  { code: "PEN-03", name: "Penal code (IPC / BNS)", desc: "Legacy IPC + new BNS, 2023 — offence → section → punishment range.", coverage: "511 / 358" },
+  { code: "PRC-04", name: "Precedent retrieval", desc: "Supreme Court & High Court rulings, cited inline with neutral citations.", coverage: "5 curated" },
+  { code: "DFT-05", name: "Drafting assist", desc: "Notices, affidavits, vakalatnama skeletons from a one-line brief.", coverage: "planned" },
+  { code: "CTR-06", name: "Citation resolver", desc: "Paste a citation — resolve it to the matching provision in the corpus.", coverage: "static" },
 ];
 
 export default function CapTable() {

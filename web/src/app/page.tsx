@@ -8,10 +8,12 @@ import { useHealthSummary, formatNumber } from "@/lib";
 export default function HomePage() {
   const { data, error } = useHealthSummary();
   const counts = data?.counts;
-  // Live counts with design-number fallbacks (1,278 / 9,142 / 61,300 from the export)
-  const articles = counts?.articles ?? 1278;
-  const sections = counts?.sections ?? 9142;
-  const judgments = counts?.judgments ?? 61300;
+  // Live counts with real corpus baselines as fallbacks (395 articles, 5 judgments).
+  // Sections fallback is null (shows "—") because the total depends on ingestion
+  // and cannot be stated accurately from static data.
+  const articles = counts?.articles ?? 395;
+  const sections = counts?.sections ?? null;
+  const judgments = counts?.judgments ?? 5;
 
   return (
     <main id="content" className="frame">
@@ -30,7 +32,7 @@ export default function HomePage() {
             </div>
             <div className="ls">
               <div className="ls-num num">{formatNumber(sections)}</div>
-              <div className="ls-lbl">Sections (CrPC/IPC/BNS)</div>
+              <div className="ls-lbl">Sections indexed</div>
             </div>
             <div className="ls">
               <div className="ls-num num">{formatNumber(judgments)}</div>
@@ -53,10 +55,11 @@ export default function HomePage() {
 
           <div className="src-chips" style={{ marginTop: "var(--gap-md)" }}>
             <span className="tag">Constitution of India</span>
+            <span className="tag">IPC 1860</span>
             <span className="tag">CrPC 1973</span>
             <span className="tag">BNS 2023</span>
             <span className="tag">BNSS 2023</span>
-            <span className="tag">SC / HC e-SCR</span>
+            <span className="tag">SC judgments</span>
           </div>
         </div>
 

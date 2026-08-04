@@ -6,8 +6,19 @@
 // one origin, so the URLs are identical.
 
 // ─── Types ────────────────────────────────────────────────────────
+export type CorpusCounts = {
+  acts: number;
+  sections: number;
+  articles: number;
+  judgments: number;
+  amendments: number;
+  schedules: number;
+  chapters: number;
+  cross_refs: number;
+};
+
 export type CorpusStats = {
-  counts: Record<string, number>;
+  counts: CorpusCounts;
   as_of: string | null;
 };
 
@@ -53,7 +64,7 @@ export type ToolsResponse = {
 
 export type HealthSummary = {
   status: string;
-  counts: Record<string, number>;
+  counts: Partial<CorpusCounts>;
   as_of: string | null;
 };
 

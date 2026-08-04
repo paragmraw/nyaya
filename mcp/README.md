@@ -7,7 +7,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 ## What it gives you
 
 - **24 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `semantic_query`, `get_judgment`, `search_judgments`, `get_sections_by_range`, `get_chapter`, `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment` / `get_amendments_for_article`, `get_definition`, `corpus_stats`, `hybrid_search`, `resolve_citation`, `search_by_kind`
-- **13 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
+- **11 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
 - **Full-text search** via Postgres `tsvector` + GIN indexes, with true total counts and `offset` pagination
 - **Semantic search** via `pgvector` + local `fastembed` embeddings (BAAI/bge-large-en-v1.5, 1024-d) — available in local dev and the slim-based image; **disabled in the Alpine image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants)). CUDAExecutionProvider is used on NVIDIA GPUs with automatic CPU fallback.
 - **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
@@ -165,7 +165,7 @@ The Dockerfile (`mcp/Dockerfile`) builds an **Alpine** image by default — the 
 
 ### Why semantic search is disabled on Alpine
 
-`semantic_query` depends on `fastembed`, which depends on `onnxruntime`. Onnxruntime publishes only `manylinux` (glibc) wheels — there are no `musllinux` wheels, so it cannot run on Alpine. The Alpine Dockerfile does not install the semantic extra; the `semantic_query` tool stays registered (so `tools/list` advertises it) but returns an empty result when called. The other 6 tools are unaffected — `search_law` (Postgres FTS) handles the keyword-search use case.
+`semantic_query` depends on `fastembed`, which depends on `onnxruntime`. Onnxruntime publishes only `manylinux` (glibc) wheels — there are no `musllinux` wheels, so it cannot run on Alpine. The Alpine Dockerfile does not install the semantic extra; the `semantic_query` tool stays registered (so `tools/list` advertises it) but returns an empty result when called. The other 23 tools are unaffected — `search_law` (Postgres FTS) handles the keyword-search use case.
 
 If you need semantic search in production, build from the slim variant instead. A `mcp/Dockerfile.slim` template is provided alongside the Alpine Dockerfile.
 
@@ -281,8 +281,8 @@ nyaya/                          # repo root
     │   ├── embeddings.py       # fastembed query embedding
     │   ├── models.py           # Pydantic models (structured output)
     │   ├── exceptions.py       # NotFound etc.
-    │   ├── tools/              # 6 MCP tools
-    │   └── resources/          # MCP resources + templates
+    │   ├── tools/              # 24 MCP tools across 17 modules
+    │   └── resources/          # 11 MCP resources + templates
     ├── scripts/
     │   └── schema.sql          # Supabase DDL (idempotent, vector(1024) embeddings)
     ├── notebooks/
