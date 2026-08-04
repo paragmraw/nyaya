@@ -10,8 +10,11 @@ FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888
 ENV NODE_ENV=production
 WORKDIR /web
 # Install deps first for layer caching (lockfile is committed for reproducibility).
+# Use `npm install` (not `npm ci`) so platform-specific optional deps
+# (e.g. @unrs/resolver-binding-linux-*) are reconciled — the committed
+# lockfile was generated on Windows and lacks Linux-only entries.
 COPY web/package.json web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm install --no-audit --no-fund --include=dev
 COPY web/ .
 RUN npm run build
 # Output: /web/out/ (static HTML/CSS/JS + assets + logo.svg)
@@ -34,8 +37,8 @@ RUN apk add --no-cache \
         postgresql-dev \
         curl
 
-# uv pinned by digest for supply-chain integrity.
-COPY --from=ghcr.io/astral-sh/uv:0.11.25-alpine@sha256:18a2499e97102ccb684f4d19fe4cdd598feb20582dccb65fe086fcadc7c9b81a /uv /usr/local/bin/uv
+# uv and uvx pinned by digest for supply-chain integrity.
+COPY --from=ghcr.io/astral-sh/uv:0.11.25-alpine@sha256:18a2499e97102ccb684f4d19fe4cdd598feb20582dccb65fe086fcadc7c9b81a /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
 COPY mcp/pyproject.toml mcp/uv.lock mcp/README.md ./
 

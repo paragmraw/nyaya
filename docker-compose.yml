@@ -2,7 +2,10 @@ services:
   nyaya:
     build:
       context: .
-      dockerfile: mcp/Dockerfile
+      # Root Dockerfile builds the Next.js SPA in a Node stage and serves it
+      # alongside the Python MCP/REST API from a single Alpine runtime on :8000.
+      # Same image Railway deploys from (see railway.toml).
+      dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8000:8000"
     environment:
