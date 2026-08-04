@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import SourceCard from "@/components/SourceCard";
 
 type FormatCard = {
@@ -35,11 +35,14 @@ const LIMITS: Limit[] = [
 
 export default function CitationsPage() {
   const [highlighted, setHighlighted] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onCiteClick = useCallback((id: string) => {
     setHighlighted(id);
-    // auto-clear the highlight after 2.5s (matches the design's JS)
-    setTimeout(() => setHighlighted((cur) => (cur === id ? null : cur)), 2500);
+    // Clear any pending timeout from a previous click to prevent races.
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    // Auto-clear the highlight after 2.5s (matches the design's JS).
+    timeoutRef.current = setTimeout(() => setHighlighted((cur) => (cur === id ? null : cur)), 2500);
   }, []);
 
   return (

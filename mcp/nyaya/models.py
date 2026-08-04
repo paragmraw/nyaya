@@ -40,21 +40,21 @@ class SectionRef(BaseModel):
 class Section(SectionRef, Provenance):
     chapter_number: int | None = None
     chapter_title: str | None = None
-    text: str = Field(description="Full section text, including any explanations and illustrations.")
+    text: str = Field(description="Full section text, including any explanations and illustrations.", max_length=200_000)
     url: str | None = Field(default=None, description="Optional canonical URL for the section.")
 
 
 class Article(Provenance):
     number: str = Field(description="Article number as a string, e.g. '21', '21A', '32'.")
     title: str
-    text: str = Field(description="Full article text, including sub-clauses.")
+    text: str = Field(description="Full article text, including sub-clauses.", max_length=200_000)
     part: str | None = Field(default=None, description="Part of the Constitution the article belongs to, e.g. 'Part III — Fundamental Rights'.")
 
 
 class Schedule(Provenance):
     number: int
     title: str
-    text: str
+    text: str = Field(max_length=200_000)
 
 
 class Amendment(Provenance):
@@ -71,7 +71,7 @@ class Judgment(Provenance):
     court: str = Field(default="Supreme Court of India")
     date: Date | None = None
     summary: str | None = Field(default=None, description="One-paragraph summary of the holding, if available.")
-    text: str = Field(description="Full judgment text or a substantial excerpt.")
+    text: str = Field(description="Full judgment text or a substantial excerpt.", max_length=200_000)
 
 
 class CrossRef(BaseModel):
@@ -82,9 +82,9 @@ class CrossRef(BaseModel):
     kind: Literal["repeals", "replaced_by", "references", "corresponds_to", "amends"] = Field(description="How the source relates to the target.")
 
 
-# Discriminator for the kind of document a search hit refers to. Lets clients
-# route to the right resource template (section://, article://, judgment://)
-# without guessing from the ``act`` field.
+# Discriminator for what a search hit refers to. Lets clients route to the
+# right resource template (section://, article://, judgment://) without
+# guessing from the ``act`` field.
 HitKind = Literal["section", "article", "judgment"]
 
 

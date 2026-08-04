@@ -53,7 +53,9 @@ def main() -> None:
             from .build_embeddings import build_embeddings
             build_embeddings(db)
         elif cmd == "all":
-            db.apply_schema(); db.commit(); print("✓ Schema applied.")
+            db.apply_schema()
+            db.commit()
+            print("✓ Schema applied.")
             from .ingest_constitution import ingest_constitution
             ingest_constitution(db)
             from .ingest_bare_acts import ingest_bare_acts

@@ -23,13 +23,13 @@ def register(mcp) -> None:
     _search_law(mcp)
     _get_section(mcp)
     _get_article(mcp)
-    _list_acts(mcp)                       # list_acts, list_chapters, list_sections, list_articles, list_judgments
+    _list_acts(mcp)
     _cross_reference(mcp)
     _semantic_query(mcp)
     _get_judgment(mcp)
     _search_judgments(mcp)
     _get_sections_by_range(mcp)
-    _schedules_amendments(mcp)            # list_schedules, get_schedule, list_amendments, get_amendment
+    _schedules_amendments(mcp)
     _get_definition(mcp)
     _corpus_stats(mcp)
     _hybrid_search(mcp)

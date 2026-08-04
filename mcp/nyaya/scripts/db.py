@@ -1,19 +1,24 @@
 """Shared DB helper for ingestion scripts.
 
-Separate from nyaya.db (the server's read layer) because ingestion does bulk
-writes, upserts, and DDL.
+Separate from ``nyaya.db`` (the server's read layer) because ingestion does
+bulk writes, upserts, and DDL.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import date
-from typing import Any, Iterable
+from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
 
 from ..config import get_settings
+
+# Resolve schema.sql relative to this file, not the CWD.
+_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "scripts" / "schema.sql"
 
 
 class IngestDB:
@@ -23,7 +28,7 @@ class IngestDB:
         self._database_url = database_url or get_settings().database_url
         self._conn: psycopg.Connection | None = None
 
-    def __enter__(self) -> "IngestDB":
+    def __enter__(self) -> IngestDB:
         self.connect()
         return self
 
@@ -47,8 +52,14 @@ class IngestDB:
         assert self._conn is not None
         return self._conn
 
-    def apply_schema(self, schema_sql_path: str = "scripts/schema.sql") -> None:
-        with open(schema_sql_path, encoding="utf-8") as f:
+    def apply_schema(self, schema_sql_path: str | Path | None = None) -> None:
+        """Apply the schema SQL file. Defaults to the package-bundled schema.sql.
+
+        The path is resolved against the package root (not the CWD) to prevent
+        path-injection via the working directory.
+        """
+        path = Path(schema_sql_path) if schema_sql_path else _SCHEMA_PATH
+        with open(path, encoding="utf-8") as f:
             sql = f.read()
         with self.conn.cursor() as cur:
             cur.execute(sql)

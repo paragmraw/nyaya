@@ -108,7 +108,8 @@ def main():
     # ── 1. list_acts ──────────────────────────────────────────────────────
     print("[1/24] list_acts")
     r, err, raw = _call_tool(headers, "list_acts", {})
-    if err: _fail("list_acts", raw)
+    if err:
+        _fail("", raw)
     else:
         acts = r.get("acts", [])
         _assert("list_acts returns list", isinstance(acts, list))
@@ -125,7 +126,8 @@ def main():
     # ── 2. list_chapters ──────────────────────────────────────────────────
     print("[2/24] list_chapters")
     r, err, raw = _call_tool(headers, "list_chapters", {"act": "IPC"})
-    if err: _fail("list_chapters", raw)
+    if err:
+        _fail("", raw)
     else:
         chs = r.get("chapters", [])
         _assert("list_chapters returns list", isinstance(chs, list))
@@ -138,7 +140,8 @@ def main():
     # ── 3. list_sections ──────────────────────────────────────────────────
     print("[3/24] list_sections")
     r, err, raw = _call_tool(headers, "list_sections", {"act": "IPC", "limit": 5, "offset": 0})
-    if err: _fail("list_sections", raw)
+    if err:
+        _fail("", raw)
     else:
         secs = r.get("sections", [])
         _assert("list_sections returns list", isinstance(secs, list))
@@ -155,7 +158,8 @@ def main():
     # ── 4. list_articles ──────────────────────────────────────────────────
     print("[4/24] list_articles")
     r, err, raw = _call_tool(headers, "list_articles", {"limit": 5})
-    if err: _fail("list_articles", raw)
+    if err:
+        _fail("", raw)
     else:
         arts = r.get("articles", [])
         _assert("list_articles returns list", isinstance(arts, list))
@@ -170,7 +174,8 @@ def main():
     # ── 5. list_judgments ─────────────────────────────────────────────────
     print("[5/24] list_judgments")
     r, err, raw = _call_tool(headers, "list_judgments", {"limit": 10})
-    if err: _fail("list_judgments", raw)
+    if err:
+        _fail("", raw)
     else:
         jds = r.get("judgments", [])
         _assert("list_judgments returns list", isinstance(jds, list))
@@ -184,7 +189,8 @@ def main():
     # ── 6. list_schedules ─────────────────────────────────────────────────
     print("[6/24] list_schedules")
     r, err, raw = _call_tool(headers, "list_schedules", {})
-    if err: _fail("list_schedules", raw)
+    if err:
+        _fail("", raw)
     else:
         schs = r.get("schedules", [])
         _assert("list_schedules returns list", isinstance(schs, list))
@@ -198,7 +204,8 @@ def main():
     # ── 7. list_amendments ────────────────────────────────────────────────
     print("[7/24] list_amendments")
     r, err, raw = _call_tool(headers, "list_amendments", {"year_from": 1950, "year_to": 1960})
-    if err: _fail("list_amendments", raw)
+    if err:
+        _fail("", raw)
     else:
         ams = r.get("amendments", [])
         _assert("list_amendments returns list", isinstance(ams, list))
@@ -212,7 +219,8 @@ def main():
     # ── 8. get_section ────────────────────────────────────────────────────
     print("[8/24] get_section")
     r, err, raw = _call_tool(headers, "get_section", {"act": "IPC", "section": "302"})
-    if err: _fail("get_section IPC 302", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_section act=IPC", r.get("act") == "IPC", f"got {r.get('act')}")
         _assert("get_section section=302", r.get("section") == "302", f"got {r.get('section')}")
@@ -224,7 +232,8 @@ def main():
     # ── 9. get_article ────────────────────────────────────────────────────
     print("[9/24] get_article")
     r, err, raw = _call_tool(headers, "get_article", {"article": "21"})
-    if err: _fail("get_article 21", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_article number=21", r.get("number") == "21", f"got {r.get('number')}")
         _assert("get_article has text with life", "life" in r.get("text", "").lower())
@@ -237,7 +246,8 @@ def main():
     # ── 10. get_judgment ──────────────────────────────────────────────────
     print("[10/24] get_judgment")
     r, err, raw = _call_tool(headers, "get_judgment", {"case_slug": "AIR 1973 SC 1461"})
-    if err: _fail("get_judgment by citation", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_judgment case_name has Kesavananda", "Kesavananda" in r.get("case_name", ""))
         _assert("get_judgment has citation", r.get("citation"))
@@ -246,7 +256,8 @@ def main():
 
     # Also test by slug
     r2, err2, raw2 = _call_tool(headers, "get_judgment", {"case_slug": "kesavananda-bharati-v-state-of-kerala"})
-    if err2: _fail("get_judgment by slug", raw2)
+    if err2:
+        _fail("get_judgment by slug", raw2)
     else:
         _assert("get_judgment slug resolves", "Kesavananda" in r2.get("case_name", ""))
         _assert("get_judgment same judgment", r2.get("case_name") == r.get("case_name"))
@@ -255,7 +266,8 @@ def main():
     # ── 11. get_schedule ──────────────────────────────────────────────────
     print("[11/24] get_schedule")
     r, err, raw = _call_tool(headers, "get_schedule", {"number": 1})
-    if err: _fail("get_schedule 1", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_schedule number=1", r.get("number") == 1)
         _assert("get_schedule has text", r.get("text") and len(r["text"]) > 10)
@@ -265,7 +277,8 @@ def main():
     # ── 12. get_amendment ─────────────────────────────────────────────────
     print("[12/24] get_amendment")
     r, err, raw = _call_tool(headers, "get_amendment", {"number": 1})
-    if err: _fail("get_amendment 1", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_amendment number=1", r.get("number") == 1)
         _assert("get_amendment has year", r.get("year") and r["year"] >= 1950)
@@ -276,7 +289,8 @@ def main():
     # ── 13. search_law ────────────────────────────────────────────────────
     print("[13/24] search_law")
     r, err, raw = _call_tool(headers, "search_law", {"query": "murder", "limit": 5})
-    if err: _fail("search_law murder", raw)
+    if err:
+        _fail("", raw)
     else:
         results = r.get("results", [])
         _assert("search_law has results", len(results) > 0)
@@ -299,7 +313,8 @@ def main():
     # ── 14. search_judgments ──────────────────────────────────────────────
     print("[14/24] search_judgments")
     r, err, raw = _call_tool(headers, "search_judgments", {"query": "basic structure", "limit": 3})
-    if err: _fail("search_judgments", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("search_judgments has results", len(r.get("results", [])) > 0)
         _assert("search_judgments has total", r.get("total", 0) > 0)
@@ -315,7 +330,8 @@ def main():
     # ── 15. search_by_kind ────────────────────────────────────────────────
     print("[15/24] search_by_kind")
     r, err, raw = _call_tool(headers, "search_by_kind", {"query": "right to privacy", "kind": "article", "limit": 3})
-    if err: _fail("search_by_kind article", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("search_by_kind has results", r.get("total", 0) >= 0)
         if r.get("results"):
@@ -325,7 +341,8 @@ def main():
     # ── 16. cross_reference ───────────────────────────────────────────────
     print("[16/24] cross_reference")
     r, err, raw = _call_tool(headers, "cross_reference", {"act": "IPC", "section": "302"})
-    if err: _fail("cross_reference IPC 302", raw)
+    if err:
+        _fail("", raw)
     else:
         refs = r.get("references", [])
         _assert("cross_reference has refs", len(refs) > 0, f"got {len(refs)}")
@@ -362,7 +379,8 @@ def main():
     # ── 18. get_sections_by_range ─────────────────────────────────────────
     print("[18/24] get_sections_by_range")
     r, err, raw = _call_tool(headers, "get_sections_by_range", {"act": "IPC", "start": "299", "end": "320"})
-    if err: _fail("get_sections_by_range", raw)
+    if err:
+        _fail("", raw)
     else:
         secs = r.get("sections", [])
         _assert("get_sections_by_range returns sections", len(secs) > 0, f"got {len(secs)}")
@@ -375,7 +393,8 @@ def main():
     # ── 19. get_chapter ───────────────────────────────────────────────────
     print("[19/24] get_chapter")
     r, err, raw = _call_tool(headers, "get_chapter", {"act": "IPC", "chapter": 1})
-    if err: _fail("get_chapter IPC 1", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_chapter has number", r.get("number") == 1)
         _assert("get_chapter has title", r.get("title"))
@@ -386,7 +405,8 @@ def main():
     # ── 20. get_definition ────────────────────────────────────────────────
     print("[20/24] get_definition")
     r, err, raw = _call_tool(headers, "get_definition", {"term": "good faith"})
-    if err: _fail("get_definition", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("get_definition has results", r.get("total", 0) >= 0)
         _assert("get_definition has as_of", r.get("as_of"))
@@ -396,7 +416,8 @@ def main():
     # ── 21. corpus_stats ──────────────────────────────────────────────────
     print("[21/24] corpus_stats")
     r, err, raw = _call_tool(headers, "corpus_stats", {})
-    if err: _fail("corpus_stats", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("corpus_stats has acts", r.get("acts", 0) > 0, f"acts={r.get('acts')}")
         _assert("corpus_stats has sections", r.get("sections", 0) > 0, f"sections={r.get('sections')}")
@@ -410,7 +431,8 @@ def main():
     # ── 22. hybrid_search ─────────────────────────────────────────────────
     print("[22/24] hybrid_search")
     r, err, raw = _call_tool(headers, "hybrid_search", {"query": "right to privacy", "limit": 5})
-    if err: _fail("hybrid_search", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("hybrid_search has results", r.get("total", 0) >= 0)
         _assert("hybrid_search has as_of", r.get("as_of"))
@@ -422,18 +444,21 @@ def main():
     # ── 23. resolve_citation ──────────────────────────────────────────────
     print("[23/24] resolve_citation")
     r, err, raw = _call_tool(headers, "resolve_citation", {"citation": "IPC s.302"})
-    if err: _fail("resolve_citation IPC s.302", raw)
+    if err:
+        _fail("", raw)
     else:
         _assert("resolve_citation section=302", r.get("section") == "302", f"got {r.get('section')}")
         _assert("resolve_citation act=IPC", r.get("act") == "IPC")
 
     r2, err2, raw2 = _call_tool(headers, "resolve_citation", {"citation": "Art.21"})
-    if err2: _fail("resolve_citation Art.21", raw2)
+    if err2:
+        _fail("resolve_citation Art.21", raw2)
     else:
         _assert("resolve_citation article=21", r2.get("number") == "21", f"got {r2.get('number')}")
 
     r3, err3, raw3 = _call_tool(headers, "resolve_citation", {"citation": "AIR 1973 SC 1461"})
-    if err3: _fail("resolve_citation judgment", raw3)
+    if err3:
+        _fail("resolve_citation judgment", raw3)
     else:
         _assert("resolve_citation judgment has case_name", "Kesavananda" in r3.get("case_name", ""))
     print()
@@ -441,7 +466,8 @@ def main():
     # ── 24. get_amendments_for_article ────────────────────────────────────
     print("[24/24] get_amendments_for_article")
     r, err, raw = _call_tool(headers, "get_amendments_for_article", {"article": "13"})
-    if err: _fail("get_amendments_for_article 13", raw)
+    if err:
+        _fail("", raw)
     else:
         ams = r.get("amendments", [])
         _assert("get_amendments_for_article returns list", isinstance(ams, list))

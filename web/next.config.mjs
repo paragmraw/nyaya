@@ -9,6 +9,9 @@ const nextConfig = {
     unoptimized: true,
   },
 
+  // Disable source maps in production to avoid leaking source code structure.
+  productionBrowserSourceMaps: false,
+
   // App Router pages are statically generated at build time. Live data is
   // fetched client-side against the same-origin REST endpoints.
   trailingSlash: true,

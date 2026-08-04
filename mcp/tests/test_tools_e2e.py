@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import json
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
+
+import pytest
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000"
 MCP = f"{BASE}/mcp"
 HEALTH = f"{BASE}/health"
 
-
-import pytest
 
 # Skip this entire module from pytest collection — it's a manual e2e test
 # that needs a running Docker container.

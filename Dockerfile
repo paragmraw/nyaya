@@ -4,19 +4,24 @@
 # export in a Node stage, then assembles the Python runtime that serves the
 # SPA + REST + MCP from one origin. Build context is the repo root.
 
-# ─── Stage 1: build the SPA (static export -> /web/out) ──────────────────────
-FROM node:20-alpine AS web-builder
+# --- Stage 1: build the SPA (static export -> /web/out) -----------------------
+# node:20-alpine pinned by digest for reproducible builds (amd64).
+FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb AS web-builder
+ENV NODE_ENV=production
 WORKDIR /web
-# Install deps first for layer caching
-COPY web/package.json web/package-lock.json* ./
-RUN npm ci --no-audit --no-fund
-# Build the app (next.config.mjs has output: 'export' -> emits static HTML)
+# Install deps first for layer caching (lockfile is committed for reproducibility).
+# Use `npm install` (not `npm ci`) so platform-specific optional deps
+# (e.g. @unrs/resolver-binding-linux-*) are reconciled — the committed
+# lockfile was generated on Windows and lacks Linux-only entries.
+COPY web/package.json web/package-lock.json ./
+RUN npm install --no-audit --no-fund --include=dev
 COPY web/ .
 RUN npm run build
 # Output: /web/out/ (static HTML/CSS/JS + assets + logo.svg)
 
-# ─── Stage 2: build the Python package (Alpine, no semantic search) ─────────
-FROM python:3.12-alpine AS py-builder
+# --- Stage 2: build the Python package (Alpine, no semantic search) ----------
+# python:3.12-alpine pinned by digest for reproducible builds (amd64).
+FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS py-builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -32,15 +37,18 @@ RUN apk add --no-cache \
         postgresql-dev \
         curl
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# uv and uvx pinned by digest for supply-chain integrity.
+COPY --from=ghcr.io/astral-sh/uv:0.11.25-alpine@sha256:18a2499e97102ccb684f4d19fe4cdd598feb20582dccb65fe086fcadc7c9b81a /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
-COPY mcp/pyproject.toml mcp/README.md ./
+COPY mcp/pyproject.toml mcp/uv.lock mcp/README.md ./
 
-RUN uv pip install --system --no-cache \
-        "."
+# Export pinned requirements from the lockfile and install into system site-packages.
+RUN uv export --frozen --no-dev --no-emit-project --no-editable --format requirements-txt > requirements.txt \
+    && uv pip install --system --no-cache -r requirements.txt
 
-# ─── Stage 3: runtime ────────────────────────────────────────────────────────
-FROM python:3.12-alpine AS runtime
+# --- Stage 3: runtime -------------------------------------------------------
+# python:3.12-alpine pinned by digest for reproducible builds (amd64).
+FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

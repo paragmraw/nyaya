@@ -62,11 +62,11 @@ def register(mcp) -> None:
     @mcp.resource(
         "judgments://",
         name="All landmark judgments",
-        description="List of all landmark Supreme Court judgments in the corpus.",
+        description="List of landmark Supreme Court judgments in the corpus (first 100).",
         mime_type="application/json",
     )
     def all_judgments() -> str:
-        juds, _ = db.list_judgments(limit=1000)
+        juds, _ = db.list_judgments(limit=100)
         return json.dumps([j.model_dump(mode="json") for j in juds], indent=2)
 
     @mcp.resource(

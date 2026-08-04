@@ -1,3 +1,3 @@
-// Barrel export for the lib module so pages can do `import { useCorpusStats, formatNumber } from "@/lib"`.
+// Barrel export so pages can do `import { useCorpusStats, formatNumber } from "@/lib"`.
 export * from "./api";
 export * from "./swr";

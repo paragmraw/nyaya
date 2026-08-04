@@ -6,20 +6,14 @@ All functions are synchronous and intended to be wrapped with
 Design notes
 ------------
 * Input normalization: act/section/article strings are stripped and resolved
-  via an alias map. Act lookups are case-insensitive at the SQL level
-  (``lower(short_name) = lower(%s)``) so unknown acts match regardless of case.
-* Provenance: articles read provenance from the Constitution act row;
-  schedules/amendments/judgments fall back to a module constant
-  ``CORPUS_AS_OF`` until per-row provenance columns are added to the schema.
-* Cross-refs: ``get_cross_refs`` queries BOTH directions and merges.
+  via an alias map; act lookups are case-insensitive at the SQL level.
 * Search: ``search_all`` uses a single UNION ALL query with a global
-  ORDER BY + LIMIT/OFFSET so pagination is correct across corpora. The true
-  total is computed via a separate ``count(*)`` query (not a window function)
-  so it's correct even when ``offset >= total`` (the window-fn approach
-  returns 0 total for an empty page).
+  ORDER BY + LIMIT/OFFSET so pagination is correct across corpora. The total
+  is computed via a separate ``count(*)`` query so it remains accurate when
+  ``offset >= total`` (a window-function approach returns 0 for an empty page).
 * Errors: DB exceptions are translated to ``DatabaseUnavailable`` /
-  ``SearchError`` so the MCP client gets a structured error code instead of
-  a raw psycopg traceback.
+  ``SearchError`` so the MCP client receives a structured error code instead
+  of a raw psycopg traceback.
 """
 
 from __future__ import annotations
@@ -28,8 +22,9 @@ import contextlib
 import re
 import threading
 import time
+from collections.abc import Iterator
 from datetime import date
-from typing import Any, Iterator
+from typing import Any
 
 import psycopg
 import psycopg_pool
@@ -37,7 +32,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from .config import get_settings
-from .exceptions import DatabaseUnavailable, SearchError
+from .exceptions import DatabaseUnavailable
 from .models import (
     Act,
     Amendment,
@@ -46,15 +41,19 @@ from .models import (
     CrossRef,
     Judgment,
     Schedule,
-    Section,
     SearchResult,
+    Section,
 )
 
-# Fallback corpus as-of date used only when an act row can't supply one.
+# Fallback provenance date used when an act row lacks a current ``as_of``.
 CORPUS_AS_OF = date(2026, 7, 1)
 
-# Aliases that map common act names/case variants to the canonical short_name
-# stored in the ``acts`` table. Keys are lower-cased on lookup.
+# Strips Unicode bidi/format characters that could spoof act-name lookups
+# (zero-width joiners, RTL/LTR overrides, isolates).
+_BIDI_RE = re.compile(r"[\u200B-\u200F\u202A-\u202E\u2066-\u2069]")
+
+# Maps common act names / case variants to the canonical short_name stored
+# in the ``acts`` table. Lookup is case-insensitive.
 _ACT_ALIASES: dict[str, str] = {
     "ipc": "IPC",
     "indian penal code": "IPC",
@@ -106,13 +105,13 @@ _ACT_ALIASES: dict[str, str] = {
 _pool: ConnectionPool | None = None
 _pool_lock = threading.Lock()
 
-# Cache for corpus_as_of(): the as_of date changes only on re-ingestion, so
-# we cache it for 5 minutes to avoid an extra DB round-trip on every search.
+# 5-minute TTL: ``as_of`` changes only on re-ingestion, so caching avoids an
+# extra round-trip on every search call. Failures are not cached.
 _as_of_cache: tuple[float, date | None] = (0.0, None)
 _AS_OF_TTL = 300.0  # seconds
 
-# ts_headline option strings, passed as SQL parameters to keep the headline
-# options (which contain quotes/angles) out of the SQL literal.
+# ts_headline option strings, passed as SQL parameters so the option syntax
+# (quotes, angle brackets) never appears in the SQL literal.
 TS_HEADLINE_OPTS = (
     'MaxWords=60, MinWords=20, MaxFragments=3, '
     'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
@@ -122,9 +121,9 @@ TS_HEADLINE_OPTS_LONG = (
     'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
 )
 
-# Regex to strip leading "s."/"section"/"art."/"article" prefixes from section
-# or article numbers, with or without a separator (handles "s.302", "s302",
-# "section 302", "section302", "art.21", "art21", "article 21").
+# Strips a leading "s."/"section"/"art."/"article" prefix from a section or
+# article number, with or without a separator ("s.302", "s302", "section 302",
+# "section302", "art.21", "art21", "article 21").
 _REF_PREFIX_RE = re.compile(
     r"^(?:s(?:ec(?:tion)?)?\.?|art(?:icle)?\.?)\s*",
     re.IGNORECASE,
@@ -141,10 +140,13 @@ def normalize_act(act: str | None) -> str | None:
     Returns the canonical ``short_name`` (e.g. 'IPC') or ``None`` if the input
     is empty/None. Unknown values are returned stripped (original case
     preserved) — the DB lookup is case-insensitive so this is fine.
+
+    Also strips Unicode bidi/format characters (U+200B-200F, U+202A-202E,
+    U+2066-2069) that could be used to spoof lookups.
     """
     if act is None:
         return None
-    key = act.strip()
+    key = _BIDI_RE.sub("", act).strip()
     if not key:
         return None
     low = key.lower()
@@ -178,25 +180,27 @@ def _escape_like(s: str) -> str:
 
 def _get_pool() -> ConnectionPool:
     global _pool
-    # Thread-safe lazy initialization. ``asyncio.to_thread`` can race on the
-    # first call; the lock ensures only one pool is created.
+    # Lazy initialization: ``asyncio.to_thread`` can race on the first call,
+    # so the lock ensures only one pool is created.
     with _pool_lock:
         if _pool is None or _pool.closed:
             settings = get_settings()
 
             def _configure(conn: psycopg.Connection) -> None:
-                # The configure callback runs once per new connection. SET
-                # commands start a transaction in psycopg's default
-                # autocommit=False mode; we must commit (or use autocommit)
-                # so the pool doesn't see the connection left in INTRANS
-                # status and discard it as broken.
+                # Configure runs once per new connection. SET commands start
+                # a transaction in psycopg's default autocommit=False mode, so
+                # we must commit (or use autocommit) — otherwise the pool
+                # sees the connection left in INTRANS and discards it.
                 conn.autocommit = True
                 try:
                     if settings.statement_timeout_ms > 0:
+                        # String formatting is safe: statement_timeout_ms is a
+                        # validated int from config. Required because Supabase's
+                        # PgBouncer in transaction mode doesn't support
+                        # parameterized SET.
                         with conn.cursor() as cur:
                             cur.execute(
-                                "set statement_timeout = %s",
-                                (settings.statement_timeout_ms,),
+                                f"set statement_timeout = {int(settings.statement_timeout_ms)}"
                             )
                     with conn.cursor() as cur:
                         cur.execute("set application_name = 'nyaya'")
@@ -318,8 +322,8 @@ def list_sections(act_short_name: str, chapter: int | None = None,
                   limit: int = 100, offset: int = 0) -> tuple[list[Section], int]:
     """List sections of an act, optionally filtered to a chapter.
 
-    Returns (sections, total) where total is the true match count before
-    limit/offset.
+    Returns ``(sections, total)`` where ``total`` is the true match count
+    before limit/offset.
     """
     sn = normalize_act(act_short_name)
     if sn is None:
@@ -360,9 +364,9 @@ def get_sections_by_range(act_short_name: str, start: str, end: str,
                           limit: int = 500) -> list[Section]:
     """Fetch all sections of an act between two numbers (inclusive).
 
-    Section numbers are strings ('302', '354A'); the numeric prefix is compared
-    numerically and the full string is used as a secondary sort/bound so
-    '354A'..'354B' does not match '354'. Non-numeric section numbers are
+    Section numbers are strings ('302', '354A'); the numeric prefix is
+    compared numerically and the full string is used as a secondary sort/bound
+    so '354A'..'354B' does not match '354'. Non-numeric section numbers are
     guarded with ``NULLIF`` so they don't break the cast.
     """
     sn = normalize_act(act_short_name)
@@ -397,8 +401,9 @@ def get_sections_by_range(act_short_name: str, start: str, end: str,
 
 def search_sections(query: str, act: str | None = None,
                     limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    """FTS over sections. Returns (results, total) where total is the true
-    match count (via a separate count query, correct even when offset >= total).
+    """FTS over sections. Returns ``(results, total)`` where ``total`` is the
+    true match count (via a separate count query, correct even when
+    ``offset >= total``).
     """
     where = "where s.act_id = a.id and s.search_tsv @@ q"
     params: list[Any] = [TS_HEADLINE_OPTS, query]
@@ -408,8 +413,6 @@ def search_sections(query: str, act: str | None = None,
     base = (
         f"from sections s, acts a, plainto_tsquery('english', %s) q {where}"
     )
-    # The headline opt is the first param; the query is the second. For the
-    # count query we only need the query param.
     with _conn() as c:
         total = c.execute(
             f"select count(*) as n {base.replace(TS_HEADLINE_OPTS + ', ', '')}",
@@ -520,9 +523,9 @@ def get_judgment(case_slug: str) -> Judgment | None:
     """Fetch a judgment by exact citation, slugified case name, or fuzzy name.
 
     The match is tried in order of specificity (citation → slugified name →
-    fuzzy name) and only falls through to the looser match if the tighter one
+    fuzzy name) and only falls through to a looser match if the tighter one
     returns nothing. This prevents short slugs like "v" from matching an
-    arbitrary judgment via the substring LIKE.
+    arbitrary judgment via substring LIKE.
     """
     slug = case_slug.strip() if case_slug else ""
     if not slug:
@@ -536,16 +539,15 @@ def get_judgment(case_slug: str) -> Judgment | None:
         ).fetchone()
         if not row:
             # 2. Slugified case-name match (e.g. "kesavananda-bharati-v-state-of-kerala").
-            #    Strip periods from the case name so "v." -> "v" matches the
-            #    common slug form without punctuation.
+            #    Strip periods so "v." -> "v" matches the common slug form.
             row = c.execute(
                 "select case_name, citation, court, date, summary, text "
                 "from judgments where lower(replace(replace(case_name, ' ', '-'), '.', '')) = lower(replace(%s, '.', '')) limit 1",
                 (slug,),
             ).fetchone()
-        if not row and len(slug) >= 4:
-            # 3. Fuzzy substring match ONLY for reasonably-long slugs (>= 4 chars)
-            # to avoid "v" or "india" matching arbitrary cases.
+        if not row and len(slug) >= 8:
+            # 3. Fuzzy substring match ONLY for slugs >= 8 chars, to avoid
+            # "v" or "india" matching arbitrary cases.
             escaped = _escape_like(slug.replace("-", " "))
             row = c.execute(
                 "select case_name, citation, court, date, summary, text "
@@ -622,8 +624,8 @@ def search_judgments(query: str, court: str | None = None,
 
 def search_all(query: str, act: str | None = None,
                limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    """Search the whole corpus. Returns (results, total) where total is the
-    true match count across all sub-corpora (before limit/offset).
+    """Search the whole corpus. Returns ``(results, total)`` where ``total``
+    is the true match count across all sub-corpora (before limit/offset).
 
     For scoped search (``act`` set), delegates to the per-corpus search
     function. For unscoped search, runs a single UNION ALL query with a global
@@ -639,10 +641,9 @@ def search_all(query: str, act: str | None = None,
         return search_sections(query, act=normalized, limit=limit, offset=offset)
 
     # Unscoped: single UNION ALL over all three corpora with global pagination.
-    # Each sub-query uses the same tsquery; ranks from different corpora are
-    # not strictly comparable, so we normalize by dividing by the max rank
-    # in each sub-corpus (via a window function) before the global sort. This
-    # mitigates the cross-corpus rank-scale conflation.
+    # Ranks from different corpora are not strictly comparable, so we normalize
+    # by dividing each by its sub-corpus max rank (window function) before the
+    # global sort. This mitigates the cross-corpus rank-scale conflation.
     union_sql = """
         with matched as (
             select a.short_name as act,
@@ -789,7 +790,7 @@ def get_amendments_for_article(article: str) -> list[Amendment]:
     results: list[Amendment] = []
     for r in rows:
         affected = (r["articles_affected"] or "")
-        # Match the article number as a whole word so "31" doesn't match "314".
+        # Word-boundary match so "31" doesn't match "314".
         if re.search(rf"\b{re.escape(art)}\b", affected):
             results.append(Amendment(
                 number=r["number"], year=r["year"], title=r["title"],
@@ -833,9 +834,8 @@ def get_cross_refs(act: str, section: str, direction: str = "both") -> list[Cros
                 (a, s),
             ).fetchall()
             refs.extend(CrossRef(**r) for r in rows)
-    # Dedupe exact duplicate rows (same from/to/kind). A from->to row and its
-    # inverse to->from row have different keys and are both kept (they are
-    # distinct directed relationships).
+    # Dedupe exact duplicate rows. A from->to row and its inverse to->from
+    # row have different keys and are both kept (distinct directed edges).
     seen: set[tuple[str, str, str, str, str]] = set()
     unique: list[CrossRef] = []
     for r in refs:
@@ -914,8 +914,11 @@ def semantic_search_judgments(embedding: list[float], limit: int = 5) -> list[Se
 
 def semantic_search_all(embedding: list[float], act: str | None = None,
                          limit: int = 5) -> list[SearchResult]:
-    """Semantic search across the corpus. ``act`` optionally scopes to sections
-    of one act (articles/judgments are not scoped by act)."""
+    """Semantic search across the corpus.
+
+    ``act`` optionally scopes to sections of one act. Articles and judgments
+    are not scoped by act.
+    """
     normalized = normalize_act(act)
     if normalized and normalized.lower() in {"constitution", "article", "articles"}:
         return semantic_search_articles(embedding, limit=limit)
@@ -957,8 +960,8 @@ def corpus_stats() -> dict[str, int]:
 def corpus_as_of() -> date | None:
     """Return the latest ``as_of`` date across acts (cached for 5 minutes).
 
-    The as_of date changes only on re-ingestion, so caching avoids an extra
-    DB round-trip on every search call.
+    Caching avoids an extra round-trip on every search call. Database
+    failures return ``None`` without caching so the next call retries.
     """
     global _as_of_cache
     now = time.monotonic()
@@ -970,6 +973,7 @@ def corpus_as_of() -> date | None:
             row = c.execute("select max(as_of) as d from acts").fetchone()
         val = row["d"] if row else None
     except DatabaseUnavailable:
-        val = None
+        # Don't cache failures — let the next call retry immediately.
+        return None
     _as_of_cache = (now, val)
     return val

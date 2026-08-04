@@ -9,7 +9,7 @@ from ..exceptions import NotFound, SearchError
 from ..models import Article, Judgment, Section
 from ._util import run_sync
 
-# Patterns: "IPC s.302", "s.302 IPC", "Art.21", "AIR 1973 SC 1461"
+# Matches "IPC s.302", "s.302 IPC", "Art.21", "AIR 1973 SC 1461".
 _SEC_RE = re.compile(
     r"(?:s(?:ec(?:tion)?)?\.?\s*(?P<num>\d+[A-Z]?)\s*(?:of\s+)?(?P<act>[A-Za-z]+)?)"
     r"|(?P<act2>[A-Za-z]+)\s+s(?:ec(?:tion)?)?\.?\s*(?P<num2>\d+[A-Z]?)",
@@ -58,7 +58,7 @@ def register(mcp) -> None:
             if art:
                 return art
 
-        # Try judgment by citation: "AIR 1973 SC 1461" or case name.
+        # Try judgment by citation or case name.
         jud = db.get_judgment(c)
         if jud:
             return jud

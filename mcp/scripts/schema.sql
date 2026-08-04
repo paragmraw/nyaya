@@ -197,3 +197,24 @@ create or replace view documents as
     union all
     select j.id::text, 'judgment', 'judgment', coalesce(j.citation, j.case_name), j.case_name, j.text
     from judgments j;
+
+-- Security: text-length CHECK constraints (defense-in-depth against DoS) ------
+-- These prevent accidental insertion of pathologically large text rows that
+-- would slow down ts_headline / search operations. The limits are generous
+-- (1 MB) and well above any legitimate legal text.
+do $$
+begin
+    begin execute 'alter table sections add constraint sections_text_len check (length(text) < 1048576)';
+    exception when duplicate_object then null; end;
+    begin execute 'alter table articles add constraint articles_text_len check (length(text) < 1048576)';
+    exception when duplicate_object then null; end;
+    begin execute 'alter table judgments add constraint judgments_text_len check (length(text) < 1048576)';
+    exception when duplicate_object then null; end;
+    begin execute 'alter table schedules add constraint schedules_text_len check (length(text) < 1048576)';
+    exception when duplicate_object then null; end;
+end $$;
+
+-- Performance: functional index for case-insensitive act lookups --------------
+-- Every get_section / get_cross_refs uses lower(short_name) = lower(%s); without
+-- this index, Postgres does a sequential scan on every call.
+create index if not exists acts_short_name_lower_idx on acts (lower(short_name));

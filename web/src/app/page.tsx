@@ -8,9 +8,9 @@ import { useHealthSummary, formatNumber } from "@/lib";
 export default function HomePage() {
   const { data, error } = useHealthSummary();
   const counts = data?.counts;
-  // Live counts with real corpus baselines as fallbacks (395 articles, 5 judgments).
-  // Sections fallback is null (shows "—") because the total depends on ingestion
-  // and cannot be stated accurately from static data.
+  // Live counts with real corpus baselines as fallbacks (395 articles,
+  // 5 judgments). Sections fallback is null (shows "—") because the total
+  // depends on ingestion and cannot be stated accurately from static data.
   const articles = counts?.articles ?? 395;
   const sections = counts?.sections ?? null;
   const judgments = counts?.judgments ?? 5;

@@ -36,7 +36,7 @@ def register(mcp) -> None:
             limit: Max sections to return (default 500, max 1000).
         """
         limit = max(1, min(int(limit), 1000))
-        # Validate that start/end have a numeric prefix to avoid a SQL cast error.
+        # Validate start/end have a numeric prefix to avoid a SQL cast error.
         for label, val in (("start", start), ("end", end)):
             v = db.normalize_ref(val) or ""
             if not _NUM_PREFIX_RE.match(v):

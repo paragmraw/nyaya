@@ -40,7 +40,7 @@ def register(mcp) -> None:
                 kind="chapter",
                 hint="Call list_chapters to see available chapters.",
             )
-        sections, _ = db.list_sections(act, chapter=chapter, limit=10000)
+        sections, _ = db.list_sections(act, chapter=chapter, limit=500)
         return ChapterWithSections(
             act=act, number=ch.number, title=ch.title,
             section_range=ch.section_range, sections=sections,

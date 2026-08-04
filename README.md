@@ -37,3 +37,18 @@ A single Railway service serves the SPA, the REST API, and the MCP endpoint from
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE).
+
+## Security
+
+The Nyaya MCP server is designed to be deployed behind a reverse proxy (Cloudflare, Railway edge, nginx) that handles authentication and TLS. The server itself does not enforce authentication — this is intentional for the alpha so browser-based MCP clients can call the endpoint without configuration.
+
+**Rate limiting** is configured in [`mcp/nyaya/config.py`](mcp/nyaya/config.py) via the `RateLimitSettings` dataclass (edit there to tune; no env vars needed). Defaults: 120 req/min/IP for read tools, 10 req/min/IP for embedding tools, 1 MB body size cap.
+
+**Security headers** (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS) are set by the Starlette middleware in [`mcp/nyaya/security_headers.py`](mcp/nyaya/security_headers.py).
+
+**Corpus integrity**: the ingest pipeline sanitizes all text at ingest time (strips control characters, caps row length at 200 KB) via [`mcp/nyaya/sanitize.py`](mcp/nyaya/sanitize.py). See [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md) for the trust model and data provenance.
+
+**Recommendations for production deployment**:
+- Use a **read-only Postgres role** for `DATABASE_URL` (the server only reads; ingestion uses the same URL but should be run from a trusted environment).
+- Deploy behind a reverse proxy with TLS, authentication, and IP-based rate limiting.
+- Run `nyaya-ingest` from a trusted machine, not the public deployment.

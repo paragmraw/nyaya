@@ -11,8 +11,9 @@ from nyaya.exceptions import NotFound
 
 def _make_app(fake_db):
     from fastmcp import FastMCP
-    from nyaya.tools import register as register_tools
+
     from nyaya.resources import register as register_resources
+    from nyaya.tools import register as register_tools
 
     mcp = FastMCP(name="nyaya-test")
     register_tools(mcp)

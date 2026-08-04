@@ -1,25 +1,25 @@
 """Ingest IPC, Indian Evidence Act, and CPC from the
-`civictech-India/Indian-Law-Penal-Code-Json` GitHub repo.
+``civictech-India/Indian-Law-Penal-Code-Json`` GitHub repo.
 
-The HuggingFace `mratanusarkar/Indian-Laws` dataset is sparse for these three
-acts (IPC has only 12 of ~511 sections). This module loads the full verbatim
-section text from the civictech repo, which packages the public-domain
-government text as JSON.
+The HuggingFace ``mratanusarkar/Indian-Laws`` dataset is sparse for these
+three acts (IPC has only 12 of ~511 sections). This module loads the full
+verbatim section text from the civictech repo, which packages the
+public-domain government text as JSON.
 
-The three JSON files use three slightly different schemas (IPC: `Section`/
-`section_title`/`section_desc`/`chapter`/`chapter_title`; IEA: `section`/
-`section_title`/`section_desc`/`chapter`; CPC: `section`/`title`/`description`,
-no chapter). A normalizer maps them to the common (number, title, text,
-chapter?) shape.
+The three JSON files use slightly different schemas (IPC: ``Section`` /
+``section_title`` / ``section_desc`` / ``chapter`` / ``chapter_title``;
+IEA: ``section`` / ``section_title`` / ``section_desc`` / ``chapter``;
+CPC: ``section`` / ``title`` / ``description``, no chapter). A normalizer
+maps them to the common ``(number, title, text, chapter?)`` shape.
 """
 
 from __future__ import annotations
 
-import json
 from datetime import date
 
 import httpx
 
+from ..sanitize import sanitize_text
 from .db import IngestDB
 
 AS_OF = date(2026, 7, 1)
@@ -92,6 +92,7 @@ def _normalize(row: dict, act: dict) -> dict:
     number = str(row[act["num_key"]]).strip().rstrip(".")
     title = (str(row.get(act["title_key"]) or "")).strip() or None
     text = (str(row.get(act["text_key"]) or "")).strip()
+    text = sanitize_text(text)
     chapter_num: int | None = None
     chapter_title: str | None = None
     if act["has_chapter"] and row.get("chapter") is not None:
