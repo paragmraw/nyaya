@@ -34,7 +34,7 @@ ingest = [
     "tqdm>=4.66,<5",
 ]
 semantic = [
-    "fastembed>=0.3.0,<0.6",
+    "fastembed>=0.3.0,<0.9",
 ]
 dev = [
     "pytest>=8.0,<9",
