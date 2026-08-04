@@ -22,8 +22,9 @@ import contextlib
 import re
 import threading
 import time
+from collections.abc import Iterator
 from datetime import date
-from typing import Any, Iterator
+from typing import Any
 
 import psycopg
 import psycopg_pool
@@ -31,7 +32,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from .config import get_settings
-from .exceptions import DatabaseUnavailable, SearchError
+from .exceptions import DatabaseUnavailable
 from .models import (
     Act,
     Amendment,
@@ -40,8 +41,8 @@ from .models import (
     CrossRef,
     Judgment,
     Schedule,
-    Section,
     SearchResult,
+    Section,
 )
 
 # Fallback provenance date used when an act row lacks a current ``as_of``.

@@ -22,7 +22,6 @@ Environment variables
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any

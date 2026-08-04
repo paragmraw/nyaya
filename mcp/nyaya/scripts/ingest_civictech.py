@@ -15,13 +15,12 @@ maps them to the common ``(number, title, text, chapter?)`` shape.
 
 from __future__ import annotations
 
-import json
 from datetime import date
 
 import httpx
 
-from .db import IngestDB
 from ..sanitize import sanitize_text
+from .db import IngestDB
 
 AS_OF = date(2026, 7, 1)
 SOURCE = "civictech-India/Indian-Law-Penal-Code-Json (public-domain government edicts)"

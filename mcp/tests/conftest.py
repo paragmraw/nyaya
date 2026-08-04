@@ -12,12 +12,12 @@ Provides:
 from __future__ import annotations
 
 import os
+import sys
 from datetime import date
 from typing import Any
 
 import pytest
 
-import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 os.environ.setdefault("DATABASE_URL", "postgresql://nobody@nowhere/db")
@@ -227,7 +227,6 @@ def fake_db(monkeypatch):
         return hits[offset:offset + limit], len(hits)
 
     def _search_articles(query, limit=10, offset=0):
-        from nyaya.models import SearchResult
         if not query or not query.strip():
             return [], 0
         return [], 0
@@ -305,8 +304,9 @@ def fake_db(monkeypatch):
         return None
 
     def _get_amendments_for_article(article):
-        from nyaya.models import Amendment
         import re
+
+        from nyaya.models import Amendment
         art = db.normalize_ref(article)
         result = []
         for a in data["amendments"]:

@@ -13,8 +13,8 @@ from datetime import date
 
 import httpx
 
-from .db import IngestDB
 from ..sanitize import sanitize_text
+from .db import IngestDB
 
 AS_OF = date(2026, 7, 1)
 SOURCE = "PRS Legislative Research (CC BY 4.0)"
@@ -59,7 +59,6 @@ def _download_pdf(url: str) -> bytes:
     """Download a PDF with a 25 MB size cap to prevent DoS via huge files."""
     import time
     MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB
-    last_err: Exception | None = None
     for attempt in range(3):
         try:
             with httpx.Client(follow_redirects=True, timeout=60.0) as client:
@@ -77,7 +76,6 @@ def _download_pdf(url: str) -> bytes:
                         chunks.append(chunk)
                     return b"".join(chunks)
         except httpx.HTTPError as e:
-            last_err = e
             if attempt < 2:
                 wait = 2 ** attempt
                 print(f"  ! PDF download failed (attempt {attempt + 1}/3): {e}; retrying in {wait}s…")

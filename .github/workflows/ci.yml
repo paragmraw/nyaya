@@ -59,7 +59,8 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Lint
-        run: npx next lint
+        # Next.js 16 removed `next lint`; use ESLint directly with the flat config.
+        run: npx eslint .
 
       - name: Build (static export)
         run: npm run build

@@ -7,9 +7,10 @@ bulk writes, upserts, and DDL.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
@@ -27,7 +28,7 @@ class IngestDB:
         self._database_url = database_url or get_settings().database_url
         self._conn: psycopg.Connection | None = None
 
-    def __enter__(self) -> "IngestDB":
+    def __enter__(self) -> IngestDB:
         self.connect()
         return self
 

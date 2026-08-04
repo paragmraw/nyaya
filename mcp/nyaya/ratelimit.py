@@ -50,7 +50,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return "/mcp" in request.url.path and request.method == "POST"
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
-        settings = get_rate_limit_settings()
         ip = _get_remote_address(request)
 
         # /health is always allowed (used by Railway healthchecks).

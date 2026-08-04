@@ -3,7 +3,9 @@
 NOT collected by pytest (needs a live server). Run manually:
     python tests/test_tools_e2e_edge.py
 """
-import json, sys, urllib.request
+import json
+import sys
+import urllib.request
 
 import pytest
 

@@ -13,8 +13,8 @@ import re
 from datetime import date
 from pathlib import Path
 
-from .db import IngestDB
 from ..sanitize import sanitize_text
+from .db import IngestDB
 
 # Resolve data paths relative to the package root, not the CWD.
 _DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "manual"

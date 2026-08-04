@@ -16,6 +16,7 @@ def test_health_endpoint(monkeypatch):
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
     import importlib
+
     import nyaya.server as server_module
     importlib.reload(server_module)
 
@@ -41,6 +42,7 @@ def test_health_degraded(monkeypatch):
     monkeypatch.setattr(db, "corpus_stats", _boom)
 
     import importlib
+
     import nyaya.server as server_module
     importlib.reload(server_module)
 
@@ -61,6 +63,7 @@ def test_mcp_endpoint_reachable(monkeypatch):
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
     import importlib
+
     import nyaya.server as server_module
     importlib.reload(server_module)
 
@@ -83,6 +86,7 @@ def test_mcp_initialize_handshake(monkeypatch):
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
     import importlib
+
     import nyaya.server as server_module
     importlib.reload(server_module)
 
@@ -107,6 +111,7 @@ def test_cors_headers(monkeypatch):
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
     import importlib
+
     import nyaya.server as server_module
     importlib.reload(server_module)
 
@@ -135,6 +140,7 @@ def test_lifespan_close_db_called(monkeypatch):
     monkeypatch.setattr(db, "close_db", _spy_close)
 
     import importlib
+
     import nyaya.server as server_module
     importlib.reload(server_module)
 

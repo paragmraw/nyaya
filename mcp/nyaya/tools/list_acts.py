@@ -5,7 +5,11 @@ from __future__ import annotations
 from .. import db
 from ..exceptions import NotFound
 from ..models import (
-    ActsList, ArticlesList, ChaptersList, JudgmentsList, SectionsList,
+    ActsList,
+    ArticlesList,
+    ChaptersList,
+    JudgmentsList,
+    SectionsList,
 )
 from ._util import run_sync
 

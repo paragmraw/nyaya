@@ -19,8 +19,8 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from .db import IngestDB
 from ..sanitize import sanitize_text
+from .db import IngestDB
 
 AS_OF = date(2026, 7, 1)
 SOURCE = "mratanusarkar/Indian-Laws (HuggingFace) sourced from indiankanoon.org (public domain)"
@@ -67,8 +67,7 @@ def _load_rows():
     for attempt in range(3):
         try:
             ds = load_dataset("mratanusarkar/Indian-Laws", split="train")
-            for row in ds:
-                yield row
+            yield from ds
             return
         except Exception as e:
             last_err = e
@@ -124,7 +123,7 @@ def ingest_bare_acts(db: IngestDB) -> None:
                 text=text,
             )
             counts[short] = counts.get(short, 0) + 1
-        except (KeyError, ValueError, TypeError) as e:
+        except (KeyError, ValueError, TypeError):
             continue
 
     db.commit()

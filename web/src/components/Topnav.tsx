@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
   { href: "/corpus", label: "Corpus" },
@@ -17,8 +17,12 @@ export default function Topnav() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Close the mobile menu on route change.
+  const prevPath = useRef(pathname);
   useEffect(() => {
-    setMenuOpen(false);
+    if (prevPath.current !== pathname) {
+      prevPath.current = pathname;
+      setMenuOpen(false);
+    }
   }, [pathname]);
 
   // Close the mobile menu on Escape.
