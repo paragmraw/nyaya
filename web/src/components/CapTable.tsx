@@ -25,7 +25,7 @@ export default function CapTable() {
     <table className="cap-table">
       <thead>
         <tr>
-          <th style={{ width: 78 }}>Code</th>
+          <th className="col-code">Code</th>
           <th>Module</th>
           <th className="num-col">Coverage</th>
         </tr>

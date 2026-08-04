@@ -107,7 +107,7 @@ export default function CorpusTable({ acts }: { acts: Act[] | undefined }) {
           </button>
         ))}
       </div>
-      <div className="corpus-wrap" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden", background: "var(--surface)" }}>
+      <div className="corpus-wrap" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)" }}>
         <table className="corpus-table">
           <thead>
             <tr>
