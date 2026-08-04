@@ -11,13 +11,13 @@
   },
   "dependencies": {
     "next": "^16.2.12",
-    "react": "19.0.0",
+    "react": "19.2.8",
     "react-dom": "19.0.0",
     "swr": "2.3.0"
   },
   "devDependencies": {
     "@types/node": "22.10.7",
-    "@types/react": "19.0.7",
+    "@types/react": "19.2.18",
     "@types/react-dom": "19.0.3",
     "autoprefixer": "10.4.20",
     "eslint": "9.18.0",
