@@ -1,21 +1,32 @@
 """Rate-limiting and body-size-cap middleware for the nyaya ASGI app.
 
-Thresholds are defined in :class:`nyaya.config.RateLimitSettings` (edit
-there to tune; no env vars needed).
+Thresholds are defined in :class:`nyaya.config.RateLimitSettings` and can be
+overridden via environment variables (see config.py).
+
+When ``REDIS_URL`` is configured, rate-limit counters are stored in Redis
+so limits are enforced globally across all workers. Without ``REDIS_URL``,
+counters are in-memory per-worker (effective limit = ``limit * workers``).
+
+Redis I/O is synchronous (``redis-py``) so it is dispatched to a worker
+thread via ``asyncio.to_thread`` to avoid blocking the event loop. If Redis
+becomes unreachable at runtime, the middleware falls back to an in-memory
+backend so the server keeps serving requests (fail-open).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import defaultdict
-from typing import Any
+from typing import Any, Protocol
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
-from .config import get_rate_limit_settings
+from .config import get_rate_limit_settings, get_settings
 
 log = logging.getLogger("nyaya.ratelimit")
 
@@ -28,20 +39,114 @@ def _get_remote_address(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Lightweight per-IP fixed-window rate limiter.
+class RateLimitBackend(Protocol):
+    """Abstract rate-limit counter backend."""
 
-    Counters live in worker memory only, so behind a multi-worker server
-    (e.g. ``uvicorn --workers >1``) each worker has its own counters and the
-    effective per-IP limit is ``limit * workers``. A shared backend (Redis)
-    would be required for strict global limits.
+    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+        """Return True if the key has exceeded ``limit`` in the current window."""
+        ...
+
+
+class InMemoryBackend:
+    """Per-worker in-memory fixed-window counter (default, no Redis needed)."""
+
+    def __init__(self) -> None:
+        self._counts: dict[str, dict[str, Any]] = defaultdict(
+            lambda: {"count": 0, "window": time.monotonic()}
+        )
+
+    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+        now = time.monotonic()
+        entry = self._counts[key]
+        if now - entry["window"] > window_seconds:
+            entry["count"] = 0
+            entry["window"] = now
+        if entry["count"] >= limit:
+            return True
+        entry["count"] += 1
+        return False
+
+
+class RedisBackend:
+    """Redis-backed fixed-window counter (strict global limits across workers).
+
+    Uses a single INCR + EXPIRE per request. The key includes the window
+    start timestamp so it rotates cleanly.
     """
 
-    def __init__(self, app: Any, read_per_min: int = 120, embedding_per_min: int = 10) -> None:
+    def __init__(self, redis_url: str) -> None:
+        import redis  # type: ignore[import-untyped]
+
+        self._redis = redis.from_url(redis_url, decode_responses=True)
+
+    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+        now = int(time.monotonic())
+        window_key = f"rl:{key}:{now // int(window_seconds)}"
+        pipe = self._redis.pipeline()
+        pipe.incr(window_key)
+        pipe.expire(window_key, int(window_seconds) + 1)
+        count, _ = pipe.execute()
+        return count > limit
+
+
+def _create_backend() -> RateLimitBackend:
+    """Create a rate-limit backend based on settings.
+
+    Returns an ``InMemoryBackend`` if Redis is not configured or the
+    ``redis`` package is not installed.
+    """
+    settings = get_settings()
+    if settings.redis_url:
+        try:
+            backend = RedisBackend(settings.redis_url)
+            log.info("Rate limiting: Redis backend enabled (%s)", _redact_url(settings.redis_url))
+            return backend
+        except ImportError:
+            log.warning(
+                "REDIS_URL is set but the 'redis' package is not installed. "
+                "Install with: pip install redis. Falling back to in-memory rate limiting."
+            )
+    return InMemoryBackend()
+
+
+def _redact_url(url: str) -> str:
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    if parts.hostname and (parts.username or parts.password):
+        netloc = f"***@{parts.hostname}"
+        if parts.port:
+            netloc += f":{parts.port}"
+        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    return url
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Per-IP fixed-window rate limiter with pluggable backend.
+
+    When Redis is configured, limits are enforced globally across all
+    workers. Without Redis, each worker has its own counters and the
+    effective per-IP limit is ``limit * workers``.
+
+    Synchronous backend calls (Redis) are dispatched to a worker thread so
+    the event loop is not blocked. If a Redis error occurs at runtime, the
+    middleware falls back to an in-memory backend (fail-open).
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        read_per_min: int = 120,
+        embedding_per_min: int = 30,
+        backend: RateLimitBackend | None = None,
+    ) -> None:
         super().__init__(app)
         self.read_per_min = read_per_min
         self.embedding_per_min = embedding_per_min
-        self._counts: dict[str, dict[str, Any]] = defaultdict(lambda: {"count": 0, "window": time.monotonic()})
+        self._backend = backend or InMemoryBackend()
+        # Fallback backend used if the primary (Redis) fails at runtime.
+        self._fallback = InMemoryBackend()
+        self._redis_failed = False
 
     def _is_embedding_request(self, request: Request) -> bool:
         """Return True for MCP POSTs to ``/mcp`` (apply the stricter limit)."""
@@ -56,14 +161,24 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/health":
             return await call_next(request)
 
-        now = time.monotonic()
-        entry = self._counts[ip]
-        if now - entry["window"] > 60.0:
-            entry["count"] = 0
-            entry["window"] = now
-
         limit = self.embedding_per_min if self._is_embedding_request(request) else self.read_per_min
-        if entry["count"] >= limit:
+
+        # Use the fallback backend if Redis has already failed.
+        backend = self._fallback if self._redis_failed else self._backend
+        try:
+            # Dispatch sync backend I/O to a worker thread to avoid blocking
+            # the event loop (RedisBackend does synchronous network I/O).
+            limited = await asyncio.to_thread(backend.is_limited, ip, limit)
+        except Exception:
+            if not self._redis_failed:
+                log.warning(
+                    "Rate-limit backend failed (likely Redis unreachable). "
+                    "Falling back to in-memory rate limiting.", exc_info=True,
+                )
+                self._redis_failed = True
+            limited = await asyncio.to_thread(self._fallback.is_limited, ip, limit)
+
+        if limited:
             return Response(
                 content='{"error": "rate_limited"}',
                 status_code=429,
@@ -71,7 +186,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": "60"},
             )
 
-        entry["count"] += 1
         return await call_next(request)
 
 
@@ -82,7 +196,7 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     defense-in-depth.
     """
 
-    def __init__(self, app: Any, max_bytes: int = 1_048_576) -> None:
+    def __init__(self, app: ASGIApp, max_bytes: int = 1_048_576) -> None:
         super().__init__(app)
         self.max_bytes = max_bytes
 
@@ -100,12 +214,14 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 def register_rate_limiting(app: Any) -> None:
     """Wire the rate-limit and body-size middleware into the Starlette app."""
     settings = get_rate_limit_settings()
+    backend = _create_backend()
 
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.body_size_max_bytes)
     app.add_middleware(
         RateLimitMiddleware,
         read_per_min=settings.read_per_min,
         embedding_per_min=settings.embedding_per_min,
+        backend=backend,
     )
 
     log.info(

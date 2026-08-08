@@ -2,33 +2,13 @@
 
 import { useMemo, useState } from "react";
 import type { Act } from "@/lib/api";
+import { CURATED } from "@/lib";
 
 // Curated metadata for the corpus table. The design ships these rows with
 // status chips and coverage descriptions; we map live rows from /api/acts
 // onto this metadata by short_name. Acts not in the curated list still
 // render with a default "Live" status and the act's as_of date. Non-act rows
 // (judgments, legislation) use a fallback date from the design export.
-type CuratedRow = {
-  short_name: string; // matches Act.short_name; "" for non-act rows
-  name: string; // display name
-  type: string;
-  coverage: string;
-  status: "live" | "beta" | "coming";
-  fallback_date: string; // design export date for non-act rows, or "" to use act.as_of
-};
-
-const CURATED: CuratedRow[] = [
-  { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 395 articles + 12 schedules", status: "live", fallback_date: "" },
-  { short_name: "BNS", name: "Bharatiya Nyaya Sanhita, 2023", type: "Statute", coverage: "All 358 sections", status: "live", fallback_date: "" },
-  { short_name: "BNSS", name: "Bharatiya Nagarik Suraksha Sanhita, 2023", type: "Statute", coverage: "All 531 sections", status: "live", fallback_date: "" },
-  { short_name: "BSA", name: "Bharatiya Sakshya Adhiniyam, 2023", type: "Statute", coverage: "All sections (replaces Evidence Act)", status: "live", fallback_date: "" },
-  { short_name: "IPC", name: "Indian Penal Code, 1860", type: "Statute", coverage: "All 511 sections (legacy reference)", status: "live", fallback_date: "" },
-  { short_name: "CrPC", name: "Code of Criminal Procedure, 1973", type: "Statute", coverage: "All 484 sections (legacy reference)", status: "live", fallback_date: "" },
-  { short_name: "", name: "Supreme Court landmark judgments", type: "Case law", coverage: "5 curated judgments (Kesavananda, Maneka, Puttaswamy, Shah Bano, Navtej Johar)", status: "live", fallback_date: "2026-07-01" },
-  { short_name: "", name: "High Court reported judgments", type: "Case law", coverage: "Planned", status: "coming", fallback_date: "" },
-  { short_name: "", name: "Subordinate legislation & rules", type: "Regulation", coverage: "Planned", status: "coming", fallback_date: "" },
-  { short_name: "", name: "Pre-1950 Privy Council decisions", type: "Case law", coverage: "Planned", status: "coming", fallback_date: "" },
-];
 
 type Row = {
   key: string;

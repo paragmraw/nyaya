@@ -325,11 +325,25 @@ def fake_db(monkeypatch):
         return date(2026, 7, 1)
 
     def _get_sections_by_range(act, start, end, limit=500):
+        import re
+
         from nyaya.models import Section
         sn = _normalize_act(act)
-        if sn and sn.lower() == "ipc":
-            return [Section(**data["section"])]
-        return []
+        if sn is None or sn.lower() != "ipc":
+            return []
+
+        def _num_prefix(val):
+            m = re.match(r"^\d+", str(val))
+            return int(m.group()) if m else None
+
+        s_num = _num_prefix(start)
+        e_num = _num_prefix(end)
+        if s_num is None or e_num is None:
+            return []
+        candidates = [Section(**data["section"]), Section(**data["section_303"])]
+        matched = [s for s in candidates
+                   if (np := _num_prefix(s.section)) is not None and s_num <= np <= e_num]
+        return matched[:limit]
 
     monkeypatch.setattr(db, "list_acts", _list_acts)
     monkeypatch.setattr(db, "get_act", _get_act)
@@ -355,3 +369,32 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(db, "corpus_as_of", _corpus_as_of)
     monkeypatch.setattr(db, "get_sections_by_range", _get_sections_by_range)
     return data
+
+
+@pytest.fixture
+def _make_app(fake_db):
+    """Return a FastMCP instance with tools and resources registered."""
+    from fastmcp import FastMCP
+
+    from nyaya.resources import register as register_resources
+    from nyaya.tools import register as register_tools
+
+    mcp = FastMCP(name="nyaya-test")
+    register_tools(mcp)
+    register_resources(mcp)
+    return mcp
+
+
+@pytest.fixture
+def _tool():
+    """Helper that calls tool ``name`` on ``app`` with keyword ``args``.
+
+    Usage in a test::
+
+        r = await _tool(_make_app, "search_law", query="murder")
+    """
+    async def _call(app, name, **args):
+        tool = await app.get_tool(name)
+        return await tool.fn(**args)
+
+    return _call

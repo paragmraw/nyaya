@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .. import db
-from ..exceptions import EmbeddingUnavailable, SearchError
+from ..exceptions import EmbeddingUnavailable
 from ..models import SearchResponse
 from ._util import run_sync
 
@@ -40,13 +40,15 @@ def register(mcp) -> None:
         # Fetch FTS results.
         fts_results, fts_total = db.search_all(query, act=act, limit=limit * 2, offset=0)
 
-        # Try semantic results; fall back to FTS-only if unavailable.
+        # Try semantic results; fall back to FTS-only if embeddings unavailable.
+        fallback_reason: str | None = None
         try:
             from ..embeddings import embed_query
             embedding = embed_query(query)
             sem_results = db.semantic_search_all(embedding, act=act, limit=limit * 2)
-        except (EmbeddingUnavailable, SearchError):
+        except EmbeddingUnavailable:
             sem_results = []
+            fallback_reason = "embedding_unavailable"
 
         # Reciprocal Rank Fusion: score = sum(1 / (k + rank)) over both lists.
         k = 60  # standard RRF constant
@@ -70,4 +72,5 @@ def register(mcp) -> None:
         return SearchResponse(
             query=query, total=total, returned=len(results), offset=offset,
             results=results, as_of=db.corpus_as_of(), limit=limit,
+            fallback_reason=fallback_reason,
         )

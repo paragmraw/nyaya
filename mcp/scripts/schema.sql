@@ -121,6 +121,17 @@ create unique index if not exists judgments_case_name_idx on judgments (case_nam
 create index if not exists judgments_citation_idx on judgments (citation) where citation is not null;
 create index if not exists judgments_date_idx on judgments (date desc) where date is not null;
 
+-- Article ↔ amendment junction (normalizes the articles_affected CSV column) --
+-- The legacy articles_affected text column on amendments is kept for backward
+-- compatibility; this junction table is the normalized form.
+create table if not exists article_amendments (
+    article_id    text not null,
+    amendment_id  int  not null,
+    primary key (article_id, amendment_id)
+);
+create index if not exists article_amendments_article_idx on article_amendments (article_id);
+create index if not exists article_amendments_amendment_idx on article_amendments (amendment_id);
+
 -- Cross-references ------------------------------------------------------------
 -- Stores relationships like "IPC s.302 corresponds_to BNS s.103",
 -- "CPC s.151 references Evidence Act s.65", "IPC s.377 repealed_by BNS s…",

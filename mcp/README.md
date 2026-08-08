@@ -156,18 +156,15 @@ Railway polls `GET /health` (configured in `railway.toml`). The endpoint returns
 
 ## Image variants
 
-The Dockerfile (`mcp/Dockerfile`) builds an **Alpine** image by default — the smallest option.
+The Dockerfile (`mcp/Dockerfile`) builds an **Alpine** image — the smallest option.
 
 | Variant | Base | Size | Semantic search | When to use |
 |---|---|---|---|---|
 | **Alpine** (default) | `python:3.12-alpine` | **~269 MB** | No | Railway, size-constrained hosts. `search_law` (FTS) and all other tools work. |
-| Slim (optional) | `python:3.12-slim` | ~593 MB | Yes | If you need `semantic_query` in production. Build with: `docker build -f mcp/Dockerfile.slim -t nyaya:slim .` |
 
 ### Why semantic search is disabled on Alpine
 
 `semantic_query` depends on `fastembed`, which depends on `onnxruntime`. Onnxruntime publishes only `manylinux` (glibc) wheels — there are no `musllinux` wheels, so it cannot run on Alpine. The Alpine Dockerfile does not install the semantic extra; the `semantic_query` tool stays registered (so `tools/list` advertises it) but returns an empty result when called. The other 23 tools are unaffected — `search_law` (Postgres FTS) handles the keyword-search use case.
-
-If you need semantic search in production, build from the slim variant instead. A `mcp/Dockerfile.slim` template is provided alongside the Alpine Dockerfile.
 
 ### Claude Desktop
 
@@ -271,7 +268,6 @@ nyaya/                          # repo root
 ├── LICENSE                     # Apache-2.0
 └── mcp/                        # the MCP server component
     ├── Dockerfile              # Alpine image (~269 MB, no semantic search)
-    ├── Dockerfile.slim         # slim image (~593 MB, with semantic search)
     ├── pyproject.toml          # package metadata + deps
     ├── README.md               # detailed setup + deploy docs (this file)
     ├── nyaya/                  # the Python package

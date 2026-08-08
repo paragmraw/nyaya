@@ -6,6 +6,10 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
+# server.py builds ``app`` at module level (middleware is imported unconditionally),
+# so a plain import gives us the ready app — no importlib.reload needed.
+from nyaya.server import app  # noqa: E402
+
 
 def test_health_endpoint(monkeypatch):
     from starlette.testclient import TestClient
@@ -15,12 +19,7 @@ def test_health_endpoint(monkeypatch):
                        lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
-    import importlib
-
-    import nyaya.server as server_module
-    importlib.reload(server_module)
-
-    with TestClient(server_module.app) as client:
+    with TestClient(app) as client:
         r = client.get("/health")
         assert r.status_code == 200
         body = r.json()
@@ -35,18 +34,14 @@ def test_health_degraded(monkeypatch):
     from starlette.testclient import TestClient
 
     from nyaya import db
+    from nyaya.exceptions import DatabaseUnavailable
 
     def _boom():
-        raise RuntimeError("DB is down")
+        raise DatabaseUnavailable("DB is down")
 
     monkeypatch.setattr(db, "corpus_stats", _boom)
 
-    import importlib
-
-    import nyaya.server as server_module
-    importlib.reload(server_module)
-
-    with TestClient(server_module.app) as client:
+    with TestClient(app) as client:
         r = client.get("/health")
         assert r.status_code == 200
         body = r.json()
@@ -62,12 +57,7 @@ def test_mcp_endpoint_reachable(monkeypatch):
                        lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
-    import importlib
-
-    import nyaya.server as server_module
-    importlib.reload(server_module)
-
-    with TestClient(server_module.app) as client:
+    with TestClient(app) as client:
         r = client.post(
             "/mcp",
             headers={"Content-Type": "application/json"},
@@ -85,12 +75,7 @@ def test_mcp_initialize_handshake(monkeypatch):
                        lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
-    import importlib
-
-    import nyaya.server as server_module
-    importlib.reload(server_module)
-
-    with TestClient(server_module.app) as client:
+    with TestClient(app) as client:
         r = client.post(
             "/mcp",
             headers={"Content-Type": "application/json", "Accept": "application/json, text/event-stream"},
@@ -102,7 +87,7 @@ def test_mcp_initialize_handshake(monkeypatch):
 
 
 def test_cors_headers(monkeypatch):
-    """CORS middleware adds Access-Control-Allow-Origin to responses."""
+    """CORS middleware adds Access-Control-Allow-Origin for allowed origins."""
     from starlette.testclient import TestClient
 
     from nyaya import db
@@ -110,13 +95,8 @@ def test_cors_headers(monkeypatch):
                        lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
                                 "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
 
-    import importlib
-
-    import nyaya.server as server_module
-    importlib.reload(server_module)
-
-    with TestClient(server_module.app) as client:
-        r = client.get("/health", headers={"Origin": "https://example.com"})
+    with TestClient(app) as client:
+        r = client.get("/health", headers={"Origin": "https://nyaya.parag.tech"})
         assert r.status_code == 200
         assert "access-control-allow-origin" in {k.lower() for k in r.headers}
 
@@ -139,12 +119,7 @@ def test_lifespan_close_db_called(monkeypatch):
 
     monkeypatch.setattr(db, "close_db", _spy_close)
 
-    import importlib
-
-    import nyaya.server as server_module
-    importlib.reload(server_module)
-
-    with TestClient(server_module.app) as client:
+    with TestClient(app) as client:
         client.get("/health")
     # After the context manager exits, close_db should have been called.
     assert closed["called"], "db.close_db was not called on shutdown"

@@ -2,7 +2,7 @@
 
 import CorpusTable from "@/components/CorpusTable";
 import StatCard from "@/components/StatCard";
-import { useCorpusStats, useActs, formatNumber, type CorpusCounts } from "@/lib";
+import { useCorpusStats, useActs, type CorpusCounts } from "@/lib";
 
 export default function CorpusPage() {
   const { data } = useCorpusStats();

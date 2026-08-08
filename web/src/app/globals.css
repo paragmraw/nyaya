@@ -56,7 +56,8 @@ body {
     linear-gradient(135deg, color-mix(in oklch, var(--bg) 96%, var(--accent)) 0%, var(--bg) 45%, color-mix(in oklch, var(--bg) 94%, var(--fg)) 100%);
   background-size: 24px 24px, 24px 24px, 100% 100%;
   background-position: 0 0, 12px 12px, 0 0;
-  background-attachment: fixed;
+  /* background-attachment: fixed causes jank on mobile (repaint on scroll).
+     Only apply it on hover-capable (desktop) devices. */
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -74,6 +75,14 @@ body {
 body.home {
   height: 100%;
   overflow: hidden;
+}
+
+/* Restore fixed background only on hover-capable (desktop) devices to avoid
+   mobile scroll jank. */
+@media (hover: hover) {
+  body {
+    background-attachment: fixed;
+  }
 }
 img, svg { display: block; max-width: 100%; }
 a { color: inherit; text-decoration: none; }

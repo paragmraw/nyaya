@@ -10,6 +10,20 @@ const NAV_LINKS = [
   { href: "/architecture", label: "Architecture" },
 ];
 
+function renderNavLink(link: { href: string; label: string }, current: string) {
+  const isActive = current === link.href || current.startsWith(link.href + "/");
+  return (
+    <Link
+      key={link.href}
+      href={link.href}
+      className={isActive ? "active" : ""}
+      aria-current={isActive ? "page" : undefined}
+    >
+      {link.label}
+    </Link>
+  );
+}
+
 export default function Topnav() {
   const pathname = usePathname();
   const current = (pathname ?? "/").replace(/\/$/, "") || "/";
@@ -45,19 +59,7 @@ export default function Topnav() {
           <img src="/logo.svg" alt="Nyaya" />
         </Link>
         <nav>
-          {NAV_LINKS.map((l) => {
-            const isActive = current === l.href || current.startsWith(l.href + "/");
-            return (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={isActive ? "active" : ""}
-                aria-current={isActive ? "page" : undefined}
-              >
-                {l.label}
-              </Link>
-            );
-          })}
+          {NAV_LINKS.map((l) => renderNavLink(l, current))}
         </nav>
         <div className="nav-right">
           <span className="meta">v0.1 · alpha</span>
@@ -76,19 +78,7 @@ export default function Topnav() {
         </div>
       </div>
       <div className={`mobile-nav${menuOpen ? " open" : ""}`} id="mobile-nav" hidden={!menuOpen}>
-        {NAV_LINKS.map((l) => {
-          const isActive = current === l.href || current.startsWith(l.href + "/");
-          return (
-            <Link
-              key={l.href}
-              href={l.href}
-              className={isActive ? "active" : ""}
-              aria-current={isActive ? "page" : undefined}
-            >
-              {l.label}
-            </Link>
-          );
-        })}
+        {NAV_LINKS.map((l) => renderNavLink(l, current))}
       </div>
     </header>
   );

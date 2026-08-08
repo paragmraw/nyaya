@@ -15,6 +15,8 @@ file.
 
 from __future__ import annotations
 
+from typing import Any
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -45,7 +47,7 @@ _SECURITY_HEADERS = {
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add security headers to every response."""
 
-    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         response: Response = await call_next(request)
         for key, value in _SECURITY_HEADERS.items():
             response.headers.setdefault(key, value)

@@ -94,6 +94,7 @@ class Settings:
     statement_timeout_ms: int
     log_level: str
     embedding_model: str
+    redis_url: str | None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -105,6 +106,7 @@ class Settings:
             "statement_timeout_ms": self.statement_timeout_ms,
             "log_level": self.log_level,
             "embedding_model": self.embedding_model,
+            "redis_url": _redact_url(self.redis_url) if self.redis_url else None,
         }
 
 
@@ -126,6 +128,8 @@ def get_settings() -> Settings:
             f"NYAYA_POOL_MIN ({pool_min}) must be <= NYAYA_POOL_MAX ({pool_max})"
         )
 
+    redis_url = os.environ.get("REDIS_URL") or None
+
     return Settings(
         database_url=_required("DATABASE_URL"),
         port=port,
@@ -135,24 +139,30 @@ def get_settings() -> Settings:
         statement_timeout_ms=_int_env("NYAYA_STATEMENT_TIMEOUT", 15000),
         log_level=os.environ.get("NYAYA_LOG_LEVEL", "INFO"),
         embedding_model=os.environ.get("NYAYA_EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5"),
+        redis_url=redis_url,
     )
 
 
 @dataclass(frozen=True)
 class RateLimitSettings:
-    """Rate-limit configuration. Edit defaults here to tune; not env-driven.
+    """Rate-limit configuration.
 
-    All rates are requests-per-minute per client IP.
+    All rates are requests-per-minute per client IP. Override via env vars
+    for testing or production tuning.
     """
 
     # Read tools (get_section, search_law, etc.): generous for a public corpus.
     read_per_min: int = 120
-    # Embedding tools (semantic_query, hybrid_search): expensive pgvector queries.
-    embedding_per_min: int = 10
+    # MCP POSTs (all tool calls go through /mcp): stricter for embedding tools.
+    embedding_per_min: int = 30
     # Maximum request body size in bytes (1 MB).
     body_size_max_bytes: int = 1_048_576
 
 
 @lru_cache(maxsize=1)
 def get_rate_limit_settings() -> RateLimitSettings:
-    return RateLimitSettings()
+    return RateLimitSettings(
+        read_per_min=_int_env("NYAYA_RATE_READ_PER_MIN", 120),
+        embedding_per_min=_int_env("NYAYA_RATE_MCP_PER_MIN", 30),
+        body_size_max_bytes=_int_env("NYAYA_RATE_BODY_MAX_BYTES", 1_048_576),
+    )

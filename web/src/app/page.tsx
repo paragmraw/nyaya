@@ -3,17 +3,23 @@
 import CapTable from "@/components/CapTable";
 import ChatPanel from "@/components/ChatPanel";
 import McpConfig from "@/components/McpConfig";
-import { useHealthSummary, formatNumber } from "@/lib";
+import { useHealthSummary, formatNumber, type HealthSummary } from "@/lib";
+
+// Real corpus baselines as fallbacks (395 articles, 5 judgments). Sections
+// is omitted from the fallback (shows "—") because the total depends on
+// ingestion and cannot be stated accurately from static data.
+const FALLBACK: HealthSummary = {
+  status: "healthy",
+  counts: { articles: 395, judgments: 5 },
+  as_of: null,
+};
 
 export default function HomePage() {
-  const { data, error } = useHealthSummary();
+  const { data, error } = useHealthSummary(FALLBACK);
   const counts = data?.counts;
-  // Live counts with real corpus baselines as fallbacks (395 articles,
-  // 5 judgments). Sections fallback is null (shows "—") because the total
-  // depends on ingestion and cannot be stated accurately from static data.
-  const articles = counts?.articles ?? 395;
-  const sections = counts?.sections ?? null;
-  const judgments = counts?.judgments ?? 5;
+  const articles = counts?.articles;
+  const sections = counts?.sections;
+  const judgments = counts?.judgments;
 
   return (
     <main id="content" className="frame">

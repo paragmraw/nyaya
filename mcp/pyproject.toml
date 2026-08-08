@@ -23,6 +23,7 @@ dependencies = [
     "PyYAML>=6.0,<7",
     "typing-extensions>=4.12,<5",
     "cachetools>=5.5,<7",
+    "redis>=5.0,<6",
 ]
 
 [project.optional-dependencies]
@@ -60,10 +61,24 @@ packages = ["nyaya"]
 # or from mcp/. Listing both keeps `pytest` working from either location.
 testpaths = ["tests", "mcp/tests"]
 asyncio_mode = "auto"
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --tb=short -q"
+filterwarnings = [
+    "ignore::DeprecationWarning:pydantic.*",
+]
 markers = [
     "integration: requires a live Supabase/database connection",
     "slow: marks tests as slow",
+]
+
+[tool.coverage.run]
+source = ["nyaya"]
+omit = ["*/tests/*", "*/scripts/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
 ]
 
 [tool.ruff]
@@ -73,3 +88,48 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
 ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+disable_error_code = ["no-any-return"]
+
+# psycopg's dict_row typing is incompatible with its own RowFactory generic;
+# the code is correct at runtime. Suppress until psycopg ships better stubs.
+[[tool.mypy.overrides]]
+module = "nyaya.db"
+disable_error_code = ["arg-type", "call-overload", "index", "assignment"]
+
+[[tool.mypy.overrides]]
+module = "nyaya.scripts.db"
+disable_error_code = ["arg-type", "call-overload", "index", "return-value"]
+
+[[tool.mypy.overrides]]
+module = "nyaya.tools.hybrid_search"
+disable_error_code = ["arg-type"]
+
+[[tool.mypy.overrides]]
+module = "nyaya.tools.cross_reference"
+disable_error_code = ["arg-type"]
+
+[[tool.mypy.overrides]]
+module = "nyaya.server"
+disable_error_code = ["misc"]
+
+[[tool.mypy.overrides]]
+module = "nyaya.scripts.ingest_sanhitas"
+disable_error_code = ["return"]
+
+[[tool.mypy.overrides]]
+module = "nyaya.scripts.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "cachetools.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "nyaya.embeddings"
+disable_error_code = ["import-untyped"]

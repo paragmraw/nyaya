@@ -69,12 +69,28 @@ export type HealthSummary = {
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────
+const FETCH_TIMEOUT_MS = 10_000;
+
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText} on ${url}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`${res.status} ${res.statusText} on ${url}`);
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${FETCH_TIMEOUT_MS}ms on ${url}`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return (await res.json()) as T;
 }
 
 export const api = {
