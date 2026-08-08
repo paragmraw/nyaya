@@ -7,6 +7,9 @@ from ..exceptions import EmbeddingUnavailable, SearchError
 from ..models import SearchResponse
 from ._util import run_sync
 
+# Kept for backward compatibility — these exceptions are now caught internally
+# and surfaced via ``fallback_reason`` rather than propagated to the caller.
+
 
 def register(mcp) -> None:
     @mcp.tool(
@@ -44,10 +47,14 @@ def register(mcp) -> None:
             from ..embeddings import embed_query
             embedding = embed_query(query)
             results = db.semantic_search_all(embedding, act=act, limit=limit)
-        except EmbeddingUnavailable:
-            raise
-        except SearchError:
-            raise
+        except (EmbeddingUnavailable, SearchError):
+            # Return an empty structured response with the fallback reason so
+            # the MCP client (LLM) can decide to retry with search_law.
+            return SearchResponse(
+                query=query, total=0, returned=0, offset=0, results=[],
+                as_of=db.corpus_as_of(), limit=limit,
+                fallback_reason="embedding_unavailable",
+            )
         return SearchResponse(
             query=query, total=len(results), returned=len(results), offset=0,
             results=results, as_of=db.corpus_as_of(), limit=limit,

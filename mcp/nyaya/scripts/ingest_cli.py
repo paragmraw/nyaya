@@ -15,16 +15,36 @@ Usage:
 
 from __future__ import annotations
 
-import sys
+import argparse
 
 from .db import IngestDB
 
 
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="nyaya-ingest",
+        description="Ingest data into the nyaya legal corpus.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True, metavar="<command>")
+
+    sub.add_parser("schema", help="apply schema.sql (DDL)")
+    sub.add_parser("constitution", help="ingest Constitution articles/schedules/amendments")
+    sub.add_parser("bare-acts", help="ingest CrPC + commercial statutes from HuggingFace")
+    sub.add_parser("civictech", help="ingest IPC/IEA/CPC from civictech JSON (full text)")
+    sub.add_parser("sanhitas", help="ingest BNS/BNSS/BSA from PRS PDFs")
+    sub.add_parser("judgments", help="ingest landmark SC judgments from YAML")
+    sub.add_parser("cross-refs", help="build cross-references between sections")
+    sub.add_parser("embeddings", help="build pgvector embeddings")
+    sub.add_parser("all", help="run everything in order")
+    sub.add_parser("counts", help="print row counts")
+
+    return parser
+
+
 def main() -> None:
-    if len(sys.argv) < 2:
-        print(__doc__)
-        sys.exit(2)
-    cmd = sys.argv[1].lower().replace("-", "_")
+    parser = _build_parser()
+    args = parser.parse_args()
+    cmd = args.command.replace("-", "_")
 
     with IngestDB() as db:
         if cmd == "schema":
@@ -74,8 +94,7 @@ def main() -> None:
             db.print_counts()
         else:
             print(f"Unknown command: {cmd!r}")
-            print(__doc__)
-            sys.exit(2)
+            raise SystemExit(2)
 
     if cmd != "counts":
         print("\nFinal counts:")

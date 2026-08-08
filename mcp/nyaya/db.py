@@ -776,27 +776,42 @@ def get_amendment(number: int) -> Amendment | None:
 def get_amendments_for_article(article: str) -> list[Amendment]:
     """Reverse lookup: which amendments affected a given article number.
 
-    Parses the comma-separated ``articles_affected`` text field since the
-    schema doesn't normalize it into a join table yet.
+    Queries the ``article_amendments`` junction table (the normalized form)
+    first. If that returns nothing, falls back to parsing the comma-separated
+    ``articles_affected`` text column — a legacy path for pre-migration data
+    that has not yet been loaded into the junction table.
     """
     art = normalize_ref(article)
     if art is None:
         return []
     with _conn() as c:
         rows = c.execute(
-            "select number, year, title, articles_affected, date from amendments "
-            "where articles_affected is not null order by number"
+            "select a.number, a.year, a.title, a.articles_affected, a.date "
+            "from amendments a join article_amendments j on j.amendment_id = a.number "
+            "where j.article_id = %s order by a.number",
+            (art,),
         ).fetchall()
+        from_junction = bool(rows)
+        if not from_junction:
+            # Fallback: parse the legacy CSV column for pre-migration data.
+            rows = c.execute(
+                "select number, year, title, articles_affected, date from amendments "
+                "where articles_affected is not null order by number"
+            ).fetchall()
     results: list[Amendment] = []
     for r in rows:
-        affected = (r["articles_affected"] or "")
-        # Word-boundary match so "31" doesn't match "314".
-        if re.search(rf"\b{re.escape(art)}\b", affected):
-            results.append(Amendment(
-                number=r["number"], year=r["year"], title=r["title"],
-                articles_affected=r["articles_affected"], date=r["date"],
-                source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
-            ))
+        if not from_junction:
+            # Only filter by the CSV column in the fallback path; junction rows
+            # are already matched by the join and may have a NULL articles_affected.
+            affected = (r["articles_affected"] or "")
+            # Word-boundary match so "31" doesn't match "314".
+            if not re.search(rf"\b{re.escape(art)}\b", affected):
+                continue
+        results.append(Amendment(
+            number=r["number"], year=r["year"], title=r["title"],
+            articles_affected=r["articles_affected"], date=r["date"],
+            source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
+        ))
     return results
 
 

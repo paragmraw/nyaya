@@ -76,6 +76,11 @@ def register(mcp) -> None:
         mime_type="application/json",
     )
     def act_metadata(short_name: str) -> str:
+        # NOTE: optimization opportunity — get_act + list_chapters are two round
+        # trips. They could be combined into a single query (e.g. a join or a
+        # CTE returning the act row plus its chapters), but db.py has no such
+        # combined function today. Left as-is: both calls are cheap and the code
+        # is clearer with them separated.
         act = db.get_act(short_name)
         if act is None:
             raise NotFound(

@@ -2,36 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import SourceCard from "@/components/SourceCard";
-
-type FormatCard = {
-  type: string;
-  format: string;
-  desc: string;
-  url: string;
-  urlLabel: string;
-};
-
-const FORMAT_CARDS: FormatCard[] = [
-  { type: "Constitution", format: "Art. 21, Constitution of India", desc: "Article number from the Constitution of India, 1950, with the full title.", url: "https://github.com/Vikhram-S/IndianConstitution", urlLabel: "→ Vikhram-S/IndianConstitution" },
-  { type: "Statute (BNS / BNSS / BSA)", format: "§ 358, BNS 2023", desc: "Section number from the named statute, with the year and short title.", url: "https://prsindia.org", urlLabel: "→ prsindia.org (CC BY 4.0)" },
-  { type: "Case law", format: "K.S. Puttaswamy v. Union of India, (2017) 10 SCC 1", desc: "Party names, neutral or SCC citation, and volume/journal reference.", url: "https://indiankanoon.org", urlLabel: "→ indiankanoon.org" },
-];
-
-type PipeStep = { num: string; title: string; desc: string; eg: string };
-const PIPE_STEPS: PipeStep[] = [
-  { num: "01", title: "Parse", desc: "Extract citation strings from the draft answer — article numbers, section references, case names.", eg: "\"Art. 21\" → {type: constitution, art: 21}" },
-  { num: "02", title: "Match", desc: "Look up each parsed citation in the indexed corpus to confirm it exists and the text matches.", eg: "match(\"S. 41A\", \"CrPC 1973\") → found, section_text" },
-  { num: "03", title: "Fetch", desc: "Pull the full provision or judgment text from the corpus so the citation can be displayed inline.", eg: "fetch(\"Art. 21\") → Constitution article text" },
-  { num: "04", title: "Display", desc: "Render the citation as a link the user can click to open the source card with the full text and provenance.", eg: "→ Source card: Constitution of India, Art. 21" },
-];
-
-type Limit = { mark: string; title: string; sub: string };
-const LIMITS: Limit[] = [
-  { mark: "01", title: "Unreported judgments", sub: "Orders and judgments not published in a reported journal are not in the corpus. Nyaya will say it cannot find a citation rather than invent one." },
-  { mark: "02", title: "Subordinate legislation & rules", sub: "Notifications, rules, and subordinate legislation under major statutes are not yet indexed. Coming per the corpus roadmap." },
-  { mark: "03", title: "Pre-1950 Privy Council decisions", sub: "Judgments of the Privy Council (the apex court for British India until 1950) are not yet indexed. Planned." },
-  { mark: "04", title: "Overruled / good-law status", sub: "Nyaya does not yet track whether a judgment has been overruled or modified by a later bench. Always confirm currency before filing." },
-];
+import { FORMAT_CARDS, LIMITS, PIPE_STEPS } from "@/lib";
 
 export default function CitationsPage() {
   const [highlighted, setHighlighted] = useState<string | null>(null);

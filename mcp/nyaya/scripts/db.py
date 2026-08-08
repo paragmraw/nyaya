@@ -21,6 +21,63 @@ from ..config import get_settings
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "scripts" / "schema.sql"
 
 
+def _split_sql(sql: str) -> list[str]:
+    """Split a SQL string into individual statements on ``;``.
+
+    Respects dollar-quoted strings (``$$ ... $$`` or ``$tag$ ... $tag$``) so
+    that function/trigger bodies containing ``;`` are not split mid-body.
+    Statements that are empty or whitespace-only after stripping are dropped.
+    """
+    statements: list[str] = []
+    buf: list[str] = []
+    i = 0
+    n = len(sql)
+    dollar_tag: str | None = None
+    while i < n:
+        ch = sql[i]
+        if dollar_tag is not None:
+            if ch == "$":
+                # Try to match the closing tag (e.g. $$ or $tag$).
+                j = i + 1
+                while j < n and (sql[j].isalnum() or sql[j] == "_"):
+                    j += 1
+                if j < n and sql[j] == "$":
+                    candidate = sql[i : j + 1]
+                    if candidate == dollar_tag:
+                        buf.append(candidate)
+                        dollar_tag = None
+                        i = j + 1
+                        continue
+            buf.append(ch)
+            i += 1
+            continue
+        # Not inside a dollar quote.
+        if ch == "$":
+            # Look ahead for an opening dollar tag: $ ... $
+            j = i + 1
+            while j < n and (sql[j].isalnum() or sql[j] == "_"):
+                j += 1
+            if j < n and sql[j] == "$":
+                dollar_tag = sql[i : j + 1]
+                buf.append(dollar_tag)
+                i = j + 1
+                continue
+            buf.append(ch)
+            i += 1
+            continue
+        if ch == ";":
+            statements.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf)
+    if tail.strip():
+        statements.append(tail)
+    return statements
+
+
 class IngestDB:
     """Synchronous connection wrapper for ingestion scripts."""
 
@@ -61,8 +118,10 @@ class IngestDB:
         path = Path(schema_sql_path) if schema_sql_path else _SCHEMA_PATH
         with open(path, encoding="utf-8") as f:
             sql = f.read()
-        with self.conn.cursor() as cur:
-            cur.execute(sql)
+        for stmt in _split_sql(sql):
+            if stmt.strip():
+                with self.conn.cursor() as cur:
+                    cur.execute(stmt)
         self.conn.commit()
 
     def upsert_act(
@@ -243,7 +302,10 @@ class IngestDB:
             )
 
     def upsert_embedding(self, *, table: str, owner_id: str, embedding: list[float]) -> None:
-        assert table in {"section", "article", "judgment"}
+        if table not in {"section", "article", "judgment"}:
+            raise ValueError(
+                f"Invalid embedding table {table!r}; expected one of: section, article, judgment."
+            )
         col = f"{table}_id"
         with self.conn.cursor() as cur:
             cur.execute(

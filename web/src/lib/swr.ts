@@ -22,16 +22,16 @@ export function useActs() {
 
 export function useJudgments(limit = 50, offset = 0) {
   return useSWR<JudgmentsResponse>(
-    `/api/judgments?limit=${limit}&offset=${offset}`,
+    ["/api/judgments", { limit, offset }],
     () => api.judgments(limit, offset),
     SWR_OPTS,
   );
 }
 
-export function useTools() {
-  return useSWR<ToolsResponse>("/api/tools", api.tools, SWR_OPTS);
+export function useTools(fallbackData?: ToolsResponse) {
+  return useSWR<ToolsResponse>("/api/tools", api.tools, { ...SWR_OPTS, fallbackData });
 }
 
-export function useHealthSummary() {
-  return useSWR<HealthSummary>("/api/health-summary", api.healthSummary, SWR_OPTS);
+export function useHealthSummary(fallbackData?: HealthSummary) {
+  return useSWR<HealthSummary>("/api/health-summary", api.healthSummary, { ...SWR_OPTS, fallbackData });
 }

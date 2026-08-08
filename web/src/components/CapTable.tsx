@@ -4,21 +4,7 @@
 // sections, 484 CrPC sections, 5 landmark SC judgments). Drafting assist
 // and the citation verifier are marked as planned — no such tool ships yet.
 
-type Cap = {
-  code: string;
-  name: string;
-  desc: string;
-  coverage: string;
-};
-
-const CAPS: Cap[] = [
-  { code: "CON-01", name: "Constitutional lookup", desc: "Parts I–XXII, Fundamental Rights & DPSP, with amendment history.", coverage: "395 arts" },
-  { code: "CRP-02", name: "CrPC procedure tracer", desc: "Bail, FIR, charge, trial stages — maps a query to the exact section.", coverage: "484 secs" },
-  { code: "PEN-03", name: "Penal code (IPC / BNS)", desc: "Legacy IPC + new BNS, 2023 — offence → section → punishment range.", coverage: "511 / 358" },
-  { code: "PRC-04", name: "Precedent retrieval", desc: "Supreme Court & High Court rulings, cited inline with neutral citations.", coverage: "5 curated" },
-  { code: "DFT-05", name: "Drafting assist", desc: "Notices, affidavits, vakalatnama skeletons from a one-line brief.", coverage: "planned" },
-  { code: "CTR-06", name: "Citation resolver", desc: "Paste a citation — resolve it to the matching provision in the corpus.", coverage: "static" },
-];
+import { CAPS } from "@/lib";
 
 export default function CapTable() {
   return (

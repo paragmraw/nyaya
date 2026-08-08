@@ -31,10 +31,17 @@ jobs:
         run: uv run ruff check nyaya/ scripts/ tests/
 
       - name: Type check (mypy)
-        run: uv run mypy nyaya/ || true  # mypy is advisory for now
+        run: uv run mypy nyaya/
 
-      - name: Test
-        run: uv run pytest -v
+      - name: Test with coverage
+        run: uv run pytest --cov=nyaya --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: mcp/coverage.xml
 
       - name: Verify lockfile is up to date
         run: uv lock --check

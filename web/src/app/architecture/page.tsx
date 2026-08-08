@@ -2,50 +2,14 @@
 
 import McpConfig from "@/components/McpConfig";
 import PipelineStage from "@/components/PipelineStage";
-import { useTools } from "@/lib";
+import { useTools, FLOW, INFRA, PLANNED, SERVICES, TODAY, type ToolsResponse } from "@/lib";
 
-type StackRow = { name: string; role: string; tool: string };
-const SERVICES: StackRow[] = [
-  { name: "Embedding model", role: "Converts text queries and corpus passages into dense vectors for semantic search.", tool: "bge-large-en-v1.5" },
-  { name: "Vector store", role: "Stores and retrieves passage embeddings with cosine similarity search at scale.", tool: "pgvector" },
-  { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query.", tool: "[planned]" },
-  { name: "LLM", role: "Drafts the cited answer from retrieved context. Constrained to cite only from the retrieved set.", tool: "[model: TBD]" },
-  { name: "Citation resolver", role: "Parses a citation string and fetches the matching provision from the corpus.", tool: "nyaya/resolve_citation" },
-];
-const INFRA: StackRow[] = [
-  { name: "Hosting", role: "Web app + API + MCP server, served from one container. Deploy region chosen at deploy time.", tool: "Railway / Docker" },
-  { name: "Refresh jobs", role: "Ingestion is manual via the nyaya-ingest CLI. Automated scheduled crawlers are planned.", tool: "[planned]" },
-  { name: "Observability", role: "Latency, retrieval quality, and error tracking.", tool: "[tool: TBD]" },
-  { name: "Object storage", role: "Stores raw PDFs and parsed text from sources for audit and re-indexing.", tool: "[planned]" },
-  { name: "Search index", role: "Full-text fallback alongside vector search for exact-match section/article lookups.", tool: "Postgres FTS" },
-];
-
-type FlowStep = { num: string; text: React.ReactNode };
-const FLOW: FlowStep[] = [
-  { num: "1", text: "User submits a natural-language legal question through the web chat or MCP tool." },
-  { num: "2", text: "Query is embedded and the vector store returns the top-k matching passages from the indexed corpus." },
-  { num: "3", text: "Optional reranker reorders the results by relevance (planned — not yet implemented)." },
-  { num: "4", text: "LLM drafts an answer using only the retrieved passages, with inline citations to articles, sections, or cases." },
-  { num: "5", text: "Citation resolver parses each reference and fetches the matching provision from the corpus before the answer is displayed." },
-];
-
-type OpennessItem = { on: boolean; text: string; meta: string };
-const TODAY: OpennessItem[] = [
-  { on: true, text: "MCP server (HTTP endpoint at /mcp)", meta: "live" },
-  { on: true, text: "Open-source MCP server (Apache-2.0)", meta: "live" },
-  { on: true, text: "Self-host recipe (Docker + docker-compose)", meta: "live" },
-  { on: false, text: "Web chat + citation engine", meta: "coming soon" },
-  { on: false, text: "Corpus data dumps", meta: "closed" },
-];
-const PLANNED: OpennessItem[] = [
-  { on: false, text: "Open corpus data (CC-BY)", meta: "planned" },
-  { on: false, text: "Citation resolver API (public)", meta: "planned" },
-  { on: false, text: "Reranker & overruled-status check", meta: "planned" },
-  { on: false, text: "Automated refresh jobs", meta: "planned" },
-];
+// Empty fallback so the page renders a sensible state while the tools list
+// is loading instead of flashing "No tools registered."
+const TOOLS_FALLBACK: ToolsResponse = { items: [], total: 0 };
 
 export default function ArchitecturePage() {
-  const { data, error, isLoading } = useTools();
+  const { data, error, isLoading } = useTools(TOOLS_FALLBACK);
   const tools = data?.items ?? [];
 
   return (

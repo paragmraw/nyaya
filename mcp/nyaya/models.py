@@ -71,7 +71,7 @@ class Judgment(Provenance):
     court: str = Field(default="Supreme Court of India")
     date: Date | None = None
     summary: str | None = Field(default=None, description="One-paragraph summary of the holding, if available.")
-    text: str = Field(description="Full judgment text or a substantial excerpt.", max_length=200_000)
+    text: str = Field(description="Full judgment text or a substantial excerpt.")
 
 
 class CrossRef(BaseModel):
@@ -107,6 +107,10 @@ class SearchResponse(BaseModel):
     source: str = "nyaya"
     as_of: Date | None = None
     limit: int = Field(default=10, description="The limit applied to this query. Useful for paging.")
+    fallback_reason: str | None = Field(
+        default=None,
+        description="Set when a search component failed and the response degraded to a fallback (e.g. 'embedding_unavailable').",
+    )
 
 
 class ActsList(BaseModel):

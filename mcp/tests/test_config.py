@@ -149,4 +149,4 @@ def test_as_dict_all_fields(monkeypatch):
     d = s.as_dict()
     assert set(d.keys()) == {"database_url", "port", "pool_min", "pool_max",
                               "pool_timeout", "statement_timeout_ms", "log_level",
-                              "embedding_model"}
+                              "embedding_model", "redis_url"}

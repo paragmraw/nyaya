@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -25,8 +26,10 @@ from . import db
 
 log = logging.getLogger("nyaya.rest")
 
+T = TypeVar("T")
 
-def _safe(fn: Any, *args: Any) -> Any:
+
+def _safe(fn: Callable[..., T], *args: Any) -> Any:
     """Run a synchronous db function in a worker thread, returning its result."""
     return asyncio.to_thread(fn, *args)
 
@@ -145,7 +148,7 @@ async def health_summary_endpoint(_request: Request) -> JSONResponse:
     )
 
 
-def register(app, mcp_instance) -> None:
+def register(app: Any, mcp_instance: Any) -> None:
     """Mount the REST endpoints on the Starlette app.
 
     Called from ``server.py`` after ``mcp_instance.http_app()`` returns the

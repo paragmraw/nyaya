@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
+P = ParamSpec("P")
 T = TypeVar("T")
 
 # Hard cap on user-supplied query strings; prevents DoS via expensive
@@ -29,7 +30,7 @@ def validate_query_length(query: str) -> str:
     return query
 
 
-def run_sync(func: Callable[..., T]) -> Callable[..., Any]:
+def run_sync(func: Callable[P, T]) -> Callable[P, Any]:
     """Decorator: run ``func`` in a worker thread so it can be awaited.
 
     Wraps a synchronous DB-bound function so the FastMCP event loop stays

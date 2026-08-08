@@ -25,7 +25,7 @@ jobs:
         run: |
           uv export --frozen --no-dev --no-emit-project --no-editable --format requirements-txt > requirements.txt
           pip install pip-audit
-          pip-audit -r requirements.txt --ignore-vuln GHSA-xxxx || true  # advisory for now
+          pip-audit -r requirements.txt
 
   npm-audit:
     runs-on: ubuntu-latest
@@ -45,7 +45,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Audit
-        run: npm audit --omit=dev --audit-level=high || true  # advisory for now
+        run: npm audit --omit=dev --audit-level=high
 
   osv-scanner:
     runs-on: ubuntu-latest
@@ -58,7 +58,7 @@ jobs:
           scan-args: |-
             --recursive
             ./
-        continue-on-error: true  # advisory for now
+        continue-on-error: true  # advisory — osv-scanner false positives for transitive deps
 
   trivy:
     runs-on: ubuntu-latest
@@ -71,8 +71,8 @@ jobs:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
-          exit-code: "0"  # advisory for now
-        continue-on-error: true
+          exit-code: "1"
+        continue-on-error: true  # advisory — trivy false positives for base image packages
 
   gitleaks:
     runs-on: ubuntu-latest
