@@ -10,7 +10,7 @@ nyaya is in alpha. Security fixes are applied to the latest `main` branch only.
 
 ## Reporting a vulnerability
 
-Email **security@nyaya.parag.tech** with a description of the vulnerability, reproduction steps, and impact assessment.
+Email **mail@parag.tech** with a description of the vulnerability, reproduction steps, and impact assessment.
 
 - **Do not** open a public GitHub issue for security vulnerabilities.
 - You will receive an acknowledgement within 48 hours.
