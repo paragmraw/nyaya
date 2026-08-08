@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .. import db
-from ..exceptions import EmbeddingUnavailable, SearchError
+from ..exceptions import EmbeddingUnavailable
 from ..models import SearchResponse
 from ._util import run_sync
 
@@ -40,13 +40,13 @@ def register(mcp) -> None:
         # Fetch FTS results.
         fts_results, fts_total = db.search_all(query, act=act, limit=limit * 2, offset=0)
 
-        # Try semantic results; fall back to FTS-only if unavailable.
+        # Try semantic results; fall back to FTS-only if embeddings unavailable.
         fallback_reason: str | None = None
         try:
             from ..embeddings import embed_query
             embedding = embed_query(query)
             sem_results = db.semantic_search_all(embedding, act=act, limit=limit * 2)
-        except (EmbeddingUnavailable, SearchError):
+        except EmbeddingUnavailable:
             sem_results = []
             fallback_reason = "embedding_unavailable"
 

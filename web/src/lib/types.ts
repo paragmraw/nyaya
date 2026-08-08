@@ -4,6 +4,8 @@
 // place (`@/lib/types`), and defines page/component-local types that were
 // previously inlined in architecture/page.tsx and citations/page.tsx.
 
+import type { ReactNode } from "react";
+
 export type {
   CorpusCounts,
   CorpusStats,
@@ -18,7 +20,7 @@ export type {
 // ─── architecture/page.tsx ────────────────────────────────────────
 export type StackRow = { name: string; role: string; tool: string };
 
-export type FlowStep = { num: string; text: React.ReactNode };
+export type FlowStep = { num: string; text: ReactNode };
 
 export type OpennessItem = { on: boolean; text: string; meta: string };
 

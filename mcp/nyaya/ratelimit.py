@@ -1,15 +1,21 @@
 """Rate-limiting and body-size-cap middleware for the nyaya ASGI app.
 
-Thresholds are defined in :class:`nyaya.config.RateLimitSettings` (edit
-there to tune; no env vars needed).
+Thresholds are defined in :class:`nyaya.config.RateLimitSettings` and can be
+overridden via environment variables (see config.py).
 
 When ``REDIS_URL`` is configured, rate-limit counters are stored in Redis
 so limits are enforced globally across all workers. Without ``REDIS_URL``,
 counters are in-memory per-worker (effective limit = ``limit * workers``).
+
+Redis I/O is synchronous (``redis-py``) so it is dispatched to a worker
+thread via ``asyncio.to_thread`` to avoid blocking the event loop. If Redis
+becomes unreachable at runtime, the middleware falls back to an in-memory
+backend so the server keeps serving requests (fail-open).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import defaultdict
@@ -83,11 +89,11 @@ class RedisBackend:
         return count > limit
 
 
-def _create_backend() -> RateLimitBackend | None:
+def _create_backend() -> RateLimitBackend:
     """Create a rate-limit backend based on settings.
 
-    Returns ``None`` if rate limiting should be skipped (e.g. Redis import
-    failure when Redis is configured but the package isn't installed).
+    Returns an ``InMemoryBackend`` if Redis is not configured or the
+    ``redis`` package is not installed.
     """
     settings = get_settings()
     if settings.redis_url:
@@ -100,7 +106,6 @@ def _create_backend() -> RateLimitBackend | None:
                 "REDIS_URL is set but the 'redis' package is not installed. "
                 "Install with: pip install redis. Falling back to in-memory rate limiting."
             )
-            return InMemoryBackend()
     return InMemoryBackend()
 
 
@@ -122,19 +127,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     When Redis is configured, limits are enforced globally across all
     workers. Without Redis, each worker has its own counters and the
     effective per-IP limit is ``limit * workers``.
+
+    Synchronous backend calls (Redis) are dispatched to a worker thread so
+    the event loop is not blocked. If a Redis error occurs at runtime, the
+    middleware falls back to an in-memory backend (fail-open).
     """
 
     def __init__(
         self,
         app: ASGIApp,
         read_per_min: int = 120,
-        embedding_per_min: int = 10,
+        embedding_per_min: int = 30,
         backend: RateLimitBackend | None = None,
     ) -> None:
         super().__init__(app)
         self.read_per_min = read_per_min
         self.embedding_per_min = embedding_per_min
         self._backend = backend or InMemoryBackend()
+        # Fallback backend used if the primary (Redis) fails at runtime.
+        self._fallback = InMemoryBackend()
+        self._redis_failed = False
 
     def _is_embedding_request(self, request: Request) -> bool:
         """Return True for MCP POSTs to ``/mcp`` (apply the stricter limit)."""
@@ -150,7 +162,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         limit = self.embedding_per_min if self._is_embedding_request(request) else self.read_per_min
-        if self._backend.is_limited(ip, limit):
+
+        # Use the fallback backend if Redis has already failed.
+        backend = self._fallback if self._redis_failed else self._backend
+        try:
+            # Dispatch sync backend I/O to a worker thread to avoid blocking
+            # the event loop (RedisBackend does synchronous network I/O).
+            limited = await asyncio.to_thread(backend.is_limited, ip, limit)
+        except Exception:
+            if not self._redis_failed:
+                log.warning(
+                    "Rate-limit backend failed (likely Redis unreachable). "
+                    "Falling back to in-memory rate limiting.", exc_info=True,
+                )
+                self._redis_failed = True
+            limited = await asyncio.to_thread(self._fallback.is_limited, ip, limit)
+
+        if limited:
             return Response(
                 content='{"error": "rate_limited"}',
                 status_code=429,

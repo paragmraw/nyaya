@@ -325,6 +325,24 @@ class TestEmbeddingTools:
         assert r.total >= 1  # FTS results still returned
         assert r.fallback_reason == "embedding_unavailable"
 
+    async def test_semantic_query_search_error_propagates(self, _make_app, _tool, monkeypatch):
+        """SearchError (client/input error) should propagate, not be swallowed as fallback."""
+        from nyaya import embeddings
+        from nyaya.exceptions import SearchError
+        monkeypatch.setattr(embeddings, "embed_query",
+                            lambda _q: (_ for _ in ()).throw(SearchError("dim mismatch")))
+        with pytest.raises(SearchError):
+            await _tool(_make_app, "semantic_query", query="right to privacy")
+
+    async def test_hybrid_search_search_error_propagates(self, _make_app, _tool, monkeypatch):
+        """SearchError in hybrid_search should propagate, not be silently swallowed."""
+        from nyaya import embeddings
+        from nyaya.exceptions import SearchError
+        monkeypatch.setattr(embeddings, "embed_query",
+                            lambda _q: (_ for _ in ()).throw(SearchError("dim mismatch")))
+        with pytest.raises(SearchError):
+            await _tool(_make_app, "hybrid_search", query="murder")
+
 
 # ---------------------------------------------------------------------------
 # Pagination + direction param tests

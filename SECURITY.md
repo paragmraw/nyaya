@@ -22,11 +22,11 @@ Email **security@nyaya.parag.tech** with a description of the vulnerability, rep
 nyaya implements defense-in-depth at the application layer:
 
 ### Rate limiting
-- Read tools: 120 req/min/IP (configurable in `nyaya/config.py`)
-- Embedding tools: 10 req/min/IP
-- Body size cap: 1 MB
+- Read endpoints (REST `/api/*`): 120 req/min/IP (env: `NYAYA_RATE_READ_PER_MIN`)
+- MCP tool calls (`POST /mcp`): 30 req/min/IP (env: `NYAYA_RATE_MCP_PER_MIN`)
+- Body size cap: 1 MB (env: `NYAYA_RATE_BODY_MAX_BYTES`)
 - Redis backend for multi-worker deployments (`REDIS_URL` env var)
-- In-memory fallback for single-worker (dev/local)
+- In-memory fallback for single-worker (dev/local) and Redis outages (fail-open)
 
 ### Security headers
 - Content-Security-Policy (restricts all resource loading to same-origin)
@@ -44,7 +44,8 @@ nyaya implements defense-in-depth at the application layer:
 
 ### Input sanitization
 - Control characters stripped at ingest time (C0/C1 controls, bidi overrides)
-- 200 KB max text length per row
+- 200 KB max text length per row at ingest time (sections, articles, schedules)
+- Judgment text has no length cap (some judgments exceed 700 KB)
 - Query length cap (4096 chars) prevents DoS via expensive ts_headline/embedding
 
 ### Database

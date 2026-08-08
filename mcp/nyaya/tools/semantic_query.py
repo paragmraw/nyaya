@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from .. import db
-from ..exceptions import EmbeddingUnavailable, SearchError
+from ..exceptions import EmbeddingUnavailable
 from ..models import SearchResponse
 from ._util import run_sync
-
-# Kept for backward compatibility — these exceptions are now caught internally
-# and surfaced via ``fallback_reason`` rather than propagated to the caller.
 
 
 def register(mcp) -> None:
@@ -20,10 +17,11 @@ def register(mcp) -> None:
             "statutory wording — e.g. 'can police search my phone without a warrant?' finds "
             "relevant CrPC/BNS provisions and Article 21 even without keyword overlap. "
             "Returns matching provisions ranked by cosine similarity. If the semantic-search "
-            "model is not installed in this build (e.g. the Alpine Docker image), raises an "
-            "embedding_unavailable error — fall back to search_law in that case. The ``act`` "
-            "parameter scopes the search to sections of one act (use 'Constitution' or "
-            "'judgment' to scope to articles or judgments respectively)."
+            "model is not installed in this build (e.g. the Alpine Docker image), returns an "
+            "empty result with fallback_reason='embedding_unavailable' — fall back to "
+            "search_law in that case. The ``act`` parameter scopes the search to sections of "
+            "one act (use 'Constitution' or 'judgment' to scope to articles or judgments "
+            "respectively)."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Semantic search"},
     )
@@ -47,9 +45,10 @@ def register(mcp) -> None:
             from ..embeddings import embed_query
             embedding = embed_query(query)
             results = db.semantic_search_all(embedding, act=act, limit=limit)
-        except (EmbeddingUnavailable, SearchError):
-            # Return an empty structured response with the fallback reason so
-            # the MCP client (LLM) can decide to retry with search_law.
+        except EmbeddingUnavailable:
+            # The embedding model is not installed (e.g. Alpine image).
+            # Return an empty structured response with fallback_reason so
+            # the MCP client (LLM) can decide to fall back to search_law.
             return SearchResponse(
                 query=query, total=0, returned=0, offset=0, results=[],
                 as_of=db.corpus_as_of(), limit=limit,
