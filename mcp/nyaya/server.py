@@ -30,23 +30,8 @@ _ALLOWED_ORIGINS = ["https://nyaya.parag.tech"]
 
 @lifespan_decorator
 async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[None]:
-    # Build the chat agent eagerly (if the chat sub-app is mounted) so the
-    # first /chat/turn isn't slow and /chat/health reports healthy. Mounted
-    # sub-app lifespans don't run under Starlette, so the host builds the
-    # agent here and injects it into the sub-app's state.
-    chat_app = getattr(server, "_nyaya_chat_app", None)
-    if chat_app is not None:
-        try:
-            from nyaya_chat.agent import build_agent as _build_chat_agent
-            from nyaya_chat.config import get_settings as _get_chat_settings
-            _chat_graph, _chat_tools = await _build_chat_agent(_get_chat_settings())
-            chat_app.state.graph = _chat_graph
-            chat_app.state.tools = _chat_tools
-            log.info("chat agent built and injected: tools=%d", len(_chat_tools))
-        except Exception:  # noqa: BLE001 — degrade; /chat/health reports degraded.
-            log.exception("failed to build chat agent; /chat will report degraded")
-            chat_app.state.graph = None
-            chat_app.state.tools = []
+    # Pre-warm: ensure chat sub-app is mounted and ready.
+    # The actual agent will be built lazily on first request.
     try:
         yield {}
     finally:
