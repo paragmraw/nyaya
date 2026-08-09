@@ -7,11 +7,16 @@ import { useChat } from "@/lib";
 
 // ChatPanel: the live Nyaya assistant. Streams tokens from the FastAPI chat
 // backend (chat/nyaya_chat) over SSE, renders citation chips for grounded
-// answers, and shows tool-call progress. Replaces the previous locked shell.
+// answers, and shows tool-call progress. Can be disabled via feature flag.
 const GREETING =
   "Namaste. I'm Nyaya — I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  /** When true, the chat panel is disabled and shown in a blurred/locked state */
+  disabled?: boolean;
+}
+
+export default function ChatPanel({ disabled = false }: ChatPanelProps) {
   const { messages, isStreaming, error, send, cancel } = useChat();
   const bodyRef = useRef<HTMLDivElement>(null);
   // Show the greeting until the first user message is sent (pure derivation,
@@ -25,14 +30,14 @@ export default function ChatPanel() {
   }, [messages, isStreaming]);
 
   return (
-    <div className={`chat-shell ${isStreaming ? "chat-streaming" : ""}`}>
+    <div className={`chat-shell ${isStreaming ? "chat-streaming" : ""} ${disabled ? "chat-locked" : ""}`}>
       <div className="chat-head">
         <div className="ch-title">
           <span className={`status-dot ${isStreaming ? "live" : ""}`} aria-hidden="true" />
           Nyaya Assistant
         </div>
         <div className="ch-meta">
-          <span className="pill">{isStreaming ? "Streaming…" : "Online"}</span>
+          <span className="pill">{isStreaming ? "Streaming…" : disabled ? "Disabled" : "Online"}</span>
           <span className="tag">Citations on</span>
         </div>
       </div>
@@ -52,7 +57,7 @@ export default function ChatPanel() {
       </div>
 
       <div className="chat-foot">
-        <ChatComposer onSend={send} disabled={isStreaming} />
+        <ChatComposer onSend={send} disabled={isStreaming || disabled} />
         <div className="composer-hint">
           <span className="status-dot" />
           Retrieval-grounded · not legal advice · verify citations before filing

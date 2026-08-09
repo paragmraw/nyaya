@@ -320,6 +320,20 @@ pre.mcp-json .n { color: var(--fg); }
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
+
+/* Locked/disabled state — blurred and non-interactive */
+.chat-shell.chat-locked {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.chat-shell.chat-locked .chat-body,
+.chat-shell.chat-locked .chat-foot {
+  filter: blur(8px);
+}
+.chat-shell.chat-locked .chat-head .pill {
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
+  color: var(--muted);
+}
 .chat-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 11px 14px;
