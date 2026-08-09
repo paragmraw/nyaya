@@ -18,11 +18,11 @@ def _make_test_app(monkeypatch, graph=None, tools=None):
     from nyaya_chat import agent as agent_mod
     from nyaya_chat import server as srv
 
-    async def _fake_build_agent(_=None):
+    async def _fake_get_agent():
         return graph, tools or []
 
-    monkeypatch.setattr(agent_mod, "build_agent", _fake_build_agent)
-    monkeypatch.setattr(srv, "build_agent", _fake_build_agent, raising=False)
+    monkeypatch.setattr(agent_mod, "get_agent", _fake_get_agent)
+    monkeypatch.setattr(srv, "get_agent", _fake_get_agent, raising=False)
 
     return srv.create_app()
 

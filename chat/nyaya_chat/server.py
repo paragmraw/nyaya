@@ -26,7 +26,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .agent import _build_messages, build_agent
+from .agent import _build_messages, get_agent
 from .config import Settings, get_settings
 from .schemas import ChatRequest, ChatSubHealthResponse
 from .streaming import stream_turn
@@ -36,26 +36,10 @@ log = logging.getLogger("nyaya_chat")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # Sub-app lifespan: no agent building here (lazy init on first request).
+    # Host lifespan handles agent building and injection.
     s = get_settings()
-    log.info("nyaya-chat sub-app lifespan: %s", s.as_log_dict())
-    # If the host already built the agent (app.state.graph set before mount),
-    # skip the async build — mounted sub-app lifespans don't run under
-    # Starlette, so the host must inject state.
-    if getattr(app.state, "graph", None) is not None or getattr(app.state, "tools", None):
-        log.info("chat agent already built by host; skipping lifespan build")
-        try:
-            yield
-        finally:
-            log.info("nyaya-chat sub-app shutting down")
-        return
-    # Otherwise (standalone run), build here.
-    try:
-        graph, tools = await build_agent(s)
-    except Exception:  # noqa: BLE001 — degrade instead of crashing on startup.
-        log.exception("failed to build chat agent at startup; /chat/health will report degraded")
-        graph, tools = None, []
-    app.state.graph = graph
-    app.state.tools = tools
+    log.info("nyaya-chat sub-app lifespan starting: %s", s.as_log_dict())
     app.state.settings = s
     try:
         yield
@@ -63,14 +47,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.info("nyaya-chat sub-app shutting down")
 
 
-def create_app(settings: Settings | None = None, *, graph: Any = None, tools: list | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the chat FastAPI sub-app.
 
     ``settings`` is optional; when ``None`` the process-wide ``get_settings()``
-    is used. ``graph``/``tools`` allow the host to inject a pre-built agent
-    (built in the host's lifespan, since mounted sub-app lifespans don't run
-    under Starlette). When ``None``, the sub-app builds the agent in its own
-    lifespan (used by standalone runs and the chat package's own tests).
+    is used.
     """
     s = settings or get_settings()
     app = FastAPI(
@@ -83,15 +64,21 @@ def create_app(settings: Settings | None = None, *, graph: Any = None, tools: li
         openapi_url="/openapi.json",
     )
     app.state.settings = s
-    # If the host pre-builds the agent, stash it so the lifespan skips the build.
-    if graph is not None or tools is not None:
-        app.state.graph = graph
-        app.state.tools = tools or []
 
     @app.get("/health", response_model=ChatSubHealthResponse)
     async def health() -> ChatSubHealthResponse:
-        tools = getattr(app.state, "tools", []) or []
         graph = getattr(app.state, "graph", None)
+        tools = getattr(app.state, "tools", None) or []
+        # If graph not yet built, check if we can build it (lazy init)
+        if graph is None:
+            try:
+                graph, tools = await get_agent()
+                app.state.graph = graph
+                app.state.tools = tools
+            except Exception:
+                log.exception("failed to build chat agent for health check")
+                graph, tools = None, []
+
         return ChatSubHealthResponse(
             status="healthy" if graph is not None else "degraded",
             model=s.llm_model,
@@ -101,11 +88,26 @@ def create_app(settings: Settings | None = None, *, graph: Any = None, tools: li
     @app.post("/turn")
     async def turn(req: ChatRequest) -> Any:
         graph = getattr(app.state, "graph", None)
+        tools = getattr(app.state, "tools", None) or []
+        if graph is None:
+            try:
+                graph, tools = await get_agent()
+                app.state.graph = graph
+                app.state.tools = tools
+            except Exception as e:
+                log.exception("failed to build chat agent for turn")
+                return JSONResponse(
+                    {"error": "agent_unavailable", "detail": str(e)},
+                    status_code=503,
+                )
+
+        # After attempting to build, check if agent is available
         if graph is None:
             return JSONResponse(
-                {"error": "agent_unavailable", "detail": "chat agent not built at startup"},
+                {"error": "agent_unavailable", "detail": "chat agent not available"},
                 status_code=503,
             )
+
         # Cap history server-side.
         history = [t.model_dump() for t in req.history][-s.max_history:]
         messages = _build_messages(req.message, history)

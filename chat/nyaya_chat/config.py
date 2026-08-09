@@ -9,6 +9,7 @@ Environment variables
     URL of the nyaya MCP server the agent calls for corpus retrieval. When
     mounted in the same process as the MCP server (the default deploy), this
     points at the same origin; for local dev it's ``http://localhost:8000/mcp``.
+    In Docker, use ``http://localhost:8000/mcp`` (or the service name in Docker Compose).
 ``CHAT_LLM_MODEL`` (optional)
     NVIDIA model id. Default: ``nvidia/nemotron-3-ultra-550b-a55b``.
 ``CHAT_LLM_TEMPERATURE`` (optional, default 0.1)
