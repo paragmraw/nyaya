@@ -3,14 +3,18 @@ services:
     build:
       context: .
       # Root Dockerfile builds the Next.js SPA in a Node stage and serves it
-      # alongside the Python MCP/REST API from a single Alpine runtime on :8000.
-      # Same image Railway deploys from (see railway.toml).
+      # alongside the Python MCP/REST API and the chat sub-app from a single
+      # Alpine runtime on :8000. Same image Railway deploys from (see
+      # railway.toml).
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - NYAYA_MCP_URL=http://localhost:8000/mcp
       - NYAYA_RATE_MCP_PER_MIN=200
+      - NYAYA_RATE_CHAT_PER_MIN=15
     restart: unless-stopped
     # Hardening: read-only root, no-new-privileges, drop all caps, cap PIDs/mem.
     read_only: true

@@ -30,7 +30,7 @@ from nyaya.sanitize import (
 # ---------------------------------------------------------------------------
 
 def _make_app(middleware_cls, **mw_kwargs):
-    """Return a Starlette app with one health endpoint and the given middleware."""
+    """Return a Starlette app with the routes the rate-limit tests need."""
     app = Starlette()
 
     async def health(request):
@@ -40,8 +40,16 @@ def _make_app(middleware_cls, **mw_kwargs):
         body = await request.body()
         return JSONResponse({"len": len(body)})
 
+    async def chat_turn(request):
+        return JSONResponse({"ok": True})
+
+    async def chat_health(request):
+        return JSONResponse({"ok": True})
+
     app.router.add_route("/health", health, methods=["GET"])
     app.router.add_route("/echo", echo, methods=["POST"])
+    app.router.add_route("/chat/turn", chat_turn, methods=["POST"])
+    app.router.add_route("/chat/health", chat_health, methods=["GET"])
     app.add_middleware(middleware_cls, **mw_kwargs)
     return app
 
@@ -203,6 +211,33 @@ def test_rate_limit_returns_json_error():
         assert r.status_code == 429
         body = r.json()
         assert "error" in body
+
+
+def test_chat_rate_limit_tighter_than_reads():
+    """POST /chat/* uses the chat_per_min limit (default 15, tighter than reads)."""
+    backend = InMemoryBackend()
+    app = _make_app(RateLimitMiddleware, read_per_min=100, chat_per_min=2, backend=backend)
+    with TestClient(app) as client:
+        # 2 chat turns allowed, 3rd blocked.
+        for _ in range(2):
+            r = client.post("/chat/turn", json={"message": "hi"})
+            assert r.status_code == 200
+        r = client.post("/chat/turn", json={"message": "hi"})
+        assert r.status_code == 429
+
+
+def test_chat_rate_limit_only_applies_to_post():
+    """GET /chat/health is not subject to the chat (POST) limit."""
+    backend = InMemoryBackend()
+    app = _make_app(RateLimitMiddleware, read_per_min=100, chat_per_min=1, backend=backend)
+    with TestClient(app) as client:
+        # Exhaust the chat POST limit.
+        client.post("/chat/turn", json={"message": "hi"})
+        r = client.post("/chat/turn", json={"message": "hi"})
+        assert r.status_code == 429
+        # A GET to the chat sub-app still passes (read limit applies, not chat).
+        r = client.get("/chat/health")
+        assert r.status_code == 200
 
 
 # ---------------------------------------------------------------------------

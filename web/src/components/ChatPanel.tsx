@@ -1,49 +1,72 @@
 "use client";
 
-// Chat is out of scope (per the build brief). We preserve the shell so the
-// home-page layout matches the exported design, but lock the body and footer
-// behind a CSS blur + pointer-events:none. The header stays visible and shows
-// a "Coming soon" pill instead of the "Online" status.
+import { useEffect, useRef } from "react";
+import ChatComposer from "./ChatComposer";
+import ChatMessageView from "./ChatMessage";
+import { useChat } from "@/lib";
+
+// ChatPanel: the live Nyaya assistant. Streams tokens from the FastAPI chat
+// backend (chat/nyaya_chat) over SSE, renders citation chips for grounded
+// answers, and shows tool-call progress. Replaces the previous locked shell.
+const GREETING =
+  "Namaste. I'm Nyaya — I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
+
 export default function ChatPanel() {
+  const { messages, isStreaming, error, send, cancel } = useChat();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // Show the greeting until the first user message is sent (pure derivation,
+  // no extra state needed).
+  const showGreeting = !messages.some((m) => m.role === "user");
+
+  // Auto-scroll to the latest message as tokens stream in.
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, isStreaming]);
+
   return (
-    <div className="chat-shell chat-locked">
+    <div className={`chat-shell ${isStreaming ? "chat-streaming" : ""}`}>
       <div className="chat-head">
         <div className="ch-title">
-          <span className="status-dot live" aria-hidden="true" />
+          <span className={`status-dot ${isStreaming ? "live" : ""}`} aria-hidden="true" />
           Nyaya Assistant
         </div>
         <div className="ch-meta">
-          <span className="pill">Coming soon</span>
+          <span className="pill">{isStreaming ? "Streaming…" : "Online"}</span>
           <span className="tag">Citations on</span>
         </div>
       </div>
 
-      <div className="chat-body" id="chatBody" aria-hidden="true">
-        <div className="msg bot">
-          <div className="avatar">§</div>
-          <div className="bubble">
-            Namaste. I&apos;m Nyaya — I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I&apos;ll cite the exact provision.
-            <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
+      <div className="chat-body" id="chatBody" ref={bodyRef}>
+        {showGreeting ? (
+          <div className="msg bot">
+            <div className="avatar">§</div>
+            <div className="bubble">
+              {GREETING}
+              <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
+            </div>
           </div>
-        </div>
+        ) : (
+          messages.map((m) => <ChatMessageView key={m.id} msg={m} />)
+        )}
       </div>
 
-      <div className="chat-foot" aria-hidden="true">
-        <div className="composer">
-          <textarea
-            rows={1}
-            aria-label="Ask Nyaya a legal question"
-            placeholder="Ask about a provision, section, or case…"
-            tabIndex={-1}
-            readOnly
-          />
-          <button className="send" aria-label="Send" tabIndex={-1} disabled>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4z" /></svg>
-          </button>
-        </div>
+      <div className="chat-foot">
+        <ChatComposer onSend={send} disabled={isStreaming} />
         <div className="composer-hint">
           <span className="status-dot" />
           Retrieval-grounded · not legal advice · verify citations before filing
+          {error ? ` · ${error}` : ""}
+          {isStreaming ? " · " : ""}
+          {isStreaming && (
+            <button
+              type="button"
+              onClick={cancel}
+              className="cancel-btn"
+            >
+              cancel
+            </button>
+          )}
         </div>
       </div>
     </div>

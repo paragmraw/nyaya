@@ -37,6 +37,7 @@ mcp/.env.local
 # --- Test / notebook files (not needed in the runtime image) ---
 mcp/tests
 mcp/notebooks
+chat/tests
 
 # --- Large / transient data (keep manual YAML, ignore raw dumps + caches) ---
 mcp/data/raw

@@ -8,31 +8,36 @@ A monorepo for Indian-law tooling. The first component is an MCP server; other t
 |---|---|---|
 | [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 24 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
 | [`web/`](web/) | alpha | Next.js 16 (App Router, static export) frontend — Home, Corpus, Citations, Architecture pages. Served from the same container as the MCP server via Starlette `StaticFiles`; live data fetched client-side from `/api/*` REST endpoints. |
+| [`chat/`](chat/) | alpha | LangGraph + FastAPI chat backend — retrieval-grounded Indian-law assistant. A ReAct agent over the nyaya MCP tools, powered by NVIDIA Nemotron, streamed to the SPA over SSE. Mounted into the main server at `/chat`, so the SPA, REST, MCP, and chat share one origin and one Railway service. |
 
 See [`mcp/README.md`](mcp/README.md) for setup, deployment, and client-configuration instructions.
 
 ## Deploy to Railway
 
-A single Railway service serves the SPA, the REST API, and the MCP endpoint from one origin.
+A single Railway service serves the SPA, the REST API, the MCP endpoint, and the chat assistant from one origin (root `Dockerfile`).
 
 1. `railway init` (or connect the GitHub repo for autodeploy from `main`).
-2. Set `DATABASE_URL` (Supabase/Postgres connection string) in the Railway Variables tab. `PORT` is set automatically.
-3. `railway up` — builds the root `Dockerfile` (Node 20 stage builds `web/out/`, Python 3.12-alpine stage serves it alongside the MCP server).
+2. Set `DATABASE_URL` (Supabase/Postgres connection string) and `NVIDIA_API_KEY` (NVIDIA API Catalog key for the chat assistant) in the Railway Variables tab. `PORT` is set automatically.
+3. `railway up` — builds the root `Dockerfile` (Node 20 stage builds `web/out/`, Python 3.12-alpine stage serves it alongside the MCP server and the chat sub-app).
 4. Railway polls `GET /health` (configured in `railway.toml`).
 5. Run `nyaya-ingest all` locally once (with the same `.env`) to hydrate the corpus — the deployed server reads from the same database.
 6. Smoke checks against the deployed domain:
-   - `GET /` → SPA home renders, chat panel blurred ("Coming soon").
+   - `GET /` → SPA home renders, chat panel live (streaming).
    - `GET /corpus/` → live numbers from `/api/corpus-stats`.
    - `GET /architecture/` → `mcp.json` copy button yields `{ "mcpServers": { "nyaya": { "url": "https://<domain>/mcp", "transport": "http" } } }`.
    - `POST /mcp` with an MCP initialize envelope → succeeds.
+   - `POST /chat/turn` with `{"message":"What is IPC 302?"}` → SSE stream of tokens + citations.
+   - `GET /chat/health` → `{"status":"healthy","model":"…","tools_loaded":N}`.
 
 ## Local development
 
-- **MCP + REST**: `cd mcp && nyaya` → uvicorn on `:8000`.
-- **SPA (HMR)**: `cd web && npm run dev` → Next dev server on `:3000`. `next.config.mjs` rewrites `/api/*` and `/mcp` to `localhost:8000`.
+- **MCP + REST + Chat**: `cd mcp && uv venv && uv pip install -e ".[dev]" && uv pip install -e ../chat && nyaya` → uvicorn on `:8000`. The chat sub-app mounts at `/chat` automatically when `NVIDIA_API_KEY` is set (Swagger UI at `http://localhost:8000/chat/docs`). Set `NYAYA_MCP_URL=http://localhost:8000/mcp` so the agent calls the same-process MCP server.
+- **SPA (HMR)**: `cd web && npm run dev` → Next dev server on `:3000`. `next.config.mjs` rewrites `/api/*`, `/mcp`, and `/chat/*` to `localhost:8000`.
 - **Build check**: `cd web && npx eslint . && npm run build` → produces `web/out/`.
 - **Serve the production bundle locally**: `NYAYA_WEB_OUT=web/out` `python -m nyaya.server` from `mcp/` → visit `http://localhost:8000/`.
-- **Python tests / lint**: `cd mcp && pytest` and `ruff check .`.
+- **Python tests / lint**:
+  - `cd mcp && pytest` and `ruff check .` (chat tests run here too via the installed package)
+  - `cd chat && pytest` and `ruff check .` (chat package's own unit tests)
 
 ## License
 
@@ -42,7 +47,7 @@ Apache-2.0. See [LICENSE](LICENSE).
 
 The Nyaya MCP server is designed to be deployed behind a reverse proxy (Cloudflare, Railway edge, nginx) that handles authentication and TLS. The server itself does not enforce authentication — this is intentional for the alpha so browser-based MCP clients can call the endpoint without configuration.
 
-**Rate limiting** is configured in [`mcp/nyaya/config.py`](mcp/nyaya/config.py) via the `RateLimitSettings` dataclass (edit there to tune; no env vars needed). Defaults: 120 req/min/IP for read tools, 10 req/min/IP for embedding tools, 1 MB body size cap.
+**Rate limiting** is configured in [`mcp/nyaya/config.py`](mcp/nyaya/config.py) via the `RateLimitSettings` dataclass (edit there to tune; no env vars needed). Defaults: 120 req/min/IP for read tools, 30 req/min/IP for embedding tools, 15 req/min/IP for chat turns, 1 MB body size cap.
 
 **Security headers** (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS) are set by the Starlette middleware in [`mcp/nyaya/security_headers.py`](mcp/nyaya/security_headers.py).
 

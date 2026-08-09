@@ -68,6 +68,40 @@ export type HealthSummary = {
   as_of: string | null;
 };
 
+// ─── Chat ────────────────────────────────────────────────────────
+export type ChatHistoryTurn = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type ChatRequest = {
+  message: string;
+  history?: ChatHistoryTurn[];
+};
+
+export type ChatCitation = {
+  act: string;
+  ref: string;
+};
+
+export type ChatToolEvent = {
+  id: string;
+  name: string;
+  args?: Record<string, unknown>;
+  summary?: string;
+  state: "start" | "result";
+};
+
+export type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations: ChatCitation[];
+  tools: ChatToolEvent[];
+  status?: string;
+  error?: string;
+};
+
 // ─── Fetch helpers ────────────────────────────────────────────────
 const FETCH_TIMEOUT_MS = 10_000;
 

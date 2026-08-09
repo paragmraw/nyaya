@@ -138,11 +138,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         app: ASGIApp,
         read_per_min: int = 120,
         embedding_per_min: int = 30,
+        chat_per_min: int = 15,
         backend: RateLimitBackend | None = None,
     ) -> None:
         super().__init__(app)
         self.read_per_min = read_per_min
         self.embedding_per_min = embedding_per_min
+        self.chat_per_min = chat_per_min
         self._backend = backend or InMemoryBackend()
         # Fallback backend used if the primary (Redis) fails at runtime.
         self._fallback = InMemoryBackend()
@@ -154,6 +156,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # so we apply the stricter limit to all MCP POSTs as a safe default.
         return "/mcp" in request.url.path and request.method == "POST"
 
+    def _is_chat_request(self, request: Request) -> bool:
+        """Return True for POSTs to the chat sub-app (``/chat/*``).
+
+        Each chat turn triggers one or more NVIDIA LLM calls plus several MCP
+        round-trips, so a much tighter per-IP limit is applied than for reads.
+        """
+        return request.url.path.startswith("/chat") and request.method == "POST"
+
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         ip = _get_remote_address(request)
 
@@ -161,7 +171,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/health":
             return await call_next(request)
 
-        limit = self.embedding_per_min if self._is_embedding_request(request) else self.read_per_min
+        if self._is_chat_request(request):
+            limit = self.chat_per_min
+        elif self._is_embedding_request(request):
+            limit = self.embedding_per_min
+        else:
+            limit = self.read_per_min
 
         # Use the fallback backend if Redis has already failed.
         backend = self._fallback if self._redis_failed else self._backend
@@ -221,12 +236,15 @@ def register_rate_limiting(app: Any) -> None:
         RateLimitMiddleware,
         read_per_min=settings.read_per_min,
         embedding_per_min=settings.embedding_per_min,
+        chat_per_min=settings.chat_per_min,
         backend=backend,
     )
 
     log.info(
-        "Rate limiting enabled: %d req/min/IP (reads), %d req/min/IP (embeddings), %d byte body cap",
+        "Rate limiting enabled: %d req/min/IP (reads), %d req/min/IP (MCP/embeddings), "
+        "%d req/min/IP (chat), %d byte body cap",
         settings.read_per_min,
         settings.embedding_per_min,
+        settings.chat_per_min,
         settings.body_size_max_bytes,
     )
