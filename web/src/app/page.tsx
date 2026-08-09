@@ -14,6 +14,9 @@ const FALLBACK: HealthSummary = {
   as_of: null,
 };
 
+// Feature flag: enable/disable chat window
+const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
+
 export default function HomePage() {
   const { data, error } = useHealthSummary(FALLBACK);
   const counts = data?.counts;
@@ -27,7 +30,7 @@ export default function HomePage() {
       <section className="pane-left">
         <div className="left-head">
           <p className="eyebrow">CONVERSATIONAL AI · INDIAN LAW</p>
-          <h1>Ask the Constitution, CrPC &amp; statute book — get cited answers.</h1>
+          <h1>Ask the Constitution, CrPC & statute book — get cited answers.</h1>
           <p className="lead">
             A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment — no paraphrased guesswork.
           </p>
@@ -72,9 +75,9 @@ export default function HomePage() {
         <McpConfig variant="promo" />
       </section>
 
-      {/* RIGHT: chat (out of scope — blurred) */}
+      {/* RIGHT: chat (can be disabled via NEXT_PUBLIC_CHAT_ENABLED) */}
       <section className="pane-right">
-        <ChatPanel />
+        <ChatPanel disabled={!CHAT_ENABLED} />
       </section>
     </main>
   );

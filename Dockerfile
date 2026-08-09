@@ -8,6 +8,9 @@
 # node:20-alpine pinned by digest for reproducible builds (amd64).
 FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb AS web-builder
 ENV NODE_ENV=production
+# Feature flag for chat UI (embedded at build time for static export)
+ARG NEXT_PUBLIC_CHAT_ENABLED=false
+ENV NEXT_PUBLIC_CHAT_ENABLED=${NEXT_PUBLIC_CHAT_ENABLED}
 WORKDIR /web
 # Install deps first for layer caching (lockfile is committed for reproducibility).
 # Use `npm install` (not `npm ci`) so platform-specific optional deps
