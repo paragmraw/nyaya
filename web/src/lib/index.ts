@@ -3,3 +3,4 @@ export * from "./api";
 export * from "./swr";
 export * from "./types";
 export * from "./data";
+export * from "./chat";

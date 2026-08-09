@@ -116,7 +116,7 @@ disable_error_code = ["arg-type"]
 
 [[tool.mypy.overrides]]
 module = "nyaya.server"
-disable_error_code = ["misc"]
+disable_error_code = ["misc", "attr-defined"]
 
 [[tool.mypy.overrides]]
 module = "nyaya.scripts.ingest_sanhitas"

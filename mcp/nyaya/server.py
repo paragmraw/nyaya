@@ -30,6 +30,23 @@ _ALLOWED_ORIGINS = ["https://nyaya.parag.tech"]
 
 @lifespan_decorator
 async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[None]:
+    # Build the chat agent eagerly (if the chat sub-app is mounted) so the
+    # first /chat/turn isn't slow and /chat/health reports healthy. Mounted
+    # sub-app lifespans don't run under Starlette, so the host builds the
+    # agent here and injects it into the sub-app's state.
+    chat_app = getattr(server, "_nyaya_chat_app", None)
+    if chat_app is not None:
+        try:
+            from nyaya_chat.agent import build_agent as _build_chat_agent
+            from nyaya_chat.config import get_settings as _get_chat_settings
+            _chat_graph, _chat_tools = await _build_chat_agent(_get_chat_settings())
+            chat_app.state.graph = _chat_graph
+            chat_app.state.tools = _chat_tools
+            log.info("chat agent built and injected: tools=%d", len(_chat_tools))
+        except Exception:  # noqa: BLE001 — degrade; /chat/health reports degraded.
+            log.exception("failed to build chat agent; /chat will report degraded")
+            chat_app.state.graph = None
+            chat_app.state.tools = []
     try:
         yield {}
     finally:
@@ -108,6 +125,38 @@ register_rate_limiting(app)
 from . import rest as _rest  # noqa: E402
 
 _rest.register(app, mcp_instance)
+
+
+# Chat sub-app: a FastAPI app (chat/nyaya_chat) hosting the LangGraph + NVIDIA
+# Nemotron retrieval-grounded assistant, mounted at /chat so the SPA, REST,
+# MCP, and chat endpoints share one origin, one healthcheck, and one Railway
+# service. The mount is optional: if the chat package is not installed (e.g.
+# the slim MCP-only image) or NVIDIA_API_KEY is not configured, the import is
+# skipped and /chat 404s rather than crashing the server. Cross-cutting
+# middleware (CORS, security headers, request-id, rate limiting, body-size
+# cap) is already handled by this host app; the sub-app owns only chat-specific
+# concerns (the agent, the LLM, the SSE encoder).
+def _maybe_mount_chat() -> None:
+    if not os.environ.get("NVIDIA_API_KEY"):
+        log.info("NVIDIA_API_KEY not set; chat sub-app not mounted (/chat will 404)")
+        return
+    try:
+        from nyaya_chat.server import create_app as _create_chat_app
+    except ImportError:
+        log.info("nyaya_chat package not installed; chat sub-app not mounted (/chat will 404)")
+        return
+    # Build the sub-app now (registers routes) with no pre-built agent; the
+    # host lifespan injects the built agent into app.state after startup.
+    # Mounted sub-app lifespans don't run under Starlette, so the host owns
+    # the build + state injection.
+    chat_app = _create_chat_app()
+    app.mount("/chat", chat_app, name="chat")
+    # Stash on the mcp instance so the lifespan can find it and inject state.
+    mcp_instance._nyaya_chat_app = chat_app
+    log.info("chat sub-app mounted at /chat (agent built at startup)")
+
+
+_maybe_mount_chat()
 
 
 # Serve the built Next.js static export (web/out/) from the same origin so

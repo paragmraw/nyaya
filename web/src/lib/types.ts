@@ -15,6 +15,11 @@ export type {
   ToolInfo,
   ToolsResponse,
   HealthSummary,
+  ChatHistoryTurn,
+  ChatRequest,
+  ChatCitation,
+  ChatToolEvent,
+  ChatMessage,
 } from "./api";
 
 // ─── architecture/page.tsx ────────────────────────────────────────

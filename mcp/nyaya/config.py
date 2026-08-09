@@ -155,6 +155,9 @@ class RateLimitSettings:
     read_per_min: int = 120
     # MCP POSTs (all tool calls go through /mcp): stricter for embedding tools.
     embedding_per_min: int = 30
+    # Chat turns (POST /chat/*): each triggers one or more NVIDIA LLM calls
+    # plus several MCP round-trips, so this is much tighter than reads.
+    chat_per_min: int = 15
     # Maximum request body size in bytes (1 MB).
     body_size_max_bytes: int = 1_048_576
 
@@ -164,5 +167,6 @@ def get_rate_limit_settings() -> RateLimitSettings:
     return RateLimitSettings(
         read_per_min=_int_env("NYAYA_RATE_READ_PER_MIN", 120),
         embedding_per_min=_int_env("NYAYA_RATE_MCP_PER_MIN", 30),
+        chat_per_min=_int_env("NYAYA_RATE_CHAT_PER_MIN", 15),
         body_size_max_bytes=_int_env("NYAYA_RATE_BODY_MAX_BYTES", 1_048_576),
     )
