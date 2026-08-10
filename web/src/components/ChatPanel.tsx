@@ -26,10 +26,15 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
   // The new-chat action only makes sense once a conversation has started.
   const canReset = messages.length > 0 || !!error;
 
-  // Auto-scroll to the latest message as tokens stream in.
+  // Auto-scroll to the latest message as tokens stream in — but only when the
+  // user is already near the bottom, so we don't yank them away while they've
+  // scrolled up to read earlier messages.
   useEffect(() => {
     const el = bodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const nearBottom =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [messages, isStreaming]);
 
   return (

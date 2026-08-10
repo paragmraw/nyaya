@@ -1,9 +1,38 @@
 "use client";
 
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import PersonIcon from "@mui/icons-material/Person";
 import BalanceIcon from "@mui/icons-material/Balance";
 import CitationChip from "./CitationChip";
 import type { ChatMessage } from "@/lib";
+
+// Normalise streamed markdown so block-level constructs (headings, blockquotes,
+// lists, tables, code fences) are recognised by CommonMark even when the model
+// emits them without the required preceding blank line. Also collapses 3+
+// newlines to a paragraph break.
+function normaliseMd(src: string): string {
+  if (!src) return src;
+  // Collapse runs of 3+ newlines to exactly two (a single blank line).
+  let s = src.replace(/\n{3,}/g, "\n\n");
+  // Ensure a blank line before block-start markers when they follow text on
+  // the previous line. Matches: ATX headings (#…), blockquotes (>), unordered
+  // list items (- * +), ordered list items (1.), fenced code (```), tables
+  // (a line starting & ending with |), and horizontal rules (--- / *** / ___).
+  const blockStart =
+    /^(#{1,6}\s|>\s?|[-*+]\s|\d+[.)]\s|```| {4,}|\|.*\|\s*$|([-*_]\s?){3,}$)/;
+  const lines = s.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i];
+    const prev = out[out.length - 1];
+    if (prev !== undefined && prev.trim() !== "" && cur.trim() !== "" && blockStart.test(cur)) {
+      out.push(""); // insert blank line separator
+    }
+    out.push(cur);
+  }
+  return out.join("\n");
+}
 
 // ChatMessage: renders a single chat turn (user or assistant).
 // - User messages are right-aligned with an inverted avatar.
@@ -19,7 +48,17 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         {isBot ? <BalanceIcon fontSize="small" /> : <PersonIcon fontSize="small" />}
       </div>
       <div className="bubble" data-error={msg.error ? "" : undefined}>
-        {msg.content || (isBot && msg.status ? <span className="chat-status">{msg.status}…</span> : "")}
+        {isBot ? (
+          msg.content ? (
+            <div className="md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{normaliseMd(msg.content)}</ReactMarkdown>
+            </div>
+          ) : msg.status ? (
+            <span className="chat-status">{msg.status}…</span>
+          ) : null
+        ) : (
+          msg.content
+        )}
         {isBot && !msg.content && !msg.status && msg.error && (
           <span className="chat-status chat-halted" aria-label="response halted">
             <span className="halt-dot" aria-hidden="true" />
