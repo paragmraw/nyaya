@@ -1,7 +1,19 @@
 """LangGraph ReAct agent over the nyaya MCP tools.
 
-The graph is a simple two-node ReAct loop:
-``START → agent → (tool_calls? tools : END) → agent → …``
+The graph is a two-stage pipeline:
+
+1. **ReAct retrieval loop**: ``START → agent → (tool_calls? tools : synthesis)``
+   with ``tools → agent`` cycling until the model produces a final answer.
+   The model is wrapped with ``with_thinking_mode(True)`` so reasoning
+   tokens stream as ``event: reasoning``.
+
+2. **Structured synthesis**: ``→ synthesis → END`` — a separate call using
+   ``with_structured_output(CitedAnswer)`` transforms the draft answer +
+   retrieved tool results into a schema-guaranteed ``CitedAnswer`` object
+   with ``citations[]``. The citations are emitted as ``event: citations``
+   via ``get_stream_writer()``. If structured output fails, the graph
+   gracefully degrades to the raw ReAct answer (with inline ``[[act:…]]``
+   markers parsed by the frontend as fallback).
 
 No checkpointer is used (per the product decision: we do not persist
 conversations). Each request rebuilds the message list from the client-supplied
@@ -14,12 +26,13 @@ from __future__ import annotations
 import logging
 from typing import Any, TypedDict
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from .config import Settings, get_settings
-from .llm import SYSTEM_PROMPT, get_model
+from .llm import SYNTHESIS_PROMPT, SYSTEM_PROMPT, get_base_model, get_model
+from .schemas import CitedAnswer, StructuredCitation
 from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
@@ -27,6 +40,7 @@ log = logging.getLogger("nyaya_chat.agent")
 
 class ChatState(TypedDict, total=False):
     messages: list[BaseMessage]
+    cited_answer: Any  # CitedAnswer | None
 
 
 def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMessage]:
@@ -45,6 +59,81 @@ def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMes
     return msgs
 
 
+def _collect_tool_context(messages: list[BaseMessage]) -> str:
+    """Extract the text content of all ToolMessages for the synthesis prompt."""
+    parts: list[str] = []
+    for msg in messages:
+        if isinstance(msg, ToolMessage):
+            content = getattr(msg, "content", "")
+            name = getattr(msg, "name", "tool")
+            if isinstance(content, str):
+                parts.append(f"[{name}] {content[:1200]}")
+    return "\n\n".join(parts) if parts else "(no tool results)"
+
+
+def _make_call_synthesis(settings: Settings) -> Any:
+    """Build the synthesis node function.
+
+    Returns an async function that:
+    1. Collects the draft answer (last AIMessage) + tool results from state.
+    2. Calls ``get_base_model().with_structured_output(CitedAnswer)`` to
+       produce schema-guaranteed citations.
+    3. Emits citations via ``get_stream_writer()`` as a custom event.
+    4. Falls back gracefully if structured output fails.
+    """
+    async def call_synthesis(state: ChatState) -> dict[str, Any]:
+        messages = state.get("messages", [])
+        # Find the last AIMessage (the draft answer from the ReAct loop).
+        draft_answer = ""
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and msg.content:
+                draft_answer = msg.content
+                break
+
+        tool_context = _collect_tool_context(messages)
+
+        synthesis_messages: list[BaseMessage] = [
+            SystemMessage(content=SYNTHESIS_PROMPT),
+            HumanMessage(content=(
+                f"Draft answer:\n{draft_answer}\n\n"
+                f"Retrieved provisions:\n{tool_context}\n\n"
+                "Produce the final answer with structured citations."
+            )),
+        ]
+
+        try:
+            base_model = get_base_model(settings)
+            structured_model = base_model.with_structured_output(CitedAnswer)
+            result = await structured_model.ainvoke(synthesis_messages)
+
+            if result is not None and isinstance(result, CitedAnswer):
+                # Emit citations as a custom event for the SSE stream.
+                try:
+                    from langgraph.config import get_stream_writer
+                    writer = get_stream_writer()
+                    citations_data = [
+                        {
+                            "act": c.act,
+                            "ref": c.ref,
+                            **({"quote": c.quote} if c.quote else {}),
+                        }
+                        for c in result.citations
+                    ]
+                    writer({"type": "citations", "citations": citations_data})
+                except Exception:
+                    log.debug("get_stream_writer not available, skipping citations event", exc_info=True)
+
+                return {"cited_answer": result}
+            else:
+                log.warning("structured output returned None, falling back to raw answer")
+                return {"cited_answer": None}
+        except Exception as exc:
+            log.warning("structured synthesis failed, falling back to raw answer: %s", exc)
+            return {"cited_answer": None}
+
+    return call_synthesis
+
+
 async def _build_agent_with_retry(settings: Settings, max_retries: int = 3, base_delay: float = 1.0) -> tuple[Any, list[Any]]:
     """Build agent with retry logic for MCP connection."""
     import asyncio
@@ -61,8 +150,11 @@ async def _build_agent_with_retry(settings: Settings, max_retries: int = 3, base
                 response = await model.ainvoke(messages)
                 return {"messages": [response]}
 
+            call_synthesis = _make_call_synthesis(settings)
+
             builder: StateGraph = StateGraph(ChatState)
             builder.add_node("agent", call_model)
+            builder.add_node("synthesis", call_synthesis)
             if tools:
                 builder.add_node("tools", ToolNode(tools))
                 builder.add_edge(START, "agent")
@@ -71,16 +163,18 @@ async def _build_agent_with_retry(settings: Settings, max_retries: int = 3, base
                     last = state["messages"][-1]
                     if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
                         return "tools"
-                    return END
+                    return "synthesis"
 
-                builder.add_conditional_edges("agent", route, ["tools", END])
+                builder.add_conditional_edges("agent", route, ["tools", "synthesis"])
                 builder.add_edge("tools", "agent")
+                builder.add_edge("synthesis", END)
             else:
                 builder.add_edge(START, "agent")
-                builder.add_edge("agent", END)
+                builder.add_edge("agent", "synthesis")
+                builder.add_edge("synthesis", END)
 
             graph = builder.compile()
-            log.info("compiled LangGraph agent (tools=%d)", len(tools))
+            log.info("compiled LangGraph agent (tools=%d, synthesis=on)", len(tools))
             return graph, tools
         except Exception as e:
             last_exception = e

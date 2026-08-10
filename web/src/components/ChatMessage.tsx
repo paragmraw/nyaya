@@ -40,6 +40,13 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
           </div>
         )}
 
+        {isBot && msg.reasoning && (
+          <details className="reasoning" aria-label="Reasoning trace">
+            <summary>Reasoning trace</summary>
+            <div className="reasoning-body">{msg.reasoning}</div>
+          </details>
+        )}
+
         {isBot && msg.citations.length > 0 && (
           <div className="cite">
             <strong>Citations:</strong>

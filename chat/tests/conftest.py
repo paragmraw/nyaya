@@ -37,10 +37,10 @@ def settings():
 def fake_model(monkeypatch):
     """A FakeChatModel that yields a scripted sequence of AIMessages.
 
-    Patches ``nyaya_chat.llm.get_model`` *and* the rebound reference in
-    ``nyaya_chat.agent`` (which does ``from .llm import get_model`` at import
-    time, binding its own reference). Must clear the real cache *before*
-    patching.
+    Patches ``nyaya_chat.llm.get_model`` and ``nyaya_chat.llm.get_base_model``
+    *and* the rebound references in ``nyaya_chat.agent`` (which does
+    ``from .llm import get_model`` at import time, binding its own reference).
+    Must clear the real cache *before* patching.
     """
     from nyaya_chat import agent as agent_mod
     from nyaya_chat import llm as llm_mod
@@ -48,6 +48,8 @@ def fake_model(monkeypatch):
     fm = FakeChatModel()
     monkeypatch.setattr(llm_mod, "get_model", lambda _=None: fm)
     monkeypatch.setattr(agent_mod, "get_model", lambda _=None: fm, raising=False)
+    monkeypatch.setattr(llm_mod, "get_base_model", lambda _=None: fm)
+    monkeypatch.setattr(agent_mod, "get_base_model", lambda _=None: fm, raising=False)
     return fm
 
 
@@ -92,6 +94,10 @@ class FakeChatModel:
     ``bind_tools`` returns ``self`` (the agent calls ``.invoke`` on it). The
     ``responses`` list is consumed in order; each entry is an AIMessage or a
     dict turned into one.
+
+    ``with_thinking_mode`` returns ``self`` (records the flag for assertions).
+    ``with_structured_output`` returns a ``_FakeStructuredRunnable`` whose
+    ``ainvoke`` returns ``self._structured_result`` (set by tests).
     """
 
     def __init__(self, responses: list | None = None):
@@ -101,10 +107,21 @@ class FakeChatModel:
         ]
         self._i = 0
         self.calls: list = []
+        self._thinking_enabled: bool | None = None
+        self._structured_schema = None
+        self._structured_result = None
 
     def bind_tools(self, tools, **kw):
         self._bound_tools = tools
         return self
+
+    def with_thinking_mode(self, enabled: bool = True, **kw):
+        self._thinking_enabled = enabled
+        return self
+
+    def with_structured_output(self, schema, **kw):
+        self._structured_schema = schema
+        return _FakeStructuredRunnable(self._structured_result)
 
     def invoke(self, messages, **kw):
         self.calls.append(messages)
@@ -116,3 +133,20 @@ class FakeChatModel:
 
     async def ainvoke(self, messages, **kw):
         return self.invoke(messages, **kw)
+
+
+class _FakeStructuredRunnable:
+    """Stand-in for the Runnable returned by ``with_structured_output``.
+
+    Tests set ``FakeChatModel._structured_result`` to control what
+    ``ainvoke`` returns (typically a ``CitedAnswer`` instance or ``None``).
+    """
+
+    def __init__(self, result):
+        self._result = result
+
+    def invoke(self, messages, **kw):
+        return self._result
+
+    async def ainvoke(self, messages, **kw):
+        return self._result

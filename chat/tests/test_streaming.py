@@ -40,8 +40,9 @@ def test_summarise_tool_result_other_types():
 class _FakeChunk:
     """Minimal stand-in for a LangChain message chunk with .content."""
 
-    def __init__(self, content: str):
+    def __init__(self, content: str, additional_kwargs: dict | None = None):
         self.content = content
+        self.additional_kwargs = additional_kwargs or {}
 
 
 class _FakeGraph:
@@ -144,3 +145,62 @@ async def test_stream_turn_empty_content_skipped():
     parts = [{"type": "messages", "data": (_FakeChunk(""), {})}]
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
     assert b"event: token" not in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_emits_reasoning_event():
+    """Reasoning content in additional_kwargs should emit event: reasoning."""
+    parts = [
+        {"type": "messages", "data": (_FakeChunk("", additional_kwargs={"reasoning_content": "Let me think..."}), {})},
+        {"type": "messages", "data": (_FakeChunk("The answer is 42."), {})},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: reasoning" in out
+    assert b"Let me think..." in out
+    assert b"event: token" in out
+    assert b"The answer is 42." in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_reasoning_before_token():
+    """Reasoning chunks should be emitted alongside tokens in order."""
+    parts = [
+        {"type": "messages", "data": (_FakeChunk("", additional_kwargs={"reasoning_content": "step 1"}), {})},
+        {"type": "messages", "data": (_FakeChunk("Answer"), {})},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    reasoning_pos = out.find(b"event: reasoning")
+    token_pos = out.find(b"event: token")
+    assert reasoning_pos != -1
+    assert token_pos != -1
+    assert reasoning_pos < token_pos
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_emits_citations_from_custom_event():
+    """Custom events with type='citations' should emit event: citations."""
+    parts = [
+        {"type": "custom", "data": {"type": "citations", "citations": [
+            {"act": "IPC", "ref": "s. 302"},
+            {"act": "BNS", "ref": "s. 103", "quote": "Whoever commits murder..."},
+        ]}},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: citations" in out
+    assert b"IPC" in out
+    assert b"s. 302" in out
+    assert b"BNS" in out
+    # Regular status events should NOT be emitted for citations type
+    assert out.count(b"event: status") == 0
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_custom_citations_not_mistaken_for_status():
+    """Ensure a citations custom event is not also emitted as status."""
+    parts = [
+        {"type": "custom", "data": {"type": "citations", "citations": []}},
+        {"type": "custom", "data": {"msg": "thinking"}},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: citations" in out
+    assert b'event: status\ndata: {"msg": "thinking"}' in out

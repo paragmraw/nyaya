@@ -74,3 +74,30 @@ def test_as_log_dict_redacts_key(monkeypatch):
     assert "abcdef" not in redacted
     assert redacted.startswith("nvapi")
     assert redacted.endswith("890")
+
+
+def test_thinking_enabled_by_default(monkeypatch):
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    s = config.get_settings()
+    assert s.llm_enable_thinking is True
+
+
+def test_thinking_disabled_via_env(monkeypatch):
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    monkeypatch.setenv("CHAT_LLM_ENABLE_THINKING", "false")
+    s = config.get_settings()
+    assert s.llm_enable_thinking is False
+
+
+def test_thinking_in_log_dict(monkeypatch):
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    s = config.get_settings()
+    d = s.as_log_dict()
+    assert "llm_enable_thinking" in d
+    assert d["llm_enable_thinking"] is True

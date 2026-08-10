@@ -18,6 +18,10 @@ Environment variables
     Cap on generated tokens per turn.
 ``CHAT_LLM_TIMEOUT_S`` (optional, default 60)
     Per-invoke timeout for the NVIDIA API.
+``CHAT_LLM_ENABLE_THINKING`` (optional, default true)
+    Whether to enable Nemotron's thinking/reasoning mode
+    (``enable_thinking``). When true, the model emits a separate
+    ``reasoning_content`` channel that we stream as ``event: reasoning``.
 ``CHAT_MAX_MESSAGE_CHARS`` (optional, default 4000)
     Maximum length of a single user message.
 ``CHAT_MAX_HISTORY`` (optional, default 8)
@@ -76,6 +80,7 @@ class Settings(BaseSettings):
     llm_temperature: float = Field(default=0.1, alias="CHAT_LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=2048, alias="CHAT_LLM_MAX_TOKENS")
     llm_timeout_s: float = Field(default=60.0, alias="CHAT_LLM_TIMEOUT_S")
+    llm_enable_thinking: bool = Field(default=True, alias="CHAT_LLM_ENABLE_THINKING")
     max_message_chars: int = Field(default=4000, alias="CHAT_MAX_MESSAGE_CHARS")
     max_history: int = Field(default=8, alias="CHAT_MAX_HISTORY")
     log_level: str = Field(default="INFO", alias="NYAYA_CHAT_LOG_LEVEL")
@@ -109,6 +114,7 @@ class Settings(BaseSettings):
             "llm_temperature": self.llm_temperature,
             "llm_max_tokens": self.llm_max_tokens,
             "llm_timeout_s": self.llm_timeout_s,
+            "llm_enable_thinking": self.llm_enable_thinking,
             "max_message_chars": self.max_message_chars,
             "max_history": self.max_history,
             "nvidia_api_key": _redact(self.nvidia_api_key.get_secret_value()),

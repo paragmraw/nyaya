@@ -78,3 +78,76 @@ async def test_agent_runs_react_loop(fake_model, fake_tools):
     # final message is the model's answer
     assert any(getattr(m, "content", "").startswith("Punishment for murder") for m in out)
     assert fake_model.calls  # the model was invoked
+
+
+@pytest.mark.asyncio
+async def test_agent_has_synthesis_node(fake_model, fake_tools):
+    """The compiled graph should have a 'synthesis' node."""
+    from nyaya_chat import agent as agent_mod
+    graph, _tools = await agent_mod.build_agent()
+    assert "synthesis" in graph.nodes
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_produces_cited_answer(fake_model, fake_tools):
+    """The synthesis node should call with_structured_output and return a CitedAnswer."""
+    from langchain_core.messages import AIMessage
+    from nyaya_chat.schemas import CitedAnswer, StructuredCitation
+    fake_model.responses = [
+        AIMessage(content="Punishment for murder is death or life imprisonment."),
+    ]
+    fake_model._structured_result = CitedAnswer(
+        answer="Punishment for murder is death or life imprisonment.",
+        citations=[StructuredCitation(act="IPC", ref="s. 302")],
+        reasoning="IPC 302 defines murder punishment.",
+    )
+    from nyaya_chat.agent import _build_messages, build_agent
+    graph, _tools = await build_agent()
+    msgs = _build_messages("What is IPC 302?", [])
+    result = await graph.ainvoke({"messages": msgs})
+    assert "cited_answer" in result
+    assert result["cited_answer"] is not None
+    assert isinstance(result["cited_answer"], CitedAnswer)
+    assert len(result["cited_answer"].citations) == 1
+    assert result["cited_answer"].citations[0].act == "IPC"
+
+
+@pytest.mark.asyncio
+async def test_synthesis_fallback_on_none(fake_model, fake_tools):
+    """If structured output returns None, cited_answer should be None (graceful fallback)."""
+    from langchain_core.messages import AIMessage
+    fake_model.responses = [
+        AIMessage(content="Some answer without citations."),
+    ]
+    fake_model._structured_result = None
+    from nyaya_chat.agent import _build_messages, build_agent
+    graph, _tools = await build_agent()
+    msgs = _build_messages("What is IPC 302?", [])
+    result = await graph.ainvoke({"messages": msgs})
+    assert result.get("cited_answer") is None
+    # The raw answer should still be in messages
+    assert any(getattr(m, "content", "") == "Some answer without citations." for m in result["messages"])
+
+
+@pytest.mark.asyncio
+async def test_synthesis_fallback_on_exception(fake_model, fake_tools, monkeypatch):
+    """If structured output raises, cited_answer should be None (graceful fallback)."""
+    from langchain_core.messages import AIMessage
+    fake_model.responses = [
+        AIMessage(content="Some answer."),
+    ]
+    # Make with_structured_output's runnable raise on ainvoke
+    class _BoomRunnable:
+        def invoke(self, messages, **kw):
+            raise RuntimeError("structured output failed")
+        async def ainvoke(self, messages, **kw):
+            raise RuntimeError("structured output failed")
+    fake_model.with_structured_output = lambda schema, **kw: _BoomRunnable()
+    from nyaya_chat import agent as agent_mod
+    # Re-patch get_base_model since we overrode with_structured_output on fake_model
+    monkeypatch.setattr(agent_mod, "get_base_model", lambda _=None: fake_model, raising=False)
+    from nyaya_chat.agent import _build_messages, build_agent
+    graph, _tools = await build_agent()
+    msgs = _build_messages("What is IPC 302?", [])
+    result = await graph.ainvoke({"messages": msgs})
+    assert result.get("cited_answer") is None

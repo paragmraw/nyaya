@@ -469,6 +469,22 @@ pre.mcp-json .n { color: var(--fg); }
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
   background: color-mix(in oklch, #b3261e 70%, var(--muted));
 }
+/* Collapsible reasoning trace from Nemotron thinking mode. */
+.reasoning {
+  margin-top: 8px; font-size: 11px;
+}
+.reasoning summary {
+  cursor: pointer; color: var(--muted); font-family: var(--font-mono);
+  user-select: none; padding: 2px 0;
+}
+.reasoning summary:hover { color: var(--fg); }
+.reasoning-body {
+  margin-top: 4px; padding: 6px 10px; border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 3%, transparent);
+  border: 1px solid var(--border); color: var(--muted);
+  font-family: var(--font-mono); font-size: 10px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
 
 /* ─── home page split frame ─────────────────────────────────────── */
 .frame {
