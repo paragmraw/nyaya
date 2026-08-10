@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import BalanceIcon from "@mui/icons-material/Balance";
 import SourceCard from "@/components/SourceCard";
 import { FORMAT_CARDS, LIMITS, PIPE_STEPS } from "@/lib";
 
@@ -40,7 +41,7 @@ export default function CitationsPage() {
           <div className="annotated">
             <div className="answer-bubble">
               <div className="ab-head">
-                <span className="avatar">§</span>
+                <span className="avatar" aria-hidden="true"><BalanceIcon fontSize="small" /></span>
                 <span className="ab-title">Nyaya Assistant</span>
               </div>
               <p>

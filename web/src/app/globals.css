@@ -350,13 +350,19 @@ pre.mcp-json .n { color: var(--fg); }
 }
 .msg { display: flex; gap: 10px; max-width: 92%; }
 .msg .avatar {
-  width: 26px; height: 26px; border-radius: 5px; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
   display: grid; place-items: center;
-  font-family: var(--font-display); font-size: 15px; font-weight: 600;
+  font-family: var(--font-display); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--surface) 18%, transparent);
 }
 .msg.user { align-self: flex-end; flex-direction: row-reverse; }
 .msg.user .avatar { background: var(--fg); color: var(--surface); }
-.msg.bot .avatar { background: var(--accent-soft); color: var(--accent); }
+.msg.bot .avatar {
+  background: var(--accent);
+  color: var(--surface);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--surface) 22%, transparent), 0 1px 2px color-mix(in oklch, var(--accent) 25%, transparent);
+}
 .msg .bubble {
   background: var(--bg);
   border: 1px solid var(--border);

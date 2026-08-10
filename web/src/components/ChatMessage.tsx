@@ -1,5 +1,7 @@
 "use client";
 
+import PersonIcon from "@mui/icons-material/Person";
+import BalanceIcon from "@mui/icons-material/Balance";
 import CitationChip from "./CitationChip";
 import type { ChatMessage } from "@/lib";
 
@@ -12,8 +14,10 @@ import type { ChatMessage } from "@/lib";
 export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
   const isBot = msg.role === "assistant";
   return (
-    <div className={`msg ${msg.role}`}>
-      <div className="avatar" aria-hidden="true">{isBot ? "§" : "You"}</div>
+    <div className={`msg ${isBot ? "bot" : msg.role}`}>
+      <div className="avatar" aria-hidden="true">
+        {isBot ? <BalanceIcon fontSize="small" /> : <PersonIcon fontSize="small" />}
+      </div>
       <div className="bubble" data-error={msg.error ? "" : undefined}>
         {msg.content || (isBot && msg.status ? <span className="chat-status">{msg.status}…</span> : "")}
         {msg.error && <span className="chat-status" style={{ color: "#d44430" }}> — {msg.error}</span>}

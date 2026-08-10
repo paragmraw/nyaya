@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import BalanceIcon from "@mui/icons-material/Balance";
 import ChatComposer from "./ChatComposer";
 import ChatMessageView from "./ChatMessage";
 import { useChat } from "@/lib";
@@ -45,7 +46,7 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
       <div className="chat-body" id="chatBody" ref={bodyRef}>
         {showGreeting ? (
           <div className="msg bot">
-            <div className="avatar">§</div>
+            <div className="avatar" aria-hidden="true"><BalanceIcon fontSize="small" /></div>
             <div className="bubble">
               {GREETING}
               <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
