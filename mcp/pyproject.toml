@@ -28,7 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ingest = [
-    "datasets>=2.20,<4",
+    "datasets>=2.20,<6",
     "pypdf>=4.0,<5",
     "beautifulsoup4>=4.12,<5",
     "indianconstitution>=1.3,<2",
