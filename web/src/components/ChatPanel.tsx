@@ -73,21 +73,16 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
       </div>
 
       <div className="chat-foot">
-        <ChatComposer onSend={send} disabled={isStreaming || disabled} />
+        <ChatComposer
+          onSend={send}
+          onStop={cancel}
+          disabled={isStreaming || disabled}
+          isStreaming={isStreaming}
+        />
         <div className="composer-hint">
           <span className="status-dot" />
           Retrieval-grounded · not legal advice · verify citations before filing
           {error ? ` · ${error}` : ""}
-          {isStreaming ? " · " : ""}
-          {isStreaming && (
-            <button
-              type="button"
-              onClick={cancel}
-              className="cancel-btn"
-            >
-              cancel
-            </button>
-          )}
         </div>
       </div>
     </div>

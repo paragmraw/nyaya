@@ -20,7 +20,13 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
       </div>
       <div className="bubble" data-error={msg.error ? "" : undefined}>
         {msg.content || (isBot && msg.status ? <span className="chat-status">{msg.status}…</span> : "")}
-        {msg.error && <span className="chat-status" style={{ color: "#d44430" }}> — {msg.error}</span>}
+        {isBot && !msg.content && !msg.status && msg.error && (
+          <span className="chat-status chat-halted" aria-label="response halted">
+            <span className="halt-dot" aria-hidden="true" />
+            Stopped — no response was generated.
+          </span>
+        )}
+        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}> — {msg.error}</span>}
 
         {isBot && msg.tools.length > 0 && (
           <div className="tools" aria-label="Tool calls">
