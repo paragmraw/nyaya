@@ -136,7 +136,7 @@ export function useChat(): UseChat {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, tools: [...m.tools.filter((t) => t.id !== ev.id || ev.state === "result"), ev] }
+              ? { ...m, tools: [...m.tools.filter((t) => t.id !== ev.id), ev] }
               : m,
           ),
         );

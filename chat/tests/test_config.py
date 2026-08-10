@@ -11,7 +11,7 @@ def test_defaults(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
     s = config.get_settings()
     assert s.mcp_url == "http://localhost:8000/mcp"
-    assert s.llm_model == "nvidia/nemotron-3-ultra-550b-a55b"
+    assert s.llm_model == "nvidia/nemotron-3-super-120b-a12b"
     assert s.llm_temperature == 0.1
     assert s.llm_max_tokens == 2048
     assert s.max_history == 8

@@ -11,7 +11,7 @@ Environment variables
     points at the same origin; for local dev it's ``http://localhost:8000/mcp``.
     In Docker, use ``http://localhost:8000/mcp`` (or the service name in Docker Compose).
 ``CHAT_LLM_MODEL`` (optional)
-    NVIDIA model id. Default: ``nvidia/nemotron-3-ultra-550b-a55b``.
+    NVIDIA model id. Default: ``nvidia/nemotron-3-super-120b-a12b``.
 ``CHAT_LLM_TEMPERATURE`` (optional, default 0.1)
     Sampling temperature for the chat model.
 ``CHAT_LLM_MAX_TOKENS`` (optional, default 2048)
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
 
     nvidia_api_key: SecretStr = Field(..., alias="NVIDIA_API_KEY")
     mcp_url: str = Field(default="http://localhost:8000/mcp", alias="NYAYA_MCP_URL")
-    llm_model: str = Field(default="nvidia/nemotron-3-ultra-550b-a55b", alias="CHAT_LLM_MODEL")
+    llm_model: str = Field(default="nvidia/nemotron-3-super-120b-a12b", alias="CHAT_LLM_MODEL")
     llm_temperature: float = Field(default=0.1, alias="CHAT_LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=2048, alias="CHAT_LLM_MAX_TOKENS")
     llm_timeout_s: float = Field(default=60.0, alias="CHAT_LLM_TIMEOUT_S")

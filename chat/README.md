@@ -26,7 +26,7 @@ request-id, rate limiting, body-size cap) is provided by the host.
 - **Tools**: the agent calls the nyaya MCP server over streamable HTTP via
   `langchain-mcp-adapters`. In the same-process deploy, `NYAYA_MCP_URL`
   points at the same origin's `/mcp`.
-- **LLM**: `ChatNVIDIA(model="nvidia/nemotron-3-ultra-550b-a55b")`, reads
+- **LLM**: `ChatNVIDIA(model="nvidia/nemotron-3-super-120b-a12b")`, reads
   `NVIDIA_API_KEY` from the environment.
 - **Streaming**: LangGraph v2 `messages` + `custom` stream modes -> typed SSE
   events (`token`, `tool_start`, `tool_result`, `status`, `done`, `error`).
@@ -61,7 +61,7 @@ See `.env.example`. Required: `NVIDIA_API_KEY`. Optional: `NYAYA_MCP_URL`,
 
 ### `GET /chat/health`
 ```json
-{"status":"healthy","model":"nvidia/nemotron-3-ultra-550b-a55b","tools_loaded":9}
+{"status":"healthy","model":"nvidia/nemotron-3-super-120b-a12b","tools_loaded":9}
 ```
 
 ### `POST /chat/turn`
