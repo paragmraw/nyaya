@@ -18,11 +18,13 @@ interface ChatPanelProps {
 }
 
 export default function ChatPanel({ disabled = false }: ChatPanelProps) {
-  const { messages, isStreaming, error, send, cancel } = useChat();
+  const { messages, isStreaming, error, send, cancel, reset } = useChat();
   const bodyRef = useRef<HTMLDivElement>(null);
   // Show the greeting until the first user message is sent (pure derivation,
   // no extra state needed).
   const showGreeting = !messages.some((m) => m.role === "user");
+  // The new-chat action only makes sense once a conversation has started.
+  const canReset = messages.length > 0 || !!error;
 
   // Auto-scroll to the latest message as tokens stream in.
   useEffect(() => {
@@ -40,6 +42,19 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
         <div className="ch-meta">
           <span className="pill">{isStreaming ? "Streaming…" : disabled ? "Disabled" : "Online"}</span>
           <span className="tag">Citations on</span>
+          <button
+            type="button"
+            className="new-chat-btn"
+            onClick={reset}
+            disabled={isStreaming || !canReset}
+            aria-label="Start a new chat"
+            title="Start a new chat"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            New chat
+          </button>
         </div>
       </div>
 
