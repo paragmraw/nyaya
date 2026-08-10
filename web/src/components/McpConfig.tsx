@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Variant = "promo" | "block";
 
@@ -50,13 +50,14 @@ const CopyIcon = () => (
 );
 
 export default function McpConfig({ variant = "promo" }: { variant?: Variant }) {
-  // Read window.location.origin once, lazily — avoids setState-in-effect
-  // (the new react-hooks/set-state-in-effect rule) and skips an extra render.
-  // SSR renders with the placeholder; the client hydrates with the real
-  // origin. Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
-  const [origin] = useState<string | null>(() =>
-    typeof window !== "undefined" ? window.location.origin : null,
-  );
+  // Render with the placeholder on the first client render (matches SSR
+  // output) to avoid hydration mismatches, then update to the real
+  // window.location.origin in a useEffect after hydration completes.
+  // Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
+  const [origin, setOrigin] = useState<string | null>(null);
+  useEffect(() => {
+    setOrigin(typeof window !== "undefined" ? window.location.origin : null);
+  }, []);
   const [copied, setCopied] = useState(false);
 
   // In production, fail-closed if the origin is not HTTPS (prevent the user
