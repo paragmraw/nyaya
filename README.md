@@ -31,10 +31,10 @@ A single Railway service serves the SPA, the REST API, the MCP endpoint, and the
 
 ## Local development
 
-- **MCP + REST + Chat**: `cd mcp && uv venv && uv pip install -e ".[dev]" && uv pip install -e ../chat && nyaya` → uvicorn on `:8000`. The chat sub-app mounts at `/chat` automatically when `NVIDIA_API_KEY` is set (Swagger UI at `http://localhost:8000/chat/docs`). Set `NYAYA_MCP_URL=http://localhost:8000/mcp` so the agent calls the same-process MCP server.
+- **MCP + REST + Chat**: `cd mcp && uv venv && uv pip install -e ".[dev]" && uv pip install -e ../chat && nyaya` → uvicorn on `:8000`. The chat sub-app mounts at `/chat` automatically when `NVIDIA_API_KEY` is set (Swagger UI at `http://localhost:8000/chat/docs`). The agent calls the same-process MCP server at `http://localhost:8000/mcp` (configured in `chat/nyaya_chat/config.py`).
 - **SPA (HMR)**: `cd web && npm run dev` → Next dev server on `:3000`. `next.config.mjs` rewrites `/api/*`, `/mcp`, and `/chat/*` to `localhost:8000`.
 - **Build check**: `cd web && npx eslint . && npm run build` → produces `web/out/`.
-- **Serve the production bundle locally**: `NYAYA_WEB_OUT=web/out` `python -m nyaya.server` from `mcp/` → visit `http://localhost:8000/`.
+- **Serve the production bundle locally**: `python -m nyaya.server` from `mcp/` → visit `http://localhost:8000/`.
 - **Python tests / lint**:
   - `cd mcp && pytest` and `ruff check .` (chat tests run here too via the installed package)
   - `cd chat && pytest` and `ruff check .` (chat package's own unit tests)

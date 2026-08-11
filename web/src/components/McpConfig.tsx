@@ -54,7 +54,6 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
   // output) to avoid hydration mismatches, then update to the real
   // window.location.origin on the client. useSyncExternalStore gives us a
   // stable client-only read without a cascading setState-in-effect render.
-  // Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
   const origin = useSyncExternalStore(
     () => () => {},
     () => window.location.origin,
@@ -65,7 +64,7 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
   // In production, fail-closed if the origin is not HTTPS (prevent the user
   // from connecting their editor to an insecure MCP endpoint).
   const json = useMemo(() => {
-    const fallback = process.env.NEXT_PUBLIC_MCP_URL ?? "https://nyaya.example";
+    const fallback = "https://nyaya.example";
     const effectiveOrigin = origin ?? fallback;
     if (
       process.env.NODE_ENV === "production" &&

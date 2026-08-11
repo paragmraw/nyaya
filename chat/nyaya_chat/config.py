@@ -1,63 +1,59 @@
-"""Runtime configuration for nyaya-chat, loaded from environment variables.
+"""Runtime configuration for nyaya-chat.
 
-Environment variables
----------------------
+Only one environment variable is read:
+
 ``NVIDIA_API_KEY`` (required)
     NVIDIA API Catalog key (``nvapi-...``). Used to call Nemotron models on
     ``integrate.api.nvidia.com``.
-``NYAYA_MCP_URL`` (optional, default ``http://localhost:8000/mcp``)
-    URL of the nyaya MCP server the agent calls for corpus retrieval. When
-    mounted in the same process as the MCP server (the default deploy), this
-    points at the same origin; for local dev it's ``http://localhost:8000/mcp``.
-    In Docker, use ``http://localhost:8000/mcp`` (or the service name in Docker Compose).
-``CHAT_LLM_MODEL`` (optional, default ``nvidia/nemotron-3.5-lightning-30b-a3b``)
-    Fallback NVIDIA model id for degraded mode (no tools).
-``CHAT_SUPERVISOR_MODEL`` (optional, default ``nvidia/nemotron-3.5-lightning-30b-a3b``)
-    Model for the supervisor phase (plans tool calls, short output).
-``CHAT_SYNTHESIS_MODEL`` (optional, default ``nvidia/nemotron-3.5-lightning-30b-a3b``)
-    Model for the synthesis phase (composes the final grounded answer).
-``CHAT_LLM_TEMPERATURE`` (optional, default 0.1)
-    Sampling temperature for the chat model.
-``CHAT_LLM_MAX_TOKENS`` (optional, default 2048)
-    Cap on generated tokens per turn (fallback/degraded mode).
-``CHAT_LLM_TIMEOUT_S`` (optional, default 60)
-    Per-invoke timeout for the NVIDIA API.
-``CHAT_LLM_MAX_RETRIES`` (optional, default 4)
-    Maximum retry attempts for NVIDIA API calls on rate-limit/transient
-    errors. Uses exponential backoff with jitter.
-``CHAT_MAX_MESSAGE_CHARS`` (optional, default 4000)
-    Maximum length of a single user message.
-``CHAT_MAX_HISTORY`` (optional, default 8)
-    Maximum number of prior (role, content) turns the client may send for
-    context. Older turns are dropped server-side.
-``CHAT_TOOLS`` (optional, comma-separated)
-    Allowlist of MCP tool names to expose to the agent. Empty/unset exposes
-    the curated default set (see ``DEFAULT_TOOLS``).
-``CHAT_SUPERVISOR_MAX_TOKENS`` (optional, default 512)
-    Token cap for the supervisor model — it plans and delegates, so a short
-    output suffices.
-``CHAT_SYNTHESIS_MAX_TOKENS`` (optional, default 4096)
-    Token cap for the synthesis model — it composes the final grounded answer.
-``NYAYA_CHAT_LOG_LEVEL`` (optional, default INFO)
-    Logging level for the chat logger.
+
+Everything else is a Python constant in this module. Edit this file to tune
+the MCP server URL, LLM models, temperatures, token caps, message limits,
+tool allowlist, or the chat log level.
 """
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
 from functools import lru_cache
-from pathlib import Path
 
-from dotenv import load_dotenv
-from pydantic import Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import SecretStr
 
-# Load .env from the repo root so `cd chat && python -m nyaya_chat.server`
-# picks up the same vars as the mcp server.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(_REPO_ROOT / ".env")
+# ---------------------------------------------------------------------------
+# Tunable constants (edit here; no env vars).
+# ---------------------------------------------------------------------------
+
+# URL of the nyaya MCP server the agent calls for corpus retrieval. When
+# mounted in the same process as the MCP server (the default deploy), this
+# points at the same origin; for local dev it's http://localhost:8000/mcp.
+MCP_URL = "http://localhost:8000/mcp"
+
+_LIGHTNING = "nvidia/nemotron-3.5-lightning-30b-a3b"
+
+# LLM model ids.
+LLM_MODEL = _LIGHTNING            # fallback for degraded mode (no tools)
+SUPERVISOR_MODEL = _LIGHTNING     # plans tool calls, short output
+SYNTHESIS_MODEL = _LIGHTNING      # composes the final grounded answer
+
+# LLM tuning.
+LLM_TEMPERATURE = 0.1
+LLM_MAX_TOKENS = 2048             # cap per turn in degraded mode
+LLM_TIMEOUT_S = 60.0              # per-invoke timeout for the NVIDIA API
+LLM_MAX_RETRIES = 4               # retries on 429/5xx with exponential backoff
+
+# Per-phase token caps.
+SUPERVISOR_MAX_TOKENS = 512       # supervisor plans and delegates; short output
+SYNTHESIS_MAX_TOKENS = 4096       # synthesis composes the final answer
+
+# Message constraints.
+MAX_MESSAGE_CHARS = 4000          # max length of a single user message
+MAX_HISTORY = 8                   # max prior (role, content) turns the client may send
+
+# Chat logger level.
+LOG_LEVEL = "INFO"
 
 # Curated default tool set. The nyaya MCP server exposes 24 tools; we expose
-# the ones most useful for grounded Q&A. Override via CHAT_TOOLS (comma-sep).
+# the ones most useful for grounded Q&A.
 DEFAULT_TOOLS: tuple[str, ...] = (
     "hybrid_search",
     "search_law",
@@ -70,8 +66,6 @@ DEFAULT_TOOLS: tuple[str, ...] = (
     "corpus_stats",
 )
 
-_LIGHTNING = "nvidia/nemotron-3.5-lightning-30b-a3b"
-
 
 def _redact(secret: str | None) -> str | None:
     if not secret:
@@ -81,46 +75,32 @@ def _redact(secret: str | None) -> str | None:
     return f"{secret[:5]}…{secret[-3:]}"
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="", env_file=None, extra="ignore")
-
-    nvidia_api_key: SecretStr = Field(..., alias="NVIDIA_API_KEY")
-    mcp_url: str = Field(default="http://localhost:8000/mcp", alias="NYAYA_MCP_URL")
-    llm_model: str = Field(default=_LIGHTNING, alias="CHAT_LLM_MODEL")
-    supervisor_model: str = Field(default=_LIGHTNING, alias="CHAT_SUPERVISOR_MODEL")
-    synthesis_model: str = Field(default=_LIGHTNING, alias="CHAT_SYNTHESIS_MODEL")
-    llm_temperature: float = Field(default=0.1, alias="CHAT_LLM_TEMPERATURE")
-    llm_max_tokens: int = Field(default=2048, alias="CHAT_LLM_MAX_TOKENS")
-    llm_timeout_s: float = Field(default=60.0, alias="CHAT_LLM_TIMEOUT_S")
-    llm_max_retries: int = Field(default=4, alias="CHAT_LLM_MAX_RETRIES")
-    max_message_chars: int = Field(default=4000, alias="CHAT_MAX_MESSAGE_CHARS")
-    max_history: int = Field(default=8, alias="CHAT_MAX_HISTORY")
-    log_level: str = Field(default="INFO", alias="NYAYA_CHAT_LOG_LEVEL")
-
-    tools: str = Field(default="", alias="CHAT_TOOLS")
-
-    supervisor_max_tokens: int = Field(default=512, alias="CHAT_SUPERVISOR_MAX_TOKENS")
-    synthesis_max_tokens: int = Field(default=4096, alias="CHAT_SYNTHESIS_MAX_TOKENS")
-
-    @field_validator("mcp_url")
-    @classmethod
-    def _validate_mcp_url(cls, v: str) -> str:
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("NYAYA_MCP_URL must start with http:// or https://")
-        return v.rstrip("/")
+@dataclass(frozen=True)
+class Settings:
+    nvidia_api_key: SecretStr
+    mcp_url: str = MCP_URL
+    llm_model: str = LLM_MODEL
+    supervisor_model: str = SUPERVISOR_MODEL
+    synthesis_model: str = SYNTHESIS_MODEL
+    llm_temperature: float = LLM_TEMPERATURE
+    llm_max_tokens: int = LLM_MAX_TOKENS
+    llm_timeout_s: float = LLM_TIMEOUT_S
+    llm_max_retries: int = LLM_MAX_RETRIES
+    max_message_chars: int = MAX_MESSAGE_CHARS
+    max_history: int = MAX_HISTORY
+    log_level: str = LOG_LEVEL
+    supervisor_max_tokens: int = SUPERVISOR_MAX_TOKENS
+    synthesis_max_tokens: int = SYNTHESIS_MAX_TOKENS
 
     @property
     def tool_allowlist(self) -> tuple[str, ...]:
-        """Parse the CHAT_TOOLS env var into a tool allowlist.
+        """The curated default tool set exposed to the agent."""
+        return DEFAULT_TOOLS
 
-        Empty/unset falls back to the curated default set. Otherwise the value
-        is split on commas and trimmed.
-        """
-        raw = self.tools.strip()
-        if not raw:
-            return DEFAULT_TOOLS
-        parts = tuple(t.strip() for t in raw.split(",") if t.strip())
-        return parts or DEFAULT_TOOLS
+    @property
+    def tools(self) -> str:
+        """Comma-join of the allowlist (kept for log-dict compatibility)."""
+        return ",".join(self.tool_allowlist)
 
     def as_log_dict(self) -> dict[str, object]:
         return {
@@ -142,14 +122,24 @@ class Settings(BaseSettings):
         }
 
 
+def _required_env(name: str) -> str:
+    val = os.environ.get(name)
+    if not val:
+        raise RuntimeError(
+            f"Required environment variable {name!r} is not set. "
+            "Copy .env.example to .env and fill in the values."
+        )
+    return val
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Return the process-wide Settings instance.
 
-    Raises pydantic ValidationError if required env vars are missing.
-    Tests should call ``get_settings.cache_clear()`` after monkeypatching env.
+    Raises RuntimeError if ``NVIDIA_API_KEY`` is missing.
+    Tests should call ``reset_settings_cache()`` after monkeypatching env.
     """
-    return Settings()  # type: ignore[call-arg]
+    return Settings(nvidia_api_key=SecretStr(_required_env("NVIDIA_API_KEY")))
 
 
 def reset_settings_cache() -> None:

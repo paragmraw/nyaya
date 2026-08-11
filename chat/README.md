@@ -25,18 +25,18 @@ request-id, rate limiting, body-size cap) is provided by the host.
   anything. The model emits citations inline as `[[act: X, ref: Y]]` markers,
   which the frontend parses into chips.
 - **Tools**: the agent calls the nyaya MCP server over streamable HTTP via
-  `langchain-mcp-adapters`. In the same-process deploy, `NYAYA_MCP_URL`
-  points at the same origin's `/mcp`.
-- **LLM**: `ChatNVIDIA(model="nvidia/nemotron-3-super-120b-a12b")`, reads
-  `NVIDIA_API_KEY` from the environment. Thinking mode is on by default so
-  reasoning tokens stream as a separate `event: reasoning` SSE channel.
+  `langchain-mcp-adapters`. In the same-process deploy, `MCP_URL` in
+  `chat/nyaya_chat/config.py` points at the same origin's `/mcp`.
+- **LLM**: `ChatNVIDIA`, reads `NVIDIA_API_KEY` from the environment. Thinking
+  mode is on by default so reasoning tokens stream as a separate
+  `event: reasoning` SSE channel.
 - **Streaming**: LangGraph v2 `messages` stream mode -> typed SSE events
   (`token`, `reasoning`, `tool_start`, `tool_result`, `status`, `done`,
   `error`).
 - **Protection**: a tighter per-IP rate limit on `POST /chat/*`
-  (`NYAYA_RATE_CHAT_PER_MIN`, default 15/min) applied by the host's
-  `RateLimitMiddleware`. No auth (same model as the MCP server - behind a
-  reverse proxy).
+  (`RATE_CHAT_PER_MIN`, default 15/min, hardcoded in `mcp/nyaya/config.py`)
+  applied by the host's `RateLimitMiddleware`. No auth (same model as the
+  MCP server - behind a reverse proxy).
 
 ## Quickstart (standalone dev)
 
@@ -48,17 +48,17 @@ uv pip install -e ".[dev]"
 # .env at the repo root (shared with mcp/) must set NVIDIA_API_KEY and DATABASE_URL.
 # Start the nyaya MCP server first (provides the corpus):
 cd ../mcp && uv pip install -e ../chat && nyaya &
-
 # The chat sub-app is mounted automatically when NVIDIA_API_KEY is set.
-# Set NYAYA_MCP_URL so the agent reaches the MCP server:
-export NYAYA_MCP_URL=http://localhost:8000/mcp
+# The agent calls the MCP server at http://localhost:8000/mcp (MCP_URL in
+# chat/nyaya_chat/config.py).
 # -> http://localhost:8000/chat  (Swagger UI at /chat/docs)
 ```
 
 ## Environment
 
-See `.env.example`. Required: `NVIDIA_API_KEY`. Optional: `NYAYA_MCP_URL`,
-`CHAT_LLM_MODEL`, `CHAT_TOOLS`.
+Only `NVIDIA_API_KEY` is required (env var). All other tuning (MCP URL, LLM
+models, temperatures, token caps, message limits, tool allowlist, log level)
+lives as Python constants in `chat/nyaya_chat/config.py`.
 
 ## API
 

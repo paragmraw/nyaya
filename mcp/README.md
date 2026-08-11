@@ -134,8 +134,9 @@ In the Railway dashboard → **Variables**, set:
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | Supabase/Postgres connection string |
+| `NVIDIA_API_KEY` | NVIDIA API Catalog key (required to mount the chat sub-app) |
 
-`PORT` is set automatically by Railway (defaults to `8000`).
+`PORT` is set automatically by Railway (defaults to `8000`). All other tuning (pool sizing, rate limits, log level, embedding model, chat LLM models) lives as Python constants in `mcp/nyaya/config.py` and `chat/nyaya_chat/config.py`.
 
 ### 3. Run ingestion (one-time)
 

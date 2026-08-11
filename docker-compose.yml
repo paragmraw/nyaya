@@ -12,9 +12,6 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
-      - NYAYA_MCP_URL=http://localhost:8000/mcp
-      - NYAYA_RATE_MCP_PER_MIN=200
-      - NYAYA_RATE_CHAT_PER_MIN=15
     restart: unless-stopped
     # Hardening: read-only root, no-new-privileges, drop all caps, cap PIDs/mem.
     read_only: true

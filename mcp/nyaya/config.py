@@ -1,22 +1,15 @@
-"""Runtime configuration from environment variables.
+"""Runtime configuration for nyaya.
 
-Environment variables
----------------------
+Only two environment variables are read:
+
 ``DATABASE_URL`` (required)
     Postgres/Supabase connection string.
 ``PORT`` (optional, default 8000)
-    HTTP port for the uvicorn server.
-``NYAYA_POOL_MIN`` / ``NYAYA_POOL_MAX`` (optional, defaults 1 / 8)
-    Connection-pool size bounds for the read layer.
-``NYAYA_POOL_TIMEOUT`` (optional, default 3.0 seconds)
-    Seconds to wait when acquiring a pooled connection before failing.
-``NYAYA_STATEMENT_TIMEOUT`` (optional, default 15000 ms)
-    Postgres ``statement_timeout`` applied to each pooled connection.
-``NYAYA_LOG_LEVEL`` (optional, default INFO)
-    Logging level for the root logger.
-``NYAYA_EMBEDDING_MODEL`` (optional)
-    Override the fastembed model name (default BAAI/bge-large-en-v1.5).
-    Must produce 1024-d vectors to match the schema.
+    HTTP port for the uvicorn server. Railway injects this automatically.
+
+Everything else is a Python constant in this module. Edit this file to tune
+pool sizing, statement timeouts, log level, embedding model, rate limits,
+or the Redis URL.
 """
 
 from __future__ import annotations
@@ -26,11 +19,47 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from dotenv import load_dotenv
-
 from .exceptions import ConfigurationError
 
-load_dotenv()
+# ---------------------------------------------------------------------------
+# Tunable constants (edit here; no env vars).
+# ---------------------------------------------------------------------------
+
+PORT_DEFAULT = 8000
+
+# Connection-pool size bounds for the read layer.
+POOL_MIN = 1
+POOL_MAX = 8
+# Seconds to wait when acquiring a pooled connection before failing.
+POOL_TIMEOUT = 3.0
+
+# Postgres ``statement_timeout`` applied to each pooled connection (ms).
+# 0 disables. Protects against slow ts_headline calls over very large
+# judgment text. Default: 15000 (15s).
+STATEMENT_TIMEOUT_MS = 15000
+
+# Root log level (DEBUG, INFO, WARNING, ERROR).
+LOG_LEVEL = "INFO"
+
+# fastembed model name. Must produce 1024-d vectors to match the schema.
+EMBEDDING_MODEL = "BAAI/bge-large-en-v1.5"
+
+# Redis connection string for distributed rate limiting. When set,
+# rate-limit counters are shared across all workers for strict global
+# limits. When None, rate limiting falls back to in-memory (single-worker
+# only). Set to a "redis://..." URL to enable.
+REDIS_URL: str | None = None
+
+# Directory containing the built Next.js static export, served at / by
+# Starlette StaticFiles. Relative to the process CWD.
+WEB_OUT = "web/out"
+
+# Rate-limit thresholds (requests-per-minute per client IP).
+RATE_READ_PER_MIN = 120
+RATE_MCP_PER_MIN = 30
+RATE_CHAT_PER_MIN = 15
+# Maximum request body size in bytes (1 MB).
+RATE_BODY_MAX_BYTES = 1_048_576
 
 
 def _required(name: str) -> str:
@@ -41,26 +70,6 @@ def _required(name: str) -> str:
             "Copy .env.example to .env and fill in the values."
         )
     return val
-
-
-def _int_env(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        raise ConfigurationError(f"{name!r} must be an integer, got {raw!r}") from None
-
-
-def _float_env(name: str, default: float) -> float:
-    raw = os.environ.get(name)
-    if raw is None or raw == "":
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        raise ConfigurationError(f"{name!r} must be a number, got {raw!r}") from None
 
 
 def _redact_url(url: str) -> str:
@@ -112,61 +121,43 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    port_raw = os.environ.get("PORT", "8000")
+    port_raw = os.environ.get("PORT", str(PORT_DEFAULT))
     try:
         port = int(port_raw)
     except ValueError:
         raise ConfigurationError(f"PORT must be an integer, got {port_raw!r}") from None
 
     if not 1 <= port <= 65535:
-        raise ConfigurationError(f"PORT must be in range 1-65535, got {port}")
+        raise ConfigurationError(f"PORT must be in range 1-65535, got {port}") from None
 
-    pool_min = _int_env("NYAYA_POOL_MIN", 1)
-    pool_max = _int_env("NYAYA_POOL_MAX", 8)
-    if pool_min > pool_max:
+    if POOL_MIN > POOL_MAX:
         raise ConfigurationError(
-            f"NYAYA_POOL_MIN ({pool_min}) must be <= NYAYA_POOL_MAX ({pool_max})"
+            f"POOL_MIN ({POOL_MIN}) must be <= POOL_MAX ({POOL_MAX})"
         )
-
-    redis_url = os.environ.get("REDIS_URL") or None
 
     return Settings(
         database_url=_required("DATABASE_URL"),
         port=port,
-        pool_min=pool_min,
-        pool_max=pool_max,
-        pool_timeout=_float_env("NYAYA_POOL_TIMEOUT", 3.0),
-        statement_timeout_ms=_int_env("NYAYA_STATEMENT_TIMEOUT", 15000),
-        log_level=os.environ.get("NYAYA_LOG_LEVEL", "INFO"),
-        embedding_model=os.environ.get("NYAYA_EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5"),
-        redis_url=redis_url,
+        pool_min=POOL_MIN,
+        pool_max=POOL_MAX,
+        pool_timeout=POOL_TIMEOUT,
+        statement_timeout_ms=STATEMENT_TIMEOUT_MS,
+        log_level=LOG_LEVEL,
+        embedding_model=EMBEDDING_MODEL,
+        redis_url=REDIS_URL,
     )
 
 
 @dataclass(frozen=True)
 class RateLimitSettings:
-    """Rate-limit configuration.
+    """Rate-limit configuration (requests-per-minute per client IP)."""
 
-    All rates are requests-per-minute per client IP. Override via env vars
-    for testing or production tuning.
-    """
-
-    # Read tools (get_section, search_law, etc.): generous for a public corpus.
-    read_per_min: int = 120
-    # MCP POSTs (all tool calls go through /mcp): stricter for embedding tools.
-    embedding_per_min: int = 30
-    # Chat turns (POST /chat/*): each triggers one or more NVIDIA LLM calls
-    # plus several MCP round-trips, so this is much tighter than reads.
-    chat_per_min: int = 15
-    # Maximum request body size in bytes (1 MB).
-    body_size_max_bytes: int = 1_048_576
+    read_per_min: int = RATE_READ_PER_MIN
+    embedding_per_min: int = RATE_MCP_PER_MIN
+    chat_per_min: int = RATE_CHAT_PER_MIN
+    body_size_max_bytes: int = RATE_BODY_MAX_BYTES
 
 
 @lru_cache(maxsize=1)
 def get_rate_limit_settings() -> RateLimitSettings:
-    return RateLimitSettings(
-        read_per_min=_int_env("NYAYA_RATE_READ_PER_MIN", 120),
-        embedding_per_min=_int_env("NYAYA_RATE_MCP_PER_MIN", 30),
-        chat_per_min=_int_env("NYAYA_RATE_CHAT_PER_MIN", 15),
-        body_size_max_bytes=_int_env("NYAYA_RATE_BODY_MAX_BYTES", 1_048_576),
-    )
+    return RateLimitSettings()

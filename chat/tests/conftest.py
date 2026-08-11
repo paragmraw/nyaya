@@ -10,8 +10,6 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 os.environ.setdefault("NVIDIA_API_KEY", "nvapi-test-key-1234567890")
-os.environ.setdefault("NYAYA_MCP_URL", "http://localhost:8000/mcp")
-os.environ.setdefault("PORT", "8001")
 
 
 @pytest.fixture(autouse=True)

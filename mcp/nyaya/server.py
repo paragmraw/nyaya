@@ -15,6 +15,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from . import config as _config
 from . import db
 from .config import get_settings
 from .exceptions import DatabaseUnavailable
@@ -148,7 +149,7 @@ _maybe_mount_chat()
 # the SPA, REST, and MCP endpoints share one domain and one healthcheck. The
 # mount is optional: local nyaya dev without a built SPA still works — the
 # route simply 404s. In the Railway image the Dockerfile copies web/out/ here.
-_WEB_OUT = os.environ.get("NYAYA_WEB_OUT", "web/out")
+_WEB_OUT = _config.WEB_OUT
 if os.path.isdir(_WEB_OUT):
     from starlette.staticfiles import StaticFiles  # noqa: E402
 
