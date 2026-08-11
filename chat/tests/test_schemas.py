@@ -48,6 +48,6 @@ def test_invalid_history_role_rejected():
 
 def test_health_response():
     from nyaya_chat.schemas import ChatSubHealthResponse
-    h = ChatSubHealthResponse(status="healthy", model="nvidia/nemotron-3-super-120b-a12b", tools_loaded=9)
+    h = ChatSubHealthResponse(status="healthy", model="nvidia/nemotron-3.5-lightning-30b-a3b", tools_loaded=9)
     assert h.status == "healthy"
     assert h.tools_loaded == 9

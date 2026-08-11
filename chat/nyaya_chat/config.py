@@ -10,18 +10,21 @@ Environment variables
     mounted in the same process as the MCP server (the default deploy), this
     points at the same origin; for local dev it's ``http://localhost:8000/mcp``.
     In Docker, use ``http://localhost:8000/mcp`` (or the service name in Docker Compose).
-``CHAT_LLM_MODEL`` (optional)
-    NVIDIA model id. Default: ``nvidia/nemotron-3-super-120b-a12b``.
+``CHAT_LLM_MODEL`` (optional, default ``nvidia/nemotron-3.5-lightning-30b-a3b``)
+    Fallback NVIDIA model id for degraded mode (no tools).
+``CHAT_SUPERVISOR_MODEL`` (optional, default ``nvidia/nemotron-3.5-lightning-30b-a3b``)
+    Model for the supervisor phase (plans tool calls, short output).
+``CHAT_SYNTHESIS_MODEL`` (optional, default ``nvidia/nemotron-3.5-lightning-30b-a3b``)
+    Model for the synthesis phase (composes the final grounded answer).
 ``CHAT_LLM_TEMPERATURE`` (optional, default 0.1)
     Sampling temperature for the chat model.
 ``CHAT_LLM_MAX_TOKENS`` (optional, default 2048)
-    Cap on generated tokens per turn.
+    Cap on generated tokens per turn (fallback/degraded mode).
 ``CHAT_LLM_TIMEOUT_S`` (optional, default 60)
     Per-invoke timeout for the NVIDIA API.
-``CHAT_LLM_ENABLE_THINKING`` (optional, default true)
-    Whether to enable Nemotron's thinking/reasoning mode
-    (``enable_thinking``). When true, the model emits a separate
-    ``reasoning_content`` channel that we stream as ``event: reasoning``.
+``CHAT_LLM_MAX_RETRIES`` (optional, default 4)
+    Maximum retry attempts for NVIDIA API calls on rate-limit/transient
+    errors. Uses exponential backoff with jitter.
 ``CHAT_MAX_MESSAGE_CHARS`` (optional, default 4000)
     Maximum length of a single user message.
 ``CHAT_MAX_HISTORY`` (optional, default 8)
@@ -30,6 +33,11 @@ Environment variables
 ``CHAT_TOOLS`` (optional, comma-separated)
     Allowlist of MCP tool names to expose to the agent. Empty/unset exposes
     the curated default set (see ``DEFAULT_TOOLS``).
+``CHAT_SUPERVISOR_MAX_TOKENS`` (optional, default 512)
+    Token cap for the supervisor model — it plans and delegates, so a short
+    output suffices.
+``CHAT_SYNTHESIS_MAX_TOKENS`` (optional, default 4096)
+    Token cap for the synthesis model — it composes the final grounded answer.
 ``NYAYA_CHAT_LOG_LEVEL`` (optional, default INFO)
     Logging level for the chat logger.
 """
@@ -48,7 +56,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_REPO_ROOT / ".env")
 
-# Curated default tool set. The nyaya MCP server exposes 17 tools; we expose
+# Curated default tool set. The nyaya MCP server exposes 24 tools; we expose
 # the ones most useful for grounded Q&A. Override via CHAT_TOOLS (comma-sep).
 DEFAULT_TOOLS: tuple[str, ...] = (
     "hybrid_search",
@@ -61,6 +69,8 @@ DEFAULT_TOOLS: tuple[str, ...] = (
     "list_acts",
     "corpus_stats",
 )
+
+_LIGHTNING = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 
 def _redact(secret: str | None) -> str | None:
@@ -76,16 +86,21 @@ class Settings(BaseSettings):
 
     nvidia_api_key: SecretStr = Field(..., alias="NVIDIA_API_KEY")
     mcp_url: str = Field(default="http://localhost:8000/mcp", alias="NYAYA_MCP_URL")
-    llm_model: str = Field(default="nvidia/nemotron-3-super-120b-a12b", alias="CHAT_LLM_MODEL")
+    llm_model: str = Field(default=_LIGHTNING, alias="CHAT_LLM_MODEL")
+    supervisor_model: str = Field(default=_LIGHTNING, alias="CHAT_SUPERVISOR_MODEL")
+    synthesis_model: str = Field(default=_LIGHTNING, alias="CHAT_SYNTHESIS_MODEL")
     llm_temperature: float = Field(default=0.1, alias="CHAT_LLM_TEMPERATURE")
     llm_max_tokens: int = Field(default=2048, alias="CHAT_LLM_MAX_TOKENS")
     llm_timeout_s: float = Field(default=60.0, alias="CHAT_LLM_TIMEOUT_S")
-    llm_enable_thinking: bool = Field(default=True, alias="CHAT_LLM_ENABLE_THINKING")
+    llm_max_retries: int = Field(default=4, alias="CHAT_LLM_MAX_RETRIES")
     max_message_chars: int = Field(default=4000, alias="CHAT_MAX_MESSAGE_CHARS")
     max_history: int = Field(default=8, alias="CHAT_MAX_HISTORY")
     log_level: str = Field(default="INFO", alias="NYAYA_CHAT_LOG_LEVEL")
 
     tools: str = Field(default="", alias="CHAT_TOOLS")
+
+    supervisor_max_tokens: int = Field(default=512, alias="CHAT_SUPERVISOR_MAX_TOKENS")
+    synthesis_max_tokens: int = Field(default=4096, alias="CHAT_SYNTHESIS_MAX_TOKENS")
 
     @field_validator("mcp_url")
     @classmethod
@@ -111,14 +126,18 @@ class Settings(BaseSettings):
         return {
             "mcp_url": self.mcp_url,
             "llm_model": self.llm_model,
+            "supervisor_model": self.supervisor_model,
+            "synthesis_model": self.synthesis_model,
             "llm_temperature": self.llm_temperature,
             "llm_max_tokens": self.llm_max_tokens,
             "llm_timeout_s": self.llm_timeout_s,
-            "llm_enable_thinking": self.llm_enable_thinking,
+            "llm_max_retries": self.llm_max_retries,
             "max_message_chars": self.max_message_chars,
             "max_history": self.max_history,
             "nvidia_api_key": _redact(self.nvidia_api_key.get_secret_value()),
             "tools": list(self.tool_allowlist),
+            "supervisor_max_tokens": self.supervisor_max_tokens,
+            "synthesis_max_tokens": self.synthesis_max_tokens,
             "log_level": self.log_level,
         }
 

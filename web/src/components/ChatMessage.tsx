@@ -144,7 +144,16 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         {isBot ? (
           msg.content ? (
             <div className="md">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{normaliseMd(msg.content)}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  table: (props) => (
+                    <div className="md-table-wrap"><table {...props} /></div>
+                  ),
+                }}
+              >
+                {normaliseMd(msg.content)}
+              </ReactMarkdown>
             </div>
           ) : msg.status ? (
             <span className="chat-status">{msg.status}…</span>

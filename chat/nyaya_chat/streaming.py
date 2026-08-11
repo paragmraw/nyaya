@@ -17,7 +17,9 @@ dispatches on ``event:``.
 
 The ``reasoning`` event carries Nemotron's ``reasoning_content`` (the model's
 chain-of-thought), which appears in ``AIMessageChunk.additional_kwargs`` when
-thinking mode is enabled via ``with_thinking_mode(True)``.
+a reasoning-capable model is used. The current default model (Lightning-30b)
+does not emit reasoning content, so these events will not fire — the code
+remains for forward compatibility with reasoning-capable models.
 """
 
 from __future__ import annotations

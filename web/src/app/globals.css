@@ -407,7 +407,11 @@ pre.mcp-json .n { color: var(--fg); }
   line-height: 1.3;
 }
 .msg.bot .bubble .md h1 { font-size: 16px; }
-.msg.bot .bubble .md h2 { font-size: 14px; }
+.msg.bot .bubble .md h2 {
+  font-size: 14px;
+  border-bottom: 1px solid color-mix(in oklch, var(--accent) 16%, transparent);
+  padding-bottom: 2px;
+}
 .msg.bot .bubble .md h3 { font-size: 13px; }
 .msg.bot .bubble .md h4 { font-size: 12.5px; }
 .msg.bot .bubble .md ul,
@@ -415,13 +419,24 @@ pre.mcp-json .n { color: var(--fg); }
 .msg.bot .bubble .md li { margin: 2px 0; }
 .msg.bot .bubble .md li > ul,
 .msg.bot .bubble .md li > ol { margin: 2px 0 0; }
+.msg.bot .bubble .md li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -18px;
+  padding-left: 0;
+}
+.msg.bot .bubble .md input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: -1px;
+  accent-color: var(--accent);
+}
 .msg.bot .bubble .md blockquote {
   margin: 0 0 8px;
   padding: 4px 12px;
-  border-left: 3px solid color-mix(in oklch, var(--accent) 40%, transparent);
+  border-left: 4px solid color-mix(in oklch, var(--accent) 40%, transparent);
   background: color-mix(in oklch, var(--accent) 5%, transparent);
   color: var(--muted);
   border-radius: 0 var(--radius) var(--radius) 0;
+  font-style: normal;
 }
 .msg.bot .bubble .md blockquote > *:first-child { margin-top: 0; }
 .msg.bot .bubble .md blockquote > *:last-child { margin-bottom: 0; }
@@ -466,6 +481,11 @@ pre.mcp-json .n { color: var(--fg); }
   margin: 0 0 8px;
   font-size: 11.5px;
 }
+.msg.bot .bubble .md-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 8px;
+}
+.msg.bot .bubble .md-table-wrap table { margin: 0; }
 .msg.bot .bubble .md th,
 .msg.bot .bubble .md td {
   padding: 5px 8px;
@@ -484,6 +504,15 @@ pre.mcp-json .n { color: var(--fg); }
   font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
 }
 .msg.bot .bubble .cite strong { color: var(--accent); font-weight: 600; }
+.msg.bot .bubble .md .footnotes {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.msg.bot .bubble .md .footnotes h2 { font-size: 11px; margin: 0 0 4px; border: none; padding: 0; }
+.msg.bot .bubble .md sup a { font-size: 9px; color: var(--accent); }
 .chat-foot { border-top: 1px solid var(--border); padding: 10px 12px; background: var(--bg); }
 .composer { display: flex; gap: 8px; align-items: flex-end; }
 .composer textarea {

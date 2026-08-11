@@ -91,7 +91,7 @@ class FakeChatModel:
 
     ``bind_tools`` returns ``self`` (the agent calls ``.invoke`` on it). The
     ``responses`` list is consumed in order; each entry is an AIMessage or a
-    dict turned into one. ``with_thinking_mode`` returns ``self``.
+    dict turned into one.
     """
 
     def __init__(self, responses: list | None = None):
@@ -101,16 +101,11 @@ class FakeChatModel:
         ]
         self._i = 0
         self.calls: list = []
-        self._thinking_enabled: bool | None = None
         self._structured_schema = None
         self._structured_result = None
 
     def bind_tools(self, tools, **kw):
         self._bound_tools = tools
-        return self
-
-    def with_thinking_mode(self, enabled: bool = True, **kw):
-        self._thinking_enabled = enabled
         return self
 
     def with_structured_output(self, schema, **kw):
