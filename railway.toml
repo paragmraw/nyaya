@@ -7,7 +7,7 @@ dockerfilePath = "Dockerfile"
 [deploy]
 # Healthcheck: poll /health on the internal port.
 healthcheckPath = "/health"
-healthcheckTimeout = 10
+healthcheckTimeout = 60
 healthcheckInterval = 30
 
 # Single replica is plenty for v1. The server is stateless (stateless_http=True),
