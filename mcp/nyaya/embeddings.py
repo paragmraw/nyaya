@@ -8,8 +8,9 @@ CPUExecutionProvider. onnxruntime picks the first usable provider from
 the list, so CUDA-capable machines use the GPU and everything else
 transparently uses CPU.
 
-The model name is configurable via ``NYAYA_EMBEDDING_MODEL`` but must
-produce ``EXPECTED_DIM``-dimensional vectors to match the pgvector columns.
+The model name is configurable via the ``EMBEDDING_MODEL`` constant in
+``nyaya/config.py`` but must produce ``EXPECTED_DIM``-dimensional vectors
+to match the pgvector columns.
 
 Raises:
     EmbeddingUnavailable: fastembed is not installed or the model fails

@@ -46,7 +46,7 @@ async def load_tools(settings: Settings | None = None) -> list[Any]:
     missing = sorted(allow - names)
     if missing:
         log.warning(
-            "CHAT_TOOLS allowlist references unknown tools (ignored): %s. "
+            "tool allowlist references unknown tools (ignored): %s. "
             "Available: %s", missing, sorted(names),
         )
     log.info(

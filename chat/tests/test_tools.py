@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import sys
 
 import pytest
@@ -42,35 +41,11 @@ def _patch_mcp_client(monkeypatch, tools):
     monkeypatch.setitem(sys.modules, "langchain_mcp_adapters.client", fake_mod)
 
 
-def _clear_settings(monkeypatch, env_overrides: dict[str, str] | None = None):
+def _clear_settings(monkeypatch):
     from nyaya_chat.config import get_settings
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
-    for k, v in (env_overrides or {}).items():
-        monkeypatch.setenv(k, v)
     get_settings.cache_clear()
     return get_settings  # return the callable, not the instance
-
-
-@pytest.mark.asyncio
-async def test_load_tools_returns_allowlist(monkeypatch):
-    from nyaya_chat import tools as tools_mod
-    _patch_mcp_client(monkeypatch, [_FakeTool("hybrid_search"), _FakeTool("get_section"), _FakeTool("get_article")])
-    get_settings = _clear_settings(monkeypatch, {"CHAT_TOOLS": "hybrid_search,get_section"})
-    result = await tools_mod.load_tools(get_settings())
-    names = [t.name for t in result]
-    assert names == ["hybrid_search", "get_section"]
-
-
-@pytest.mark.asyncio
-async def test_load_tools_warns_on_missing(monkeypatch, caplog):
-    from nyaya_chat import tools as tools_mod
-    _patch_mcp_client(monkeypatch, [_FakeTool("hybrid_search"), _FakeTool("get_section")])
-    get_settings = _clear_settings(monkeypatch, {"CHAT_TOOLS": "hybrid_search,nonexistent_tool"})
-    with caplog.at_level(logging.WARNING, logger="nyaya_chat.tools"):
-        result = await tools_mod.load_tools(get_settings())
-    names = [t.name for t in result]
-    assert names == ["hybrid_search"]
-    assert any("nonexistent_tool" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -88,7 +63,7 @@ async def test_load_tools_default_allowlist(monkeypatch):
     from nyaya_chat.config import DEFAULT_TOOLS
     all_names = list(DEFAULT_TOOLS) + ["some_extra"]
     _patch_mcp_client(monkeypatch, [_FakeTool(n) for n in all_names])
-    get_settings = _clear_settings(monkeypatch)  # no CHAT_TOOLS -> default
+    get_settings = _clear_settings(monkeypatch)  # default allowlist
     result = await tools_mod.load_tools(get_settings())
     names = {t.name for t in result}
     assert set(DEFAULT_TOOLS).issubset(names)

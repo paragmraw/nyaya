@@ -13,10 +13,10 @@ def test_settings_required_vars(monkeypatch):
     config.get_settings.cache_clear()
     s = config.get_settings()
     assert s.database_url.startswith("postgresql://")
-    # Pool config defaults
-    assert s.pool_min == 1
-    assert s.pool_max == 8
-    assert s.pool_timeout == 3.0
+    # Pool config defaults (constants)
+    assert s.pool_min == config.POOL_MIN
+    assert s.pool_max == config.POOL_MAX
+    assert s.pool_timeout == config.POOL_TIMEOUT
 
 
 def test_settings_missing_required(monkeypatch):
@@ -57,69 +57,6 @@ def test_as_dict_redacts_credentials(monkeypatch):
     assert "***" in d["database_url"]
 
 
-def test_pool_size_env(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_POOL_MAX", "20")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.pool_max == 20
-
-
-def test_pool_min_env(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_POOL_MIN", "2")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.pool_min == 2
-
-
-def test_pool_timeout_env(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_POOL_TIMEOUT", "5.5")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.pool_timeout == 5.5
-
-
-def test_statement_timeout_env(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_STATEMENT_TIMEOUT", "500")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.statement_timeout_ms == 500
-
-
-def test_log_level_env(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_LOG_LEVEL", "DEBUG")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.log_level == "DEBUG"
-
-
-def test_embedding_model_env(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_EMBEDDING_MODEL", "custom/model")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.embedding_model == "custom/model"
-
-
-def test_invalid_pool_max_raises(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NYAYA_POOL_MAX", "abc")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    with pytest.raises(ConfigurationError):
-        config.get_settings()
-
-
 def test_redact_postgres_scheme(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgres://user:secret@host:5432/db")
     from nyaya import config
@@ -150,3 +87,24 @@ def test_as_dict_all_fields(monkeypatch):
     assert set(d.keys()) == {"database_url", "port", "pool_min", "pool_max",
                               "pool_timeout", "statement_timeout_ms", "log_level",
                               "embedding_model", "redis_url"}
+
+
+def test_constants_match_settings(monkeypatch):
+    """Settings fields reflect the module-level constants."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
+    from nyaya import config
+    config.get_settings.cache_clear()
+    s = config.get_settings()
+    assert s.statement_timeout_ms == config.STATEMENT_TIMEOUT_MS
+    assert s.log_level == config.LOG_LEVEL
+    assert s.embedding_model == config.EMBEDDING_MODEL
+    assert s.redis_url == config.REDIS_URL
+
+
+def test_rate_limit_constants():
+    from nyaya import config
+    rl = config.get_rate_limit_settings()
+    assert rl.read_per_min == config.RATE_READ_PER_MIN
+    assert rl.embedding_per_min == config.RATE_MCP_PER_MIN
+    assert rl.chat_per_min == config.RATE_CHAT_PER_MIN
+    assert rl.body_size_max_bytes == config.RATE_BODY_MAX_BYTES

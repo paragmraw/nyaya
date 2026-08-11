@@ -22,10 +22,10 @@ Email **mail@parag.tech** with a description of the vulnerability, reproduction 
 nyaya implements defense-in-depth at the application layer:
 
 ### Rate limiting
-- Read endpoints (REST `/api/*`): 120 req/min/IP (env: `NYAYA_RATE_READ_PER_MIN`)
-- MCP tool calls (`POST /mcp`): 30 req/min/IP (env: `NYAYA_RATE_MCP_PER_MIN`)
-- Body size cap: 1 MB (env: `NYAYA_RATE_BODY_MAX_BYTES`)
-- Redis backend for multi-worker deployments (`REDIS_URL` env var)
+- Read endpoints (REST `/api/*`): 120 req/min/IP (hardcoded in `nyaya/config.py`)
+- MCP tool calls (`POST /mcp`): 30 req/min/IP (hardcoded in `nyaya/config.py`)
+- Body size cap: 1 MB (hardcoded in `nyaya/config.py`)
+- Redis backend for multi-worker deployments (set `REDIS_URL` constant in `nyaya/config.py`)
 - In-memory fallback for single-worker (dev/local) and Redis outages (fail-open)
 
 ### Security headers
@@ -57,4 +57,4 @@ nyaya implements defense-in-depth at the application layer:
 - Deploy behind a reverse proxy (Cloudflare, Railway edge, nginx) with TLS and authentication
 - Use a read-only Postgres role for `DATABASE_URL`
 - Run `nyaya-ingest` from a trusted machine, not the public deployment
-- Set `REDIS_URL` for multi-worker rate limiting
+- Set the `REDIS_URL` constant in `nyaya/config.py` for multi-worker rate limiting
