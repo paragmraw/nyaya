@@ -1,0 +1,10 @@
+title = "nyaya gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist dummy NVIDIA API key used in test fixtures"
+regexes = [
+  '''nvapi-abcdef1234567890''',
+]
