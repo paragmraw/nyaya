@@ -1,28 +1,23 @@
 """Encode LangGraph v2 stream events into Server-Sent Events.
 
-LangGraph's ``astream(..., stream_mode=["messages","custom"], version="v2")``
-yields ``StreamPart`` dicts with ``type``/``ns``/``data``. We project them
-into typed SSE events the frontend parses:
+LangGraph's ``astream(..., stream_mode=["messages"], version="v2")`` yields
+``StreamPart`` dicts with ``type``/``ns``/``data``. We project them into typed
+SSE events the frontend parses:
 
   event: token       data: {"content": "..."}        # LLM token deltas
   event: reasoning   data: {"content": "..."}        # reasoning_content deltas
   event: tool_start  data: {"name","args","id"}      # the model called a tool
   event: tool_result data: {"name","summary","id"}   # a tool finished
-  event: citations   data: {"citations": [...]}      # structured citations
-  event: status      data: {"msg": "..."}            # custom progress
+  event: status      data: {"msg": "..."}            # progress
   event: error       data: {"message": "..."}        # a node threw
   event: done        data: {}                        # stream complete
 
-All ``data`` payloads are single-line JSON. The frontend ``useChat`` hook
+All ``data`` payloads are single line JSON. The frontend ``useChat`` hook
 dispatches on ``event:``.
 
 The ``reasoning`` event carries Nemotron's ``reasoning_content`` (the model's
 chain-of-thought), which appears in ``AIMessageChunk.additional_kwargs`` when
 thinking mode is enabled via ``with_thinking_mode(True)``.
-
-The ``citations`` event carries schema-guaranteed citations from the
-structured-output synthesis node, emitted as a custom event via
-``get_stream_writer()``.
 """
 
 from __future__ import annotations
@@ -77,7 +72,7 @@ async def stream_turn(
 
         async for part in graph.astream(
             {"messages": messages},
-            stream_mode=["messages", "custom"],
+            stream_mode=["messages"],
             version="v2",
         ):
             if not isinstance(part, dict) or "type" not in part:
@@ -85,47 +80,36 @@ async def stream_turn(
             ptype: str = part["type"]
             data = part.get("data")
 
-            if ptype == "messages":
-                msg_chunk, _metadata = data if isinstance(data, (list, tuple)) and len(data) == 2 else (data, {})
-                # Stream reasoning_content deltas as reasoning events (Nemotron
-                # thinking mode: reasoning appears in additional_kwargs).
-                ak = getattr(msg_chunk, "additional_kwargs", None) or {}
-                reasoning = ak.get("reasoning_content")
-                if isinstance(reasoning, str) and reasoning:
-                    yield _sse("reasoning", {"content": reasoning})
-                # Stream content deltas as tokens.
-                content = getattr(msg_chunk, "content", None)
-                if isinstance(content, str) and content:
-                    yield _sse("token", {"content": content})
-                # Detect a completed AIMessage with tool_calls -> emit starts.
-                if isinstance(msg_chunk, AIMessage):
-                    calls = getattr(msg_chunk, "tool_calls", None) or []
-                    for tc in calls:
-                        tc_id = tc.get("id") or tc.get("name", "")
-                        pending_tool_calls[tc_id] = {
-                            "id": tc_id,
-                            "name": tc.get("name", ""),
-                            "args": tc.get("args", {}),
-                        }
-                        yield _sse("tool_start", pending_tool_calls[tc_id])
-                # ToolMessage -> pair with its tool_call_id and emit result.
-                if isinstance(msg_chunk, ToolMessage):
-                    tc_id = getattr(msg_chunk, "tool_call_id", "")
-                    name = getattr(msg_chunk, "name", "") or tc_id
-                    summary = _summarise_tool_result(getattr(msg_chunk, "content", ""))
-                    yield _sse("tool_result", {"id": tc_id, "name": name, "summary": summary})
-
-            elif ptype == "custom":
-                # Custom events from get_stream_writer().
-                # The synthesis node emits {"type": "citations", "citations": [...]}
-                # for structured citations. Other dict payloads are status/progress.
-                if isinstance(data, dict):
-                    if data.get("type") == "citations":
-                        yield _sse("citations", {"citations": data.get("citations", [])})
-                    else:
-                        yield _sse("status", data)
-                elif isinstance(data, str):
-                    yield _sse("status", {"msg": data})
+            if ptype != "messages":
+                continue
+            msg_chunk, _metadata = data if isinstance(data, (list, tuple)) and len(data) == 2 else (data, {})
+            # Stream reasoning_content deltas as reasoning events (Nemotron
+            # thinking mode: reasoning appears in additional_kwargs).
+            ak = getattr(msg_chunk, "additional_kwargs", None) or {}
+            reasoning = ak.get("reasoning_content")
+            if isinstance(reasoning, str) and reasoning:
+                yield _sse("reasoning", {"content": reasoning})
+            # Stream content deltas as tokens.
+            content = getattr(msg_chunk, "content", None)
+            if isinstance(content, str) and content:
+                yield _sse("token", {"content": content})
+            # Detect a completed AIMessage with tool_calls -> emit starts.
+            if isinstance(msg_chunk, AIMessage):
+                calls = getattr(msg_chunk, "tool_calls", None) or []
+                for tc in calls:
+                    tc_id = tc.get("id") or tc.get("name", "")
+                    pending_tool_calls[tc_id] = {
+                        "id": tc_id,
+                        "name": tc.get("name", ""),
+                        "args": tc.get("args", {}),
+                    }
+                    yield _sse("tool_start", pending_tool_calls[tc_id])
+            # ToolMessage -> pair with its tool_call_id and emit result.
+            if isinstance(msg_chunk, ToolMessage):
+                tc_id = getattr(msg_chunk, "tool_call_id", "")
+                name = getattr(msg_chunk, "name", "") or tc_id
+                summary = _summarise_tool_result(getattr(msg_chunk, "content", ""))
+                yield _sse("tool_result", {"id": tc_id, "name": name, "summary": summary})
 
     except Exception as exc:  # noqa: BLE001 — we want to surface any failure.
         log.error("agent stream failed: %s", exc, exc_info=True)

@@ -37,10 +37,10 @@ def settings():
 def fake_model(monkeypatch):
     """A FakeChatModel that yields a scripted sequence of AIMessages.
 
-    Patches ``nyaya_chat.llm.get_model`` and ``nyaya_chat.llm.get_base_model``
-    *and* the rebound references in ``nyaya_chat.agent`` (which does
-    ``from .llm import get_model`` at import time, binding its own reference).
-    Must clear the real cache *before* patching.
+    Patches ``nyaya_chat.llm.get_model`` *and* the rebound reference in
+    ``nyaya_chat.agent`` (which does ``from .llm import get_model`` at import
+    time, binding its own reference). Must clear the real cache *before*
+    patching.
     """
     from nyaya_chat import agent as agent_mod
     from nyaya_chat import llm as llm_mod
@@ -48,8 +48,6 @@ def fake_model(monkeypatch):
     fm = FakeChatModel()
     monkeypatch.setattr(llm_mod, "get_model", lambda _=None: fm)
     monkeypatch.setattr(agent_mod, "get_model", lambda _=None: fm, raising=False)
-    monkeypatch.setattr(llm_mod, "get_base_model", lambda _=None: fm)
-    monkeypatch.setattr(agent_mod, "get_base_model", lambda _=None: fm, raising=False)
     return fm
 
 
@@ -93,11 +91,7 @@ class FakeChatModel:
 
     ``bind_tools`` returns ``self`` (the agent calls ``.invoke`` on it). The
     ``responses`` list is consumed in order; each entry is an AIMessage or a
-    dict turned into one.
-
-    ``with_thinking_mode`` returns ``self`` (records the flag for assertions).
-    ``with_structured_output`` returns a ``_FakeStructuredRunnable`` whose
-    ``ainvoke`` returns ``self._structured_result`` (set by tests).
+    dict turned into one. ``with_thinking_mode`` returns ``self``.
     """
 
     def __init__(self, responses: list | None = None):

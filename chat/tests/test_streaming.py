@@ -70,10 +70,13 @@ async def test_stream_turn_emits_token_and_done():
 
 
 @pytest.mark.asyncio
-async def test_stream_turn_emits_status_from_custom():
+async def test_stream_turn_emits_status_skipped_for_non_messages():
+    """Non-messages part types are skipped (no status event in simplified arch)."""
     parts = [{"type": "custom", "data": {"msg": "thinking"}}]
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
-    assert b'event: status\ndata: {"msg": "thinking"}\n\n' in out
+    # No status emitted in the simplified single-stream-mode architecture.
+    assert b"event: status" not in out
+    assert out.endswith(b"event: done\ndata: {}\n\n")
 
 
 @pytest.mark.asyncio
@@ -106,6 +109,15 @@ async def test_stream_turn_ignores_unknown_part_type():
 async def test_stream_turn_handles_malformed_part():
     parts = [{"weird": True}, "not a dict", None]
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert out.endswith(b"event: done\ndata: {}\n\n")
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_ignores_custom_part_type():
+    """Custom-typed parts (from stream modes we don't use) are skipped."""
+    parts = [{"type": "custom", "data": {"type": "citations", "citations": []}}]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: citations" not in out
     assert out.endswith(b"event: done\ndata: {}\n\n")
 
 
@@ -174,33 +186,3 @@ async def test_stream_turn_reasoning_before_token():
     assert reasoning_pos != -1
     assert token_pos != -1
     assert reasoning_pos < token_pos
-
-
-@pytest.mark.asyncio
-async def test_stream_turn_emits_citations_from_custom_event():
-    """Custom events with type='citations' should emit event: citations."""
-    parts = [
-        {"type": "custom", "data": {"type": "citations", "citations": [
-            {"act": "IPC", "ref": "s. 302"},
-            {"act": "BNS", "ref": "s. 103", "quote": "Whoever commits murder..."},
-        ]}},
-    ]
-    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
-    assert b"event: citations" in out
-    assert b"IPC" in out
-    assert b"s. 302" in out
-    assert b"BNS" in out
-    # Regular status events should NOT be emitted for citations type
-    assert out.count(b"event: status") == 0
-
-
-@pytest.mark.asyncio
-async def test_stream_turn_custom_citations_not_mistaken_for_status():
-    """Ensure a citations custom event is not also emitted as status."""
-    parts = [
-        {"type": "custom", "data": {"type": "citations", "citations": []}},
-        {"type": "custom", "data": {"msg": "thinking"}},
-    ]
-    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
-    assert b"event: citations" in out
-    assert b'event: status\ndata: {"msg": "thinking"}' in out

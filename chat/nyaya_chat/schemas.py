@@ -36,41 +36,6 @@ class ChatRequest(BaseModel):
         return v
 
 
-class StructuredCitation(BaseModel):
-    """A single citation extracted by the structured-output synthesis step.
-
-    Emitted as part of a ``CitedAnswer`` when Nemotron's structured-output
-    capability is used to guarantee citation shape.
-    """
-
-    act: str = Field(description="Act short name, e.g. IPC, BNS, Constitution")
-    ref: str = Field(description="Section/article number, e.g. s. 302, Art. 21")
-    quote: str | None = Field(
-        default=None,
-        description="Optional short quote from the provision",
-    )
-
-
-class CitedAnswer(BaseModel):
-    """Schema-enforced answer returned by ``with_structured_output``.
-
-    The synthesis node calls
-    ``get_base_model().with_structured_output(CitedAnswer)`` to transform the
-    ReAct loop's raw answer + retrieved tool results into this object. The
-    ``citations`` list is guaranteed to match the schema — no regex parsing
-    of inline ``[[act:…]]`` markers needed.
-    """
-
-    answer: str = Field(description="The grounded answer text, without [[act:...]] markers")
-    citations: list[StructuredCitation] = Field(
-        description="Every citation referenced in the answer"
-    )
-    reasoning: str = Field(
-        default="",
-        description="Brief reasoning trace for why these provisions apply",
-    )
-
-
 class ChatSubHealthResponse(BaseModel):
     """Health payload for the chat sub-app (served at GET /chat/health)."""
     status: Literal["healthy", "degraded"]

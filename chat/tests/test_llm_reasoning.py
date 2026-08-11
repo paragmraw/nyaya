@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_get_model_caches_instance(monkeypatch):
     """get_model should return the same instance on repeated calls."""
@@ -12,7 +10,6 @@ def test_get_model_caches_instance(monkeypatch):
     llm.reset_model_cache()
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
 
-    # Patch ChatNVIDIA to a fake so we don't need a real API key
     calls: list = []
 
     class FakeChatNVIDIA:
@@ -29,28 +26,6 @@ def test_get_model_caches_instance(monkeypatch):
     m1 = llm.get_model()
     m2 = llm.get_model()
     assert m1 is m2
-
-
-def test_get_base_model_caches_separately(monkeypatch):
-    """get_base_model should return the same base instance on repeated calls."""
-    from nyaya_chat import config, llm
-    config.reset_settings_cache()
-    llm.reset_model_cache()
-    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
-
-    class FakeChatNVIDIA:
-        def __init__(self, **kw):
-            pass
-
-        def with_thinking_mode(self, enabled=True, **kw):
-            return self
-
-    monkeypatch.setattr(
-        "langchain_nvidia_ai_endpoints.ChatNVIDIA", FakeChatNVIDIA
-    )
-    b1 = llm.get_base_model()
-    b2 = llm.get_base_model()
-    assert b1 is b2
 
 
 def test_thinking_mode_applied_when_enabled(monkeypatch):
@@ -99,14 +74,12 @@ def test_thinking_mode_not_applied_when_disabled(monkeypatch):
     monkeypatch.setattr(
         "langchain_nvidia_ai_endpoints.ChatNVIDIA", FakeChatNVIDIA
     )
-    model = llm.get_model()
+    llm.get_model()
     assert thinking_calls == []  # should not be called
-    # get_model should return the base model directly
-    assert model is llm.get_base_model()
 
 
-def test_reset_model_cache_clears_both(monkeypatch):
-    """reset_model_cache should clear both base and thinking model caches."""
+def test_reset_model_cache_clears(monkeypatch):
+    """reset_model_cache should clear the model cache."""
     from nyaya_chat import config, llm
     config.reset_settings_cache()
     llm.reset_model_cache()
@@ -126,11 +99,3 @@ def test_reset_model_cache_clears_both(monkeypatch):
     llm.reset_model_cache()
     m2 = llm.get_model()
     assert m1 is not m2  # new instance after reset
-
-
-def test_synthesis_prompt_exists():
-    """SYNTHESIS_PROMPT should be defined and non-empty."""
-    from nyaya_chat.llm import SYNTHESIS_PROMPT
-    assert isinstance(SYNTHESIS_PROMPT, str)
-    assert len(SYNTHESIS_PROMPT) > 50
-    assert "citation" in SYNTHESIS_PROMPT.lower()

@@ -20,16 +20,19 @@ Railway service. The sub-app owns only chat-specific concerns (the agent,
 the LLM, the SSE encoder); cross-cutting middleware (CORS, security headers,
 request-id, rate limiting, body-size cap) is provided by the host.
 
-- **Agent**: a two-node async ReAct loop (`agent <-> tools`) compiled with no
+- **Agent**: a single-node async ReAct loop (`agent ↔ tools`) compiled with no
   checkpointer — conversation state is per-request only; we do not persist
-  anything.
+  anything. The model emits citations inline as `[[act: X, ref: Y]]` markers,
+  which the frontend parses into chips.
 - **Tools**: the agent calls the nyaya MCP server over streamable HTTP via
   `langchain-mcp-adapters`. In the same-process deploy, `NYAYA_MCP_URL`
   points at the same origin's `/mcp`.
 - **LLM**: `ChatNVIDIA(model="nvidia/nemotron-3-super-120b-a12b")`, reads
-  `NVIDIA_API_KEY` from the environment.
-- **Streaming**: LangGraph v2 `messages` + `custom` stream modes -> typed SSE
-  events (`token`, `tool_start`, `tool_result`, `status`, `done`, `error`).
+  `NVIDIA_API_KEY` from the environment. Thinking mode is on by default so
+  reasoning tokens stream as a separate `event: reasoning` SSE channel.
+- **Streaming**: LangGraph v2 `messages` stream mode -> typed SSE events
+  (`token`, `reasoning`, `tool_start`, `tool_result`, `status`, `done`,
+  `error`).
 - **Protection**: a tighter per-IP rate limit on `POST /chat/*`
   (`NYAYA_RATE_CHAT_PER_MIN`, default 15/min) applied by the host's
   `RateLimitMiddleware`. No auth (same model as the MCP server - behind a
@@ -71,6 +74,7 @@ See `.env.example`. Required: `NVIDIA_API_KEY`. Optional: `NYAYA_MCP_URL`,
 | event | data | meaning |
 |---|---|---|
 | `token` | `{"content": "..."}` | LLM token delta |
+| `reasoning` | `{"content": "..."}` | reasoning_content delta (thinking mode) |
 | `tool_start` | `{"id","name","args"}` | the model called a tool |
 | `tool_result` | `{"id","name","summary"}` | a tool returned |
 | `status` | `{"msg": "thinking"}` | progress |

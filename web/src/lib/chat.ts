@@ -9,14 +9,13 @@
 //   event: reasoning   data: {"content": "..."}        — reasoning_content deltas
 //   event: tool_start  data: {"id","name","args"}      — a tool was called
 //   event: tool_result data: {"id","name","summary"}   — a tool returned
-//   event: citations   data: {"citations": [...]}      — structured citations
 //   event: status      data: {"msg": "thinking"}       — progress
 //   event: error       data: {"message","detail"}      — failure
 //   event: done        data: {}                         — stream complete
 //
 // The hook assembles token deltas into a single assistant message, collects
-// tool events, reasoning trace, and citations (from structured event or parsed
-// from [[act: X, ref: Y]] markers as fallback), and reports isStreaming/error.
+// tool events and the reasoning trace, parses inline [[act: X, ref: Y]]
+// citation markers into citation chips, and reports isStreaming/error.
 
 import { useCallback, useRef, useState } from "react";
 import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolEvent } from "./api";
@@ -129,7 +128,6 @@ export function useChat(): UseChat {
       let buffer = "";
       let accContent = "";
       let accReasoning = "";
-      let gotStructuredCitations = false;
 
       const updateAssistant = (patch: Partial<ChatMessage>) => {
         setMessages((prev) =>
@@ -163,25 +161,14 @@ export function useChat(): UseChat {
             case "token": {
               const c = (payload.content as string) || "";
               accContent += c;
-              // Only parse inline citations if we haven't received structured ones.
-              if (!gotStructuredCitations) {
-                const { text: cleaned, citations } = parseCitations(accContent);
-                updateAssistant({ content: cleaned, citations });
-              } else {
-                updateAssistant({ content: accContent });
-              }
+              const { text: cleaned, citations } = parseCitations(accContent);
+              updateAssistant({ content: cleaned, citations });
               break;
             }
             case "reasoning": {
               const r = (payload.content as string) || "";
               accReasoning += r;
               updateAssistant({ reasoning: accReasoning });
-              break;
-            }
-            case "citations": {
-              const citations = (payload.citations as ChatCitation[]) || [];
-              gotStructuredCitations = true;
-              updateAssistant({ citations });
               break;
             }
             case "tool_start": {
@@ -220,14 +207,9 @@ export function useChat(): UseChat {
           }
         }
       }
-      // Final cleanup: re-parse inline citations only if no structured
-      // citations event was received (graceful fallback to text-based parsing).
-      if (!gotStructuredCitations) {
-        const { text: cleaned, citations } = parseCitations(accContent);
-        updateAssistant({ content: cleaned, citations, status: undefined });
-      } else {
-        updateAssistant({ status: undefined });
-      }
+      // Final cleanup: re-parse inline citations now that the full text is in.
+      const { text: cleaned, citations } = parseCitations(accContent);
+      updateAssistant({ content: cleaned, citations, status: undefined });
     } catch (err) {
       const msg = err instanceof Error && err.name === "AbortError"
         ? "cancelled"
