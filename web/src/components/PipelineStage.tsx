@@ -34,7 +34,7 @@ const STAGES: Stage[] = [
       <>
         <strong>Store:</strong> pgvector (pgvector extension on PostgreSQL).<br />
         <strong>k:</strong> top-k passages (default 5, max 20).<br />
-        <strong>Reranker:</strong> planned — not yet implemented.<br />
+        <strong>Reranker:</strong> planned; not yet implemented.<br />
         <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA/IPC/CrPC, SC judgments.
       </>
     ),
@@ -60,7 +60,7 @@ const STAGES: Stage[] = [
     detail: (
       <>
         <strong>Resolver:</strong> parse → match → fetch (see Citations).<br />
-        <strong>MCP server:</strong> HTTP endpoint at /mcp — exposes search_law, get_article, resolve_citation.<br />
+        <strong>MCP server:</strong> HTTP endpoint at /mcp that exposes search_law, get_article, resolve_citation.<br />
         <strong>Clients:</strong> Claude, Cursor, Windsurf.
       </>
     ),

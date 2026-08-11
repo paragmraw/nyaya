@@ -140,6 +140,6 @@ export const api = {
 
 // ─── Format helpers ───────────────────────────────────────────────
 export function formatNumber(n: number | null | undefined): string {
-  if (n == null) return "—";
+  if (n == null) return "N/A";
   return n.toLocaleString("en-IN");
 }

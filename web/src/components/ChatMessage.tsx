@@ -12,7 +12,7 @@ import type { ChatMessage, ChatToolEvent } from "@/lib";
 // left intact — the panel truncates with CSS ellipsis + a scroll fallback so
 // nothing overflows the bubble.
 function formatToolValue(v: unknown): string {
-  if (v == null) return "—";
+  if (v == null) return "N/A";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   try { return JSON.stringify(v); } catch { return String(v); }
@@ -164,10 +164,10 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         {isBot && !msg.content && !msg.status && msg.error && (
           <span className="chat-status chat-halted" aria-label="response halted">
             <span className="halt-dot" aria-hidden="true" />
-            Stopped — no response was generated.
+            Stopped; no response was generated.
           </span>
         )}
-        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}> — {msg.error}</span>}
+        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}>: {msg.error}</span>}
 
         {isBot && msg.tools.length > 0 && (
           <div className="tools" aria-label="Tool calls">

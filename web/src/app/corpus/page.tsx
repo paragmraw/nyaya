@@ -17,7 +17,7 @@ export default function CorpusPage() {
           <p className="eyebrow">Corpus · v0.1</p>
           <h1>What Nyaya has indexed</h1>
           <p className="lead">
-            Constitution, statutes, and reported case law — ingested from openly-licensed sources. Every number below is traceable to the source it was drawn from.
+            Constitution, statutes, and reported case law, ingested from openly-licensed sources. Every number below is traceable to the source it was drawn from.
           </p>
         </section>
 
@@ -65,15 +65,15 @@ export default function CorpusPage() {
           <div className="cadence">
             <div className="cadence-row">
               <span className="cad-when">Manual</span>
-              <span className="cad-what">Constitution + BNS/BNSS/BSA/IPC/CrPC — re-pulled from openly-licensed sources (Vikhram-S/IndianConstitution, PRS, HuggingFace) and diff-merged into the index on demand.</span>
+              <span className="cad-what">Constitution + BNS/BNSS/BSA/IPC/CrPC, re-pulled from openly-licensed sources (Vikhram-S/IndianConstitution, PRS, HuggingFace) and diff-merged into the index on demand.</span>
             </div>
             <div className="cadence-row">
               <span className="cad-when">Manual</span>
-              <span className="cad-what">Landmark Supreme Court judgments — curated from indiankanoon.org and embedded on ingestion. Not yet automated.</span>
+              <span className="cad-what">Landmark Supreme Court judgments, curated from indiankanoon.org and embedded on ingestion. Not yet automated.</span>
             </div>
             <div className="cadence-row">
               <span className="cad-when">Planned</span>
-              <span className="cad-what">High Court reported judgments — selected High Courts. Roadmap: automated nightly fetch once the pipeline is in place.</span>
+              <span className="cad-what">High Court reported judgments from selected High Courts. Roadmap: automated nightly fetch once the pipeline is in place.</span>
             </div>
           </div>
         </section>
@@ -92,12 +92,12 @@ export default function CorpusPage() {
             </div>
             <div className="roadmap-item">
               <div className="ri-name">Subordinate legislation &amp; rules</div>
-              <div className="ri-desc">Rules, notifications, and subordinate legislation under major statutes — the long tail of regulatory text.</div>
+              <div className="ri-desc">Rules, notifications, and subordinate legislation under major statutes; the long tail of regulatory text.</div>
               <div className="ri-eta">Planned</div>
             </div>
             <div className="roadmap-item">
               <div className="ri-name">Pre-1950 Privy Council decisions</div>
-              <div className="ri-desc">Judgments of the Privy Council (the apex court for British India until 1950) — the historical layer of Indian case law.</div>
+              <div className="ri-desc">Judgments of the Privy Council (the apex court for British India until 1950); the historical layer of Indian case law.</div>
               <div className="ri-eta">Planned</div>
             </div>
           </div>

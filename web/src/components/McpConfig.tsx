@@ -131,7 +131,7 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
               <span className="mcp-tag">plug in</span>
             </div>
             <p className="mcp-desc">
-              Bring Nyaya&apos;s corpus into your editor — retrieve cited answers to{" "}
+              Bring Nyaya&apos;s corpus into your editor. Retrieve cited answers to{" "}
               <b>Constitution</b>, <b>CrPC</b> and <b>BNS</b> directly inside your workflow.
             </p>
           </div>

@@ -102,7 +102,7 @@ export default function CitationsPage() {
         <section className="section">
           <div className="section-head">
             <h2>What Nyaya does not cite yet</h2>
-            <p className="sec-desc">Honest limits — we would rather tell you than guess.</p>
+            <p className="sec-desc">Honest limits. We would rather tell you than guess.</p>
           </div>
           <div className="limits">
             {LIMITS.map((l) => (

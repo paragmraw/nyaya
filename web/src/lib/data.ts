@@ -34,7 +34,7 @@ export const INFRA: StackRow[] = [
 export const FLOW: FlowStep[] = [
   { num: "1", text: "User submits a natural-language legal question through the web chat or MCP tool." },
   { num: "2", text: "Query is embedded and the vector store returns the top-k matching passages from the indexed corpus." },
-  { num: "3", text: "Optional reranker reorders the results by relevance (planned — not yet implemented)." },
+  { num: "3", text: "Optional reranker reorders the results by relevance (planned; not yet implemented)." },
   { num: "4", text: "LLM drafts an answer using only the retrieved passages, with inline citations to articles, sections, or cases." },
   { num: "5", text: "Citation resolver parses each reference and fetches the matching provision from the corpus before the answer is displayed." },
 ];
@@ -62,7 +62,7 @@ export const FORMAT_CARDS: FormatCard[] = [
 ];
 
 export const PIPE_STEPS: PipeStep[] = [
-  { num: "01", title: "Parse", desc: "Extract citation strings from the draft answer — article numbers, section references, case names.", eg: "\"Art. 21\" → {type: constitution, art: 21}" },
+  { num: "01", title: "Parse", desc: "Extract citation strings from the draft answer: article numbers, section references, case names.", eg: "\"Art. 21\" → {type: constitution, art: 21}" },
   { num: "02", title: "Match", desc: "Look up each parsed citation in the indexed corpus to confirm it exists and the text matches.", eg: "match(\"S. 41A\", \"CrPC 1973\") → found, section_text" },
   { num: "03", title: "Fetch", desc: "Pull the full provision or judgment text from the corpus so the citation can be displayed inline.", eg: "fetch(\"Art. 21\") → Constitution article text" },
   { num: "04", title: "Display", desc: "Render the citation as a link the user can click to open the source card with the full text and provenance.", eg: "→ Source card: Constitution of India, Art. 21" },
@@ -78,11 +78,11 @@ export const LIMITS: Limit[] = [
 // ─── CapTable.tsx ──────────────────────────────────────────────────
 export const CAPS: Cap[] = [
   { code: "CON-01", name: "Constitutional lookup", desc: "Parts I–XXII, Fundamental Rights & DPSP, with amendment history.", coverage: "395 arts" },
-  { code: "CRP-02", name: "CrPC procedure tracer", desc: "Bail, FIR, charge, trial stages — maps a query to the exact section.", coverage: "484 secs" },
-  { code: "PEN-03", name: "Penal code (IPC / BNS)", desc: "Legacy IPC + new BNS, 2023 — offence → section → punishment range.", coverage: "511 / 358" },
+  { code: "CRP-02", name: "CrPC procedure tracer", desc: "Bail, FIR, charge, trial stages; maps a query to the exact section.", coverage: "484 secs" },
+  { code: "PEN-03", name: "Penal code (IPC / BNS)", desc: "Legacy IPC + new BNS, 2023: offence → section → punishment range.", coverage: "511 / 358" },
   { code: "PRC-04", name: "Precedent retrieval", desc: "Supreme Court & High Court rulings, cited inline with neutral citations.", coverage: "5 curated" },
   { code: "DFT-05", name: "Drafting assist", desc: "Notices, affidavits, vakalatnama skeletons from a one-line brief.", coverage: "planned" },
-  { code: "CTR-06", name: "Citation resolver", desc: "Paste a citation — resolve it to the matching provision in the corpus.", coverage: "static" },
+  { code: "CTR-06", name: "Citation resolver", desc: "Paste a citation; resolve it to the matching provision in the corpus.", coverage: "static" },
 ];
 
 // ─── CorpusTable.tsx ──────────────────────────────────────────────

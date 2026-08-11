@@ -10,7 +10,7 @@ import { useChat } from "@/lib";
 // backend (chat/nyaya_chat) over SSE, renders citation chips for grounded
 // answers, and shows tool-call progress. Can be disabled via feature flag.
 const GREETING =
-  "Namaste. I'm Nyaya — I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
+  "Namaste. I'm Nyaya. I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
 
 interface ChatPanelProps {
   /** When true, the chat panel is disabled and shown in a blurred/locked state */

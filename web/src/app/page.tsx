@@ -6,7 +6,7 @@ import McpConfig from "@/components/McpConfig";
 import { useHealthSummary, formatNumber, type HealthSummary } from "@/lib";
 
 // Real corpus baselines as fallbacks (395 articles, 5 judgments). Sections
-// is omitted from the fallback (shows "—") because the total depends on
+// is omitted from the fallback (shows "N/A") because the total depends on
 // ingestion and cannot be stated accurately from static data.
 const FALLBACK: HealthSummary = {
   status: "healthy",
@@ -30,9 +30,9 @@ export default function HomePage() {
       <section className="pane-left">
         <div className="left-head">
           <p className="eyebrow">CONVERSATIONAL AI · INDIAN LAW</p>
-          <h1>Ask the Constitution, CrPC & statute book — get cited answers.</h1>
+          <h1>Ask the Constitution, CrPC & statute book. Get cited answers.</h1>
           <p className="lead">
-            A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment — no paraphrased guesswork.
+            A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment. No paraphrased guesswork.
           </p>
           <div className="left-stats">
             <div className="ls">
@@ -50,7 +50,7 @@ export default function HomePage() {
           </div>
           {error && (
             <p className="meta" style={{ marginTop: 8, color: "var(--muted)" }}>
-              Live counts unavailable — showing fallback numbers.
+              Live counts unavailable; showing fallback numbers.
             </p>
           )}
         </div>
