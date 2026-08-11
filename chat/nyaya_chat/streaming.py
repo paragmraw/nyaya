@@ -38,9 +38,14 @@ def _sse(event: str, payload: Any) -> bytes:
 
 
 def _summarise_tool_result(content: Any) -> str:
-    """Collapse a ToolMessage content blob to a short string for the UI chip."""
+    """Collapse a ToolMessage content blob to a string for the UI panel.
+
+    The cap is generous (8 KB) so full tool results — typically a JSON object
+    describing a provision — survive intact and the frontend can format them
+    as readable key-value fields rather than a truncated blob.
+    """
     if isinstance(content, str):
-        return content[:400]
+        return content[:8000]
     if isinstance(content, list):
         # LangChain tool content can be a list of blocks; pull out text.
         parts = []
@@ -51,8 +56,8 @@ def _summarise_tool_result(content: Any) -> str:
                     parts.append(str(t))
             elif isinstance(block, str):
                 parts.append(block)
-        return (" ".join(parts))[:400]
-    return str(content)[:400]
+        return (" ".join(parts))[:8000]
+    return str(content)[:8000]
 
 
 async def stream_turn(

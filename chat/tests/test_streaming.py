@@ -22,7 +22,7 @@ def test_sse_non_ascii_preserved():
 
 def test_summarise_tool_result_string():
     assert _summarise_tool_result("short") == "short"
-    assert _summarise_tool_result("x" * 500) == "x" * 400
+    assert _summarise_tool_result("x" * 9000) == "x" * 8000
 
 
 def test_summarise_tool_result_list_of_blocks():

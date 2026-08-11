@@ -520,8 +520,103 @@ pre.mcp-json .n { color: var(--fg); }
 }
 @keyframes chat-cursor { 50% { opacity: 0; } }
 .msg.bot .bubble .tools {
-  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px;
-  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  margin-top: 8px;
+  /* Guard against the global .mcp-tools-wrap .tools table styles leaking
+     in — the chat tool-calls container is a plain wrapper, not a bordered
+     table; the chips carry their own borders. */
+  border: none; border-radius: 0; overflow: visible;
+}
+.tools .tool-chips {
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+/* Interactive pill for a single tool call. */
+.tool-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono); font-size: 10px;
+  font-weight: 500; line-height: 1.4;
+  border: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: default;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.tool-chip:disabled { cursor: default; }
+.tool-chip.done:not(:disabled) { cursor: pointer; }
+.tool-chip.done:not(:disabled):hover,
+.tool-chip.done:not(:disabled).open {
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 32%, var(--border));
+  color: var(--accent);
+}
+.tool-chip.done:not(:disabled):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.tool-chip.running {
+  background: color-mix(in oklch, var(--accent) 7%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
+  color: var(--accent);
+}
+.tool-chip-icon { display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; flex-shrink: 0; }
+.tool-chip-icon svg { color: color-mix(in oklch, var(--accent) 78%, var(--muted)); }
+.tool-chip-name { white-space: nowrap; }
+.tool-chip-caret {
+  display: inline-flex; margin-left: 1px; transition: transform 0.15s ease;
+  color: color-mix(in oklch, var(--accent) 70%, var(--muted));
+}
+.tool-chip.open .tool-chip-caret { transform: rotate(180deg); }
+/* Spinner ring shown while a tool is running. */
+.tool-chip-spinner {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid color-mix(in oklch, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: tool-spin 0.7s linear infinite;
+}
+@keyframes tool-spin { to { transform: rotate(360deg); } }
+/* Expandable result panel below the chips row. */
+.tool-panel {
+  margin-top: 6px;
+  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--accent) 4%, var(--bg));
+  overflow: hidden;
+  animation: tool-panel-open 0.15s ease-out;
+}
+@keyframes tool-panel-open { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+.tool-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 9px;
+  border-bottom: 1px solid color-mix(in oklch, var(--accent) 18%, var(--border));
+  background: color-mix(in oklch, var(--accent) 7%, transparent);
+}
+.tool-panel-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--accent); }
+.tool-panel-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: var(--radius);
+  border: none; background: transparent; color: var(--muted);
+  cursor: pointer; padding: 0;
+}
+.tool-panel-close:hover { color: var(--fg); background: color-mix(in oklch, var(--fg) 8%, transparent); }
+.tool-panel-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tool-panel-fields {
+  margin: 0; padding: 6px 9px;
+  display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.45;
+}
+.tool-field { display: contents; }
+.tool-field dt { color: var(--muted); white-space: nowrap; }
+.tool-field dd {
+  margin: 0; color: var(--fg);
+  overflow-wrap: anywhere; word-break: break-word;
+  max-height: 140px; overflow-y: auto;
+}
+.tool-panel-raw {
+  margin: 0; padding: 6px 9px;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.45;
+  color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 160px; overflow-y: auto;
 }
 .cite-chip {
   display: inline-flex; align-items: center; gap: 4px;
@@ -663,7 +758,7 @@ pre.mcp-json .n { color: var(--fg); }
 .flow-step .fs-text .fs-link:hover { background: var(--accent-soft); }
 
 /* ─── MCP tools list (architecture) ────────────────────────────── */
-.tools { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.mcp-tools-wrap .tools { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .tool-row { display: grid; grid-template-columns: 180px 1fr; padding: 10px var(--gap-md); border-bottom: 1px solid var(--border); gap: var(--gap-md); align-items: center; transition: background 0.15s; }
 .tool-row:last-child { border-bottom: none; }
 .tool-row:hover { background: var(--bg); }
@@ -826,6 +921,8 @@ pre.mcp-json .n { color: var(--fg); }
 /* ─── reduced motion (vestibular / 2.2.2) ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .status-dot.live { animation: none; }
+  .tool-chip-spinner { animation: none; }
+  .tool-panel { animation: none; }
   .btn, .mcp-card, .tag, .cap-table tbody tr, .corpus-table tbody tr,
   .pipe-card, .stack-row, .tool-row, .filter-chip, .topnav nav a,
   .inline-cite, .source-card, .pipe-step { transition: none; }
