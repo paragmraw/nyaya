@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import BalanceIcon from "@mui/icons-material/Balance";
 import SourceCard from "@/components/SourceCard";
 import { FORMAT_CARDS, LIMITS, PIPE_STEPS } from "@/lib";
 
@@ -40,7 +41,7 @@ export default function CitationsPage() {
           <div className="annotated">
             <div className="answer-bubble">
               <div className="ab-head">
-                <span className="avatar">§</span>
+                <span className="avatar" aria-hidden="true"><BalanceIcon fontSize="small" /></span>
                 <span className="ab-title">Nyaya Assistant</span>
               </div>
               <p>
@@ -101,7 +102,7 @@ export default function CitationsPage() {
         <section className="section">
           <div className="section-head">
             <h2>What Nyaya does not cite yet</h2>
-            <p className="sec-desc">Honest limits — we would rather tell you than guess.</p>
+            <p className="sec-desc">Honest limits. We would rather tell you than guess.</p>
           </div>
           <div className="limits">
             {LIMITS.map((l) => (

@@ -82,6 +82,7 @@ export type ChatRequest = {
 export type ChatCitation = {
   act: string;
   ref: string;
+  quote?: string;
 };
 
 export type ChatToolEvent = {
@@ -100,6 +101,7 @@ export type ChatMessage = {
   tools: ChatToolEvent[];
   status?: string;
   error?: string;
+  reasoning?: string;
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────
@@ -138,6 +140,6 @@ export const api = {
 
 // ─── Format helpers ───────────────────────────────────────────────
 export function formatNumber(n: number | null | undefined): string {
-  if (n == null) return "—";
+  if (n == null) return "N/A";
   return n.toLocaleString("en-IN");
 }

@@ -101,10 +101,16 @@ class FakeChatModel:
         ]
         self._i = 0
         self.calls: list = []
+        self._structured_schema = None
+        self._structured_result = None
 
     def bind_tools(self, tools, **kw):
         self._bound_tools = tools
         return self
+
+    def with_structured_output(self, schema, **kw):
+        self._structured_schema = schema
+        return _FakeStructuredRunnable(self._structured_result)
 
     def invoke(self, messages, **kw):
         self.calls.append(messages)
@@ -116,3 +122,20 @@ class FakeChatModel:
 
     async def ainvoke(self, messages, **kw):
         return self.invoke(messages, **kw)
+
+
+class _FakeStructuredRunnable:
+    """Stand-in for the Runnable returned by ``with_structured_output``.
+
+    Tests set ``FakeChatModel._structured_result`` to control what
+    ``ainvoke`` returns (typically a ``CitedAnswer`` instance or ``None``).
+    """
+
+    def __init__(self, result):
+        self._result = result
+
+    def invoke(self, messages, **kw):
+        return self._result
+
+    async def ainvoke(self, messages, **kw):
+        return self._result

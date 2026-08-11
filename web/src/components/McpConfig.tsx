@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
 type Variant = "promo" | "block";
 
@@ -50,12 +50,15 @@ const CopyIcon = () => (
 );
 
 export default function McpConfig({ variant = "promo" }: { variant?: Variant }) {
-  // Read window.location.origin once, lazily — avoids setState-in-effect
-  // (the new react-hooks/set-state-in-effect rule) and skips an extra render.
-  // SSR renders with the placeholder; the client hydrates with the real
-  // origin. Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
-  const [origin] = useState<string | null>(() =>
-    typeof window !== "undefined" ? window.location.origin : null,
+  // Render with the placeholder on the first client render (matches SSR
+  // output) to avoid hydration mismatches, then update to the real
+  // window.location.origin on the client. useSyncExternalStore gives us a
+  // stable client-only read without a cascading setState-in-effect render.
+  // Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => null,
   );
   const [copied, setCopied] = useState(false);
 
@@ -130,7 +133,7 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
               <span className="mcp-tag">plug in</span>
             </div>
             <p className="mcp-desc">
-              Bring Nyaya&apos;s corpus into your editor — retrieve cited answers to{" "}
+              Bring Nyaya&apos;s corpus into your editor. Retrieve cited answers to{" "}
               <b>Constitution</b>, <b>CrPC</b> and <b>BNS</b> directly inside your workflow.
             </p>
           </div>

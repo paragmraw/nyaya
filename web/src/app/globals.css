@@ -342,21 +342,48 @@ pre.mcp-json .n { color: var(--fg); }
 }
 .chat-head .ch-title { display: flex; align-items: center; gap: 9px; font-family: var(--font-display); font-size: 15.5px; font-weight: 600; letter-spacing: -0.012em; }
 .chat-head .ch-meta { display: flex; align-items: center; gap: 10px; }
+.new-chat-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.new-chat-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.new-chat-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .chat-body {
   flex: 1; overflow-y: auto;
+  min-height: 0;        /* flex item default (auto) would prevent overflow */
   padding: 14px;
   display: flex; flex-direction: column; gap: 12px;
   scroll-behavior: smooth;
 }
-.msg { display: flex; gap: 10px; max-width: 92%; }
+.msg { display: flex; gap: 10px; max-width: 92%; flex-shrink: 0; }
 .msg .avatar {
-  width: 26px; height: 26px; border-radius: 5px; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
   display: grid; place-items: center;
-  font-family: var(--font-display); font-size: 15px; font-weight: 600;
+  font-family: var(--font-display); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--surface) 18%, transparent);
 }
 .msg.user { align-self: flex-end; flex-direction: row-reverse; }
 .msg.user .avatar { background: var(--fg); color: var(--surface); }
-.msg.bot .avatar { background: var(--accent-soft); color: var(--accent); }
+.msg.bot .avatar {
+  background: var(--accent);
+  color: var(--surface);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, var(--surface) 22%, transparent), 0 1px 2px color-mix(in oklch, var(--accent) 25%, transparent);
+}
 .msg .bubble {
   background: var(--bg);
   border: 1px solid var(--border);
@@ -364,15 +391,128 @@ pre.mcp-json .n { color: var(--fg); }
   padding: 9px 12px;
   font-size: 12.5px;
   line-height: 1.5;
-  white-space: pre-wrap;
   word-wrap: break-word;
 }
+/* User bubbles keep raw text wrapping. */
+.msg.user .bubble { white-space: pre-wrap; }
+/* Bot bubbles render markdown — let the .md block own its spacing. */
+.msg.bot .bubble .md > *:first-child { margin-top: 0; }
+.msg.bot .bubble .md > *:last-child { margin-bottom: 0; }
+.msg.bot .bubble .md p { margin: 0 0 8px; }
+.msg.bot .bubble .md h1,
+.msg.bot .bubble .md h2,
+.msg.bot .bubble .md h3,
+.msg.bot .bubble .md h4 {
+  margin: 12px 0 6px;
+  line-height: 1.3;
+}
+.msg.bot .bubble .md h1 { font-size: 16px; }
+.msg.bot .bubble .md h2 {
+  font-size: 14px;
+  border-bottom: 1px solid color-mix(in oklch, var(--accent) 16%, transparent);
+  padding-bottom: 2px;
+}
+.msg.bot .bubble .md h3 { font-size: 13px; }
+.msg.bot .bubble .md h4 { font-size: 12.5px; }
+.msg.bot .bubble .md ul,
+.msg.bot .bubble .md ol { margin: 0 0 8px; padding-left: 20px; }
+.msg.bot .bubble .md li { margin: 2px 0; }
+.msg.bot .bubble .md li > ul,
+.msg.bot .bubble .md li > ol { margin: 2px 0 0; }
+.msg.bot .bubble .md li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -18px;
+  padding-left: 0;
+}
+.msg.bot .bubble .md input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: -1px;
+  accent-color: var(--accent);
+}
+.msg.bot .bubble .md blockquote {
+  margin: 0 0 8px;
+  padding: 4px 12px;
+  border-left: 4px solid color-mix(in oklch, var(--accent) 40%, transparent);
+  background: color-mix(in oklch, var(--accent) 5%, transparent);
+  color: var(--muted);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-style: normal;
+}
+.msg.bot .bubble .md blockquote > *:first-child { margin-top: 0; }
+.msg.bot .bubble .md blockquote > *:last-child { margin-bottom: 0; }
+.msg.bot .bubble .md code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
+  color: var(--fg);
+}
+.msg.bot .bubble .md pre {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 5%, transparent);
+  border: 1px solid var(--border);
+  overflow-x: auto;
+}
+.msg.bot .bubble .md pre code {
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre;
+}
+.msg.bot .bubble .md a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.msg.bot .bubble .md a:hover { text-decoration-thickness: 2px; }
+.msg.bot .bubble .md hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+.msg.bot .bubble .md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 8px;
+  font-size: 11.5px;
+}
+.msg.bot .bubble .md-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 8px;
+}
+.msg.bot .bubble .md-table-wrap table { margin: 0; }
+.msg.bot .bubble .md th,
+.msg.bot .bubble .md td {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.msg.bot .bubble .md th {
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  font-weight: 600;
+}
+.msg.bot .bubble .md strong { font-weight: 700; }
+.msg.bot .bubble .md em { font-style: italic; }
 .msg.bot .bubble .cite {
   display: block; margin-top: 8px; padding-top: 8px;
   border-top: 1px solid color-mix(in oklch, var(--accent) 24%, transparent);
   font-family: var(--font-mono); font-size: 10.5px; color: var(--muted);
 }
 .msg.bot .bubble .cite strong { color: var(--accent); font-weight: 600; }
+.msg.bot .bubble .md .footnotes {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.msg.bot .bubble .md .footnotes h2 { font-size: 11px; margin: 0 0 4px; border: none; padding: 0; }
+.msg.bot .bubble .md sup a { font-size: 9px; color: var(--accent); }
 .chat-foot { border-top: 1px solid var(--border); padding: 10px 12px; background: var(--bg); }
 .composer { display: flex; gap: 8px; align-items: flex-end; }
 .composer textarea {
@@ -389,6 +529,11 @@ pre.mcp-json .n { color: var(--fg); }
 }
 .composer .send:disabled { opacity: 0.5; cursor: not-allowed; }
 .composer .send svg { width: 16px; height: 16px; }
+/* Stop variant — same footprint as send, but signals halt. */
+.composer .send.stop {
+  background: var(--fg); border-color: var(--fg);
+}
+.composer .send.stop:hover { background: color-mix(in oklch, var(--fg) 85%, #b3261e 15%); border-color: color-mix(in oklch, var(--fg) 85%, #b3261e 15%); }
 .cancel-btn {
   background: none; border: none; color: var(--muted); cursor: pointer; padding: 0;
   font: inherit; text-decoration: underline; font-size: 10px; font-family: var(--font-mono);
@@ -404,8 +549,103 @@ pre.mcp-json .n { color: var(--fg); }
 }
 @keyframes chat-cursor { 50% { opacity: 0; } }
 .msg.bot .bubble .tools {
-  display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px;
-  font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  margin-top: 8px;
+  /* Guard against the global .mcp-tools-wrap .tools table styles leaking
+     in — the chat tool-calls container is a plain wrapper, not a bordered
+     table; the chips carry their own borders. */
+  border: none; border-radius: 0; overflow: visible;
+}
+.tools .tool-chips {
+  display: flex; flex-wrap: wrap; gap: 5px;
+}
+/* Interactive pill for a single tool call. */
+.tool-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-family: var(--font-mono); font-size: 10px;
+  font-weight: 500; line-height: 1.4;
+  border: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: default;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.tool-chip:disabled { cursor: default; }
+.tool-chip.done:not(:disabled) { cursor: pointer; }
+.tool-chip.done:not(:disabled):hover,
+.tool-chip.done:not(:disabled).open {
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 32%, var(--border));
+  color: var(--accent);
+}
+.tool-chip.done:not(:disabled):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.tool-chip.running {
+  background: color-mix(in oklch, var(--accent) 7%, var(--surface));
+  border-color: color-mix(in oklch, var(--accent) 28%, var(--border));
+  color: var(--accent);
+}
+.tool-chip-icon { display: inline-flex; align-items: center; justify-content: center; width: 11px; height: 11px; flex-shrink: 0; }
+.tool-chip-icon svg { color: color-mix(in oklch, var(--accent) 78%, var(--muted)); }
+.tool-chip-name { white-space: nowrap; }
+.tool-chip-caret {
+  display: inline-flex; margin-left: 1px; transition: transform 0.15s ease;
+  color: color-mix(in oklch, var(--accent) 70%, var(--muted));
+}
+.tool-chip.open .tool-chip-caret { transform: rotate(180deg); }
+/* Spinner ring shown while a tool is running. */
+.tool-chip-spinner {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid color-mix(in oklch, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: tool-spin 0.7s linear infinite;
+}
+@keyframes tool-spin { to { transform: rotate(360deg); } }
+/* Expandable result panel below the chips row. */
+.tool-panel {
+  margin-top: 6px;
+  border: 1px solid color-mix(in oklch, var(--accent) 24%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--accent) 4%, var(--bg));
+  overflow: hidden;
+  animation: tool-panel-open 0.15s ease-out;
+}
+@keyframes tool-panel-open { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
+.tool-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 9px;
+  border-bottom: 1px solid color-mix(in oklch, var(--accent) 18%, var(--border));
+  background: color-mix(in oklch, var(--accent) 7%, transparent);
+}
+.tool-panel-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--accent); }
+.tool-panel-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: var(--radius);
+  border: none; background: transparent; color: var(--muted);
+  cursor: pointer; padding: 0;
+}
+.tool-panel-close:hover { color: var(--fg); background: color-mix(in oklch, var(--fg) 8%, transparent); }
+.tool-panel-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tool-panel-fields {
+  margin: 0; padding: 6px 9px;
+  display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.45;
+}
+.tool-field { display: contents; }
+.tool-field dt { color: var(--muted); white-space: nowrap; }
+.tool-field dd {
+  margin: 0; color: var(--fg);
+  overflow-wrap: anywhere; word-break: break-word;
+  max-height: 140px; overflow-y: auto;
+}
+.tool-panel-raw {
+  margin: 0; padding: 6px 9px;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.45;
+  color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere;
+  max-height: 160px; overflow-y: auto;
 }
 .cite-chip {
   display: inline-flex; align-items: center; gap: 4px;
@@ -427,6 +667,33 @@ pre.mcp-json .n { color: var(--fg); }
   font-family: var(--font-mono); font-size: 10px; color: var(--muted);
   padding: 2px 0; font-style: italic;
 }
+/* Explicit "halted before any content" state for aborted assistant turns. */
+.chat-status.chat-halted {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted); font-style: normal;
+  padding: 6px 10px; border: 1px dashed var(--border); border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 3%, transparent);
+}
+.chat-status.chat-halted .halt-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  background: color-mix(in oklch, #b3261e 70%, var(--muted));
+}
+/* Collapsible reasoning trace from Nemotron thinking mode. */
+.reasoning {
+  margin-top: 8px; font-size: 11px;
+}
+.reasoning summary {
+  cursor: pointer; color: var(--muted); font-family: var(--font-mono);
+  user-select: none; padding: 2px 0;
+}
+.reasoning summary:hover { color: var(--fg); }
+.reasoning-body {
+  margin-top: 4px; padding: 6px 10px; border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 3%, transparent);
+  border: 1px solid var(--border); color: var(--muted);
+  font-family: var(--font-mono); font-size: 10px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
 
 /* ─── home page split frame ─────────────────────────────────────── */
 .frame {
@@ -441,11 +708,25 @@ pre.mcp-json .n { color: var(--fg); }
   display: flex; flex-direction: column;
   border-right: 1px solid var(--border);
   scroll-behavior: smooth;
+  min-height: 0;
+  min-width: 0;
   background: linear-gradient(180deg, transparent 0%, color-mix(in oklch, var(--surface) 40%, transparent) 100%),
               radial-gradient(120% 80% at 0% 0%, color-mix(in oklch, var(--accent) 7%, transparent), transparent 60%);
 }
-.pane-right { padding: var(--gap-md) var(--gap-lg) var(--gap-lg) var(--gap-lg); position: relative; }
-.pane-right > .chat-shell { height: 100%; }
+.pane-right {
+  padding: var(--gap-md) var(--gap-lg) var(--gap-lg) var(--gap-lg);
+  position: relative;
+  /* Grid items default to min-height/min-width: auto, so they grow to fit
+     content instead of staying within the track — which prevents the chat
+     body from ever overflowing (and thus from scrolling). Force them to 0
+     so the pane is constrained to the grid track height. */
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.pane-right > .chat-shell { height: 100%; flex: 1; min-height: 0; }
 .left-head { margin-bottom: var(--gap-md); }
 .left-head h1 { margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid color-mix(in oklch, var(--accent) 20%, transparent); }
 .left-stats { display: flex; gap: var(--gap-lg); margin-top: var(--gap-md); padding-top: var(--gap-md); border-top: 1px solid var(--border); }
@@ -506,7 +787,7 @@ pre.mcp-json .n { color: var(--fg); }
 .flow-step .fs-text .fs-link:hover { background: var(--accent-soft); }
 
 /* ─── MCP tools list (architecture) ────────────────────────────── */
-.tools { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.mcp-tools-wrap .tools { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .tool-row { display: grid; grid-template-columns: 180px 1fr; padding: 10px var(--gap-md); border-bottom: 1px solid var(--border); gap: var(--gap-md); align-items: center; transition: background 0.15s; }
 .tool-row:last-child { border-bottom: none; }
 .tool-row:hover { background: var(--bg); }
@@ -669,6 +950,8 @@ pre.mcp-json .n { color: var(--fg); }
 /* ─── reduced motion (vestibular / 2.2.2) ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .status-dot.live { animation: none; }
+  .tool-chip-spinner { animation: none; }
+  .tool-panel { animation: none; }
   .btn, .mcp-card, .tag, .cap-table tbody tr, .corpus-table tbody tr,
   .pipe-card, .stack-row, .tool-row, .filter-chip, .topnav nav a,
   .inline-cite, .source-card, .pipe-step { transition: none; }

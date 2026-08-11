@@ -13,7 +13,7 @@ export default function StatCard({ num, label, source, prefix = "" }: Props) {
   return (
     <div className="stat-card">
       <div className="sc-num num">
-        {num == null ? "—" : `${prefix}${formatNumber(num)}`}
+        {num == null ? "N/A" : `${prefix}${formatNumber(num)}`}
       </div>
       <div className="sc-lbl">{label}</div>
       <div className="sc-src">{source}</div>

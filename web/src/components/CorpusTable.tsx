@@ -37,7 +37,7 @@ export default function CorpusTable({ acts }: { acts: Act[] | undefined }) {
   const rows: Row[] = useMemo(() => {
     return CURATED.map((c, i) => {
       const act = c.short_name ? actsByShort.get(c.short_name) : undefined;
-      const date = (act?.as_of ?? c.fallback_date) || "—";
+      const date = (act?.as_of ?? c.fallback_date) || "N/A";
       return { key: `${i}-${c.name}`, name: c.name, type: c.type, coverage: c.coverage, date, status: c.status };
     });
   }, [actsByShort]);

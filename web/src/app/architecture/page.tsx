@@ -99,7 +99,7 @@ export default function ArchitecturePage() {
             {isLoading ? (
               <p className="meta">Loading tools…</p>
             ) : error ? (
-              <p className="meta">Live tool list unavailable — showing the server&apos;s advertised tools on connect.</p>
+              <p className="meta">Live tool list unavailable; showing the server&apos;s advertised tools on connect.</p>
             ) : tools.length === 0 ? (
               <p className="meta">No tools registered.</p>
             ) : (
@@ -124,7 +124,7 @@ export default function ArchitecturePage() {
         <section className="section">
           <div className="section-head">
             <h2>Openness &amp; roadmap</h2>
-            <p className="sec-desc">What is open today and what is planned. Honest status — no fake repo links.</p>
+            <p className="sec-desc">What is open today and what is planned. Honest status. No fake repo links.</p>
           </div>
           <div className="openness">
             <div className="openness-card">

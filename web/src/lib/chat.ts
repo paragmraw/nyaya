@@ -6,6 +6,7 @@
 // The backend (chat/nyaya_chat/server.py) responds to POST /chat/turn with a
 // text/event-stream of typed SSE events:
 //   event: token       data: {"content": "..."}        — LLM token deltas
+//   event: reasoning   data: {"content": "..."}        — reasoning_content deltas
 //   event: tool_start  data: {"id","name","args"}      — a tool was called
 //   event: tool_result data: {"id","name","summary"}   — a tool returned
 //   event: status      data: {"msg": "thinking"}       — progress
@@ -13,8 +14,8 @@
 //   event: done        data: {}                         — stream complete
 //
 // The hook assembles token deltas into a single assistant message, collects
-// tool events and citations (parsed from [[act: X, ref: Y]] markers the system
-// prompt instructs the model to emit), and reports isStreaming/error state.
+// tool events and the reasoning trace, parses inline [[act: X, ref: Y]]
+// citation markers into citation chips, and reports isStreaming/error.
 
 import { useCallback, useRef, useState } from "react";
 import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolEvent } from "./api";
@@ -126,6 +127,7 @@ export function useChat(): UseChat {
       const decoder = new TextDecoder();
       let buffer = "";
       let accContent = "";
+      let accReasoning = "";
 
       const updateAssistant = (patch: Partial<ChatMessage>) => {
         setMessages((prev) =>
@@ -136,7 +138,7 @@ export function useChat(): UseChat {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, tools: [...m.tools.filter((t) => t.id !== ev.id || ev.state === "result"), ev] }
+              ? { ...m, tools: [...m.tools.filter((t) => t.id !== ev.id), ev] }
               : m,
           ),
         );
@@ -161,6 +163,12 @@ export function useChat(): UseChat {
               accContent += c;
               const { text: cleaned, citations } = parseCitations(accContent);
               updateAssistant({ content: cleaned, citations });
+              break;
+            }
+            case "reasoning": {
+              const r = (payload.content as string) || "";
+              accReasoning += r;
+              updateAssistant({ reasoning: accReasoning });
               break;
             }
             case "tool_start": {
@@ -199,7 +207,7 @@ export function useChat(): UseChat {
           }
         }
       }
-      // Final cleanup of citations (re-parse in case last tokens completed a marker).
+      // Final cleanup: re-parse inline citations now that the full text is in.
       const { text: cleaned, citations } = parseCitations(accContent);
       updateAssistant({ content: cleaned, citations, status: undefined });
     } catch (err) {

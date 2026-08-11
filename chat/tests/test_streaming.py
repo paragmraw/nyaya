@@ -22,7 +22,7 @@ def test_sse_non_ascii_preserved():
 
 def test_summarise_tool_result_string():
     assert _summarise_tool_result("short") == "short"
-    assert _summarise_tool_result("x" * 500) == "x" * 400
+    assert _summarise_tool_result("x" * 9000) == "x" * 8000
 
 
 def test_summarise_tool_result_list_of_blocks():
@@ -40,8 +40,9 @@ def test_summarise_tool_result_other_types():
 class _FakeChunk:
     """Minimal stand-in for a LangChain message chunk with .content."""
 
-    def __init__(self, content: str):
+    def __init__(self, content: str, additional_kwargs: dict | None = None):
         self.content = content
+        self.additional_kwargs = additional_kwargs or {}
 
 
 class _FakeGraph:
@@ -69,10 +70,13 @@ async def test_stream_turn_emits_token_and_done():
 
 
 @pytest.mark.asyncio
-async def test_stream_turn_emits_status_from_custom():
+async def test_stream_turn_emits_status_skipped_for_non_messages():
+    """Non-messages part types are skipped (no status event in simplified arch)."""
     parts = [{"type": "custom", "data": {"msg": "thinking"}}]
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
-    assert b'event: status\ndata: {"msg": "thinking"}\n\n' in out
+    # No status emitted in the simplified single-stream-mode architecture.
+    assert b"event: status" not in out
+    assert out.endswith(b"event: done\ndata: {}\n\n")
 
 
 @pytest.mark.asyncio
@@ -105,6 +109,15 @@ async def test_stream_turn_ignores_unknown_part_type():
 async def test_stream_turn_handles_malformed_part():
     parts = [{"weird": True}, "not a dict", None]
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert out.endswith(b"event: done\ndata: {}\n\n")
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_ignores_custom_part_type():
+    """Custom-typed parts (from stream modes we don't use) are skipped."""
+    parts = [{"type": "custom", "data": {"type": "citations", "citations": []}}]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: citations" not in out
     assert out.endswith(b"event: done\ndata: {}\n\n")
 
 
@@ -144,3 +157,32 @@ async def test_stream_turn_empty_content_skipped():
     parts = [{"type": "messages", "data": (_FakeChunk(""), {})}]
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
     assert b"event: token" not in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_emits_reasoning_event():
+    """Reasoning content in additional_kwargs should emit event: reasoning."""
+    parts = [
+        {"type": "messages", "data": (_FakeChunk("", additional_kwargs={"reasoning_content": "Let me think..."}), {})},
+        {"type": "messages", "data": (_FakeChunk("The answer is 42."), {})},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: reasoning" in out
+    assert b"Let me think..." in out
+    assert b"event: token" in out
+    assert b"The answer is 42." in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_reasoning_before_token():
+    """Reasoning chunks should be emitted alongside tokens in order."""
+    parts = [
+        {"type": "messages", "data": (_FakeChunk("", additional_kwargs={"reasoning_content": "step 1"}), {})},
+        {"type": "messages", "data": (_FakeChunk("Answer"), {})},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    reasoning_pos = out.find(b"event: reasoning")
+    token_pos = out.find(b"event: token")
+    assert reasoning_pos != -1
+    assert token_pos != -1
+    assert reasoning_pos < token_pos
