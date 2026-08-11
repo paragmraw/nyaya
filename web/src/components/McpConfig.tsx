@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 
 type Variant = "promo" | "block";
 
@@ -52,12 +52,14 @@ const CopyIcon = () => (
 export default function McpConfig({ variant = "promo" }: { variant?: Variant }) {
   // Render with the placeholder on the first client render (matches SSR
   // output) to avoid hydration mismatches, then update to the real
-  // window.location.origin in a useEffect after hydration completes.
+  // window.location.origin on the client. useSyncExternalStore gives us a
+  // stable client-only read without a cascading setState-in-effect render.
   // Fallback uses NEXT_PUBLIC_MCP_URL (build-time).
-  const [origin, setOrigin] = useState<string | null>(null);
-  useEffect(() => {
-    setOrigin(typeof window !== "undefined" ? window.location.origin : null);
-  }, []);
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => null,
+  );
   const [copied, setCopied] = useState(false);
 
   // In production, fail-closed if the origin is not HTTPS (prevent the user
