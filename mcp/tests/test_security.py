@@ -174,9 +174,11 @@ def test_health_endpoint_not_rate_limited():
     """/health bypasses rate limiting entirely (Railway healthcheck friendly)."""
     backend = InMemoryBackend()
     # Exhaust the limit for any key so a normal request would 429.
+    # The middleware keys counters as "{ip}:{bucket}", so use the read bucket
+    # (the default for non-chat, non-mcp requests).
     for _ in range(120):
-        backend.is_limited("testclient", limit=120)
-    assert backend.is_limited("testclient", limit=120) is True
+        backend.is_limited("testclient:read", limit=120)
+    assert backend.is_limited("testclient:read", limit=120) is True
 
     app = _make_app(RateLimitMiddleware, read_per_min=120, backend=backend)
     with TestClient(app) as client:
@@ -237,6 +239,109 @@ def test_chat_rate_limit_only_applies_to_post():
         assert r.status_code == 429
         # A GET to the chat sub-app still passes (read limit applies, not chat).
         r = client.get("/chat/health")
+        assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# RateLimitMiddleware — loopback exemption
+# ---------------------------------------------------------------------------
+
+def test_loopback_exempt_without_xff(monkeypatch):
+    """Loopback requests without X-Forwarded-For bypass rate limiting.
+
+    This models genuine in-container self-calls (e.g. the chat agent calling
+    the MCP server over localhost). The TestClient's default client host is
+    "testclient" (not loopback), so we monkeypatch _get_remote_address to
+    return 127.0.0.1, simulating a real loopback connection.
+    """
+    import nyaya.ratelimit as rl
+    monkeypatch.setattr(rl, "_get_remote_address", lambda request: "127.0.0.1")
+
+    backend = InMemoryBackend()
+    app = _make_app(RateLimitMiddleware, read_per_min=2, backend=backend)
+    with TestClient(app) as client:
+        # Far more than the 2 req/min read limit — all should pass.
+        for _ in range(10):
+            r = client.post("/echo", json={"x": 1})
+            assert r.status_code == 200
+
+
+def test_loopback_not_exempt_with_xff():
+    """Requests with X-Forwarded-For: 127.0.0.1 are NOT exempt (spoof-proof).
+
+    External requests through a reverse proxy always carry X-Forwarded-For.
+    Even if that header is spoofed to a loopback address, the limiter must
+    still enforce the limit.
+    """
+    backend = InMemoryBackend()
+    app = _make_app(RateLimitMiddleware, read_per_min=2, backend=backend)
+    with TestClient(app) as client:
+        # X-Forwarded-For is set to 127.0.0.1 — should NOT be exempt.
+        for _ in range(2):
+            r = client.post(
+                "/echo", json={"x": 1},
+                headers={"X-Forwarded-For": "127.0.0.1"},
+            )
+            assert r.status_code == 200
+        # 3rd request should be blocked despite the loopback IP in XFF.
+        r = client.post(
+            "/echo", json={"x": 1},
+            headers={"X-Forwarded-For": "127.0.0.1"},
+        )
+        assert r.status_code == 429
+
+
+# ---------------------------------------------------------------------------
+# RateLimitMiddleware — per-bucket counter isolation
+# ---------------------------------------------------------------------------
+
+def test_buckets_independent_mcp_vs_chat():
+    """Exhausting the MCP bucket does not block chat requests from the same IP."""
+    backend = InMemoryBackend()
+    app = _make_app(
+        RateLimitMiddleware,
+        read_per_min=100,
+        embedding_per_min=3,
+        chat_per_min=3,
+        backend=backend,
+    )
+    with TestClient(app) as client:
+        # Add an /mcp route so the embedding bucket is exercised.
+        async def mcp_echo(request):
+            return JSONResponse({"ok": True})
+        app.router.add_route("/mcp", mcp_echo, methods=["POST"])
+
+        # Exhaust the MCP (embedding) bucket.
+        for _ in range(3):
+            r = client.post("/mcp", json={"x": 1})
+            assert r.status_code == 200
+        r = client.post("/mcp", json={"x": 1})
+        assert r.status_code == 429
+
+        # Chat requests from the same IP should still be allowed (separate bucket).
+        r = client.post("/chat/turn", json={"message": "hi"})
+        assert r.status_code == 200
+
+
+def test_buckets_independent_chat_vs_read():
+    """Exhausting the chat bucket does not block read requests from the same IP."""
+    backend = InMemoryBackend()
+    app = _make_app(
+        RateLimitMiddleware,
+        read_per_min=3,
+        chat_per_min=2,
+        backend=backend,
+    )
+    with TestClient(app) as client:
+        # Exhaust the chat bucket.
+        for _ in range(2):
+            r = client.post("/chat/turn", json={"message": "hi"})
+            assert r.status_code == 200
+        r = client.post("/chat/turn", json={"message": "hi"})
+        assert r.status_code == 429
+
+        # Read (POST /echo) requests from the same IP should still be allowed.
+        r = client.post("/echo", json={"x": 1})
         assert r.status_code == 200
 
 
