@@ -89,3 +89,25 @@ def test_retry_in_log_dict(monkeypatch):
     d = s.as_log_dict()
     assert "llm_max_retries" in d
     assert d["llm_max_retries"] == 4
+
+
+def test_mcp_url_derived_from_port(monkeypatch):
+    """MCP_URL auto-derives its port from the PORT env var (Railway sets this)."""
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    monkeypatch.setenv("PORT", "8080")
+    monkeypatch.delenv("MCP_URL", raising=False)
+    s = config.get_settings()
+    assert s.mcp_url == "http://localhost:8080/mcp"
+
+
+def test_mcp_url_env_override(monkeypatch):
+    """An explicit MCP_URL env var takes precedence over the PORT-derived default."""
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    monkeypatch.setenv("PORT", "8080")
+    monkeypatch.setenv("MCP_URL", "http://example.com:9000/mcp")
+    s = config.get_settings()
+    assert s.mcp_url == "http://example.com:9000/mcp"

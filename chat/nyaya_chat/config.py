@@ -26,6 +26,10 @@ from pydantic import SecretStr
 # URL of the nyaya MCP server the agent calls for corpus retrieval. When
 # mounted in the same process as the MCP server (the default deploy), this
 # points at the same origin; for local dev it's http://localhost:8000/mcp.
+# At runtime, get_settings() derives the port from the PORT env var (set by
+# Railway to e.g. 8080) so the self-call matches the actual listening port.
+# An explicit MCP_URL env var overrides the PORT-derived default (useful for
+# split-process local dev where the MCP server runs separately).
 MCP_URL = "http://localhost:8000/mcp"
 
 _LIGHTNING = "nvidia/nemotron-3.5-lightning-30b-a3b"
@@ -139,7 +143,13 @@ def get_settings() -> Settings:
     Raises RuntimeError if ``NVIDIA_API_KEY`` is missing.
     Tests should call ``reset_settings_cache()`` after monkeypatching env.
     """
-    return Settings(nvidia_api_key=SecretStr(_required_env("NVIDIA_API_KEY")))
+    port = os.environ.get("PORT", "8000")
+    default_mcp_url = f"http://localhost:{port}/mcp"
+    mcp_url = os.environ.get("MCP_URL", default_mcp_url)
+    return Settings(
+        nvidia_api_key=SecretStr(_required_env("NVIDIA_API_KEY")),
+        mcp_url=mcp_url,
+    )
 
 
 def reset_settings_cache() -> None:

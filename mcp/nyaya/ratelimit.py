@@ -30,6 +30,13 @@ from .config import get_rate_limit_settings, get_settings
 
 log = logging.getLogger("nyaya.ratelimit")
 
+# Loopback addresses that are exempt from rate limiting when the request has
+# no X-Forwarded-For header (i.e. genuine in-container self-calls such as the
+# chat agent calling the MCP server over localhost). External requests through
+# a reverse proxy always carry X-Forwarded-For, so a spoofed 127.0.0.1 in that
+# header does not bypass the limiter.
+_LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
+
 
 def _get_remote_address(request: Request) -> str:
     """Extract the client IP, respecting X-Forwarded-For from a trusted proxy."""
@@ -171,19 +178,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path == "/health":
             return await call_next(request)
 
+        # Loopback self-calls (e.g. chat agent -> MCP in the same container)
+        # are exempt from rate limiting. The absence of X-Forwarded-For
+        # ensures external requests cannot bypass the limiter by spoofing
+        # 127.0.0.1 in that header.
+        if not request.headers.get("x-forwarded-for") and ip in _LOOPBACK:
+            return await call_next(request)
+
         if self._is_chat_request(request):
+            bucket = "chat"
             limit = self.chat_per_min
         elif self._is_embedding_request(request):
+            bucket = "mcp"
             limit = self.embedding_per_min
         else:
+            bucket = "read"
             limit = self.read_per_min
+
+        key = f"{ip}:{bucket}"
 
         # Use the fallback backend if Redis has already failed.
         backend = self._fallback if self._redis_failed else self._backend
         try:
             # Dispatch sync backend I/O to a worker thread to avoid blocking
             # the event loop (RedisBackend does synchronous network I/O).
-            limited = await asyncio.to_thread(backend.is_limited, ip, limit)
+            limited = await asyncio.to_thread(backend.is_limited, key, limit)
         except Exception:
             if not self._redis_failed:
                 log.warning(
@@ -191,7 +210,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "Falling back to in-memory rate limiting.", exc_info=True,
                 )
                 self._redis_failed = True
-            limited = await asyncio.to_thread(self._fallback.is_limited, ip, limit)
+            limited = await asyncio.to_thread(self._fallback.is_limited, key, limit)
 
         if limited:
             return Response(
