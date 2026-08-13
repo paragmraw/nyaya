@@ -60,8 +60,33 @@ def _summarise_tool_result(content: Any) -> str:
     The cap is generous (8 KB) so full tool results — typically a JSON object
     describing a provision — survive intact and the frontend can format them
     as readable key-value fields rather than a truncated blob.
+
+    Handles three content shapes:
+    - ``str``: returned as-is, unless it looks like a stringified Python list
+      of content blocks (``[{'type': 'text', 'text': '...'}]``), in which case
+      the text is extracted.
+    - ``list``: LangChain tool content as a list of blocks; text is extracted.
+    - anything else: ``str()``-ified.
     """
     if isinstance(content, str):
+        # Check if it looks like a stringified list of content blocks
+        stripped = content.strip()
+        if stripped.startswith("[{") and "'type'" in stripped and "'text'" in stripped:
+            try:
+                import ast
+                parsed = ast.literal_eval(stripped)
+                if isinstance(parsed, list):
+                    parts = []
+                    for block in parsed:
+                        if isinstance(block, dict):
+                            t = block.get("text") or block.get("content")
+                            if t:
+                                parts.append(str(t))
+                        elif isinstance(block, str):
+                            parts.append(block)
+                    return (" ".join(parts))[:8000]
+            except Exception:
+                pass  # not a valid Python literal — return as-is
         return content[:8000]
     if isinstance(content, list):
         # LangChain tool content can be a list of blocks; pull out text.
@@ -131,12 +156,34 @@ async def stream_turn(
                 # Whitespace-only chunks (e.g. trailing newlines from the
                 # supervisor) are skipped so they don't produce empty plan
                 # events that render as an empty collapsible in the UI.
-                content = getattr(msg_chunk, "content", None)
-                if isinstance(content, str) and content.strip():
-                    if node == "supervisor":
-                        yield _sse("plan", {"content": content})
-                    else:
-                        yield _sse("token", {"content": content})
+                #
+                # Some models return content as a list of content blocks
+                # (e.g. [{'type': 'text', 'text': '...'}]) instead of a plain
+                # string. We extract the text from each block so the raw repr
+                # of the list-of-dicts never leaks into the SSE stream.
+                #
+                # CRITICAL: Only route content for AIMessage chunks.
+                # ToolMessage content is tool output (JSON results, etc.)
+                # and must NEVER be emitted as token events — it would leak
+                # raw tool-result data into the answer text. ToolMessage
+                # content is handled separately below as tool_result events.
+                if not isinstance(msg_chunk, ToolMessage):
+                    content = getattr(msg_chunk, "content", None)
+                    if isinstance(content, list):
+                        parts = []
+                        for block in content:
+                            if isinstance(block, str):
+                                parts.append(block)
+                            elif isinstance(block, dict):
+                                t = block.get("text") or block.get("content")
+                                if isinstance(t, str):
+                                    parts.append(t)
+                        content = "".join(parts)
+                    if isinstance(content, str) and content.strip():
+                        if node == "supervisor":
+                            yield _sse("plan", {"content": content})
+                        else:
+                            yield _sse("token", {"content": content})
 
                 # Detect a completed AIMessage with tool_calls → emit starts.
                 if isinstance(msg_chunk, AIMessage):

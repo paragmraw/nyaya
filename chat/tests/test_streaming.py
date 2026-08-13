@@ -159,6 +159,87 @@ async def test_stream_turn_empty_content_skipped():
     assert b"event: token" not in out
 
 
+class _FakeChunkListContent:
+    """Stand-in for a message chunk whose .content is a list of content blocks.
+
+    Some models return content as ``[{'type': 'text', 'text': '...'}]`` instead
+    of a plain string. The streamer must extract the text rather than emit the
+    Python repr of the list-of-dicts.
+    """
+
+    def __init__(self, blocks: list, additional_kwargs: dict | None = None):
+        self.content = blocks
+        self.additional_kwargs = additional_kwargs or {}
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_list_content_blocks_extracted():
+    """Content returned as a list of blocks is flattened to text — no repr leak."""
+    blocks = [
+        {"type": "text", "text": "Hello "},
+        {"type": "text", "text": "world"},
+    ]
+    parts = [{"type": "messages", "data": (_FakeChunkListContent(blocks), {})}]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b'event: token\ndata: {"content": "Hello world"}\n\n' in out
+    # The raw Python repr of the list must NOT appear in the output.
+    assert b"type" not in out  # no {'type': 'text', ...} leak
+    assert b"lc_" not in out   # no 'lc_...' id leak
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_list_content_non_text_blocks_ignored():
+    """Non-text blocks (images, etc.) are silently skipped, not stringified."""
+    blocks = [
+        {"type": "text", "text": "answer"},
+        {"type": "image_url", "image_url": {"url": "data:..."}},
+    ]
+    parts = [{"type": "messages", "data": (_FakeChunkListContent(blocks), {})}]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b'event: token\ndata: {"content": "answer"}\n\n' in out
+    assert b"image_url" not in out
+    assert b"data:..." not in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_tool_message_not_emitted_as_token():
+    """ToolMessage content must NEVER leak as token events.
+
+    ToolMessage content is tool output (JSON results from MCP tools).
+    It should only appear in tool_result events, not in the answer text.
+    This is a regression test for the raw tool-result repr that was leaking
+    into the bot's answer bubble.
+    """
+    parts = [{"type": "messages", "data": (_tool_msg(), {})}]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: token" not in out
+    assert b"event: tool_result" in out
+    assert b"murder" in out  # appears in tool_result, not token
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_tool_message_list_content_not_emitted_as_token():
+    """ToolMessage with list-of-blocks content must not leak as token events.
+
+    MCP adapters return content as ``[{'type': 'text', 'text': '...'}]``.
+    This must be extracted for the tool_result summary but NEVER routed as
+    token events into the answer text.
+    """
+    from langchain_core.messages import ToolMessage
+
+    tool_msg = ToolMessage(
+        content=[{"type": "text", "text": '{"act":"IPC","section":"302"}'}],
+        tool_call_id="tc1",
+        name="get_section",
+    )
+    parts = [{"type": "messages", "data": (tool_msg, {})}]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    assert b"event: token" not in out
+    assert b"event: tool_result" in out
+    # The content should appear in the tool_result summary
+    assert b"IPC" in out
+
+
 @pytest.mark.asyncio
 async def test_stream_turn_emits_reasoning_event():
     """Reasoning content in additional_kwargs should emit event: reasoning."""

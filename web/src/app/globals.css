@@ -416,6 +416,8 @@ pre.mcp-json .n { color: var(--fg); }
 .msg.bot .bubble .md h4 { font-size: 12.5px; }
 .msg.bot .bubble .md ul,
 .msg.bot .bubble .md ol { margin: 0 0 8px; padding-left: 20px; }
+.msg.bot .bubble .md ul { list-style: disc; }
+.msg.bot .bubble .md ol { list-style: decimal; }
 .msg.bot .bubble .md li { margin: 2px 0; }
 .msg.bot .bubble .md li > ul,
 .msg.bot .bubble .md li > ol { margin: 2px 0 0; }
