@@ -31,7 +31,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from .config import Settings, get_settings
-from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, get_model
+from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, astream_with_retry, get_model
 from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
@@ -264,10 +264,20 @@ def _make_synthesis_node(model: Any, settings: Settings):
             if isinstance(m, SystemMessage):
                 continue  # drop the supervisor's system prompt
             out_msgs.append(m)
-        response = await ainvoke_with_retry(
+        # Stream the synthesis model so LangGraph's stream_mode="messages"
+        # intercepts each token via on_llm_new_token and yields it to the SSE
+        # stream. Collect chunks for the final state update.
+        chunks: list[Any] = []
+        async for chunk in astream_with_retry(
             model, out_msgs, max_retries=settings.llm_max_retries,
-        )
-        return {"messages": [response]}
+        ):
+            chunks.append(chunk)
+        if chunks:
+            final = chunks[0]
+            for chunk in chunks[1:]:
+                final = final + chunk
+            return {"messages": [final]}
+        return {"messages": []}
 
     return _synthesis
 

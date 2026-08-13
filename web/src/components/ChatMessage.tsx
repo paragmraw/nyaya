@@ -8,6 +8,30 @@ import BalanceIcon from "@mui/icons-material/Balance";
 import CitationChip from "./CitationChip";
 import type { ChatMessage, ChatToolEvent } from "@/lib";
 
+// Build a compact label for a tool chip, showing the most relevant arg.
+function toolArgsLabel(name: string, args?: Record<string, unknown>): string {
+  if (!args) return name;
+  const act = args.act || args.act_short_name;
+  const section = args.section_number || args.article_number || args.section;
+  const query = args.query;
+  if (act && section) return `${name}(${act} §${section})`;
+  if (query) return `${name}("${String(query).slice(0, 30)}…")`;
+  if (act) return `${name}(${act})`;
+  if (section) return `${name}(§${section})`;
+  return name;
+}
+
+// Map backend status codes to user-friendly phase labels.
+function phaseLabel(status: string): string {
+  const labels: Record<string, string> = {
+    thinking: "Thinking…",
+    analyzing: "Analysing your question…",
+    searching: "Searching legal corpus…",
+    composing: "Composing answer…",
+  };
+  return labels[status] ?? `${status}…`;
+}
+
 // Render a tool-result value as a compact, readable string. Long strings are
 // left intact — the panel truncates with CSS ellipsis + a scroll fallback so
 // nothing overflows the bubble.
@@ -51,7 +75,7 @@ function ToolChipView({
           </svg>
         )}
       </span>
-      <span className="tool-chip-name">{tool.name}</span>
+      <span className="tool-chip-name">{toolArgsLabel(tool.name, tool.args)}</span>
       {hasDetail && (
         <span className="tool-chip-caret" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -132,7 +156,7 @@ function normaliseMd(src: string): string {
 //   class on the last bot message), list tool calls as interactive chips with
 //   an expandable result panel, and render citation chips for any
 //   [[act: X, ref: Y]] markers the model emitted.
-export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
+export default function ChatMessageView({ msg, isStreaming = false }: { msg: ChatMessage; isStreaming?: boolean }) {
   const isBot = msg.role === "assistant";
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   return (
@@ -141,34 +165,15 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         {isBot ? <BalanceIcon fontSize="small" /> : <PersonIcon fontSize="small" />}
       </div>
       <div className="bubble" data-error={msg.error ? "" : undefined}>
-        {isBot ? (
-          msg.content ? (
-            <div className="md">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  table: (props) => (
-                    <div className="md-table-wrap"><table {...props} /></div>
-                  ),
-                }}
-              >
-                {normaliseMd(msg.content)}
-              </ReactMarkdown>
-            </div>
-          ) : msg.status ? (
-            <span className="chat-status">{msg.status}…</span>
-          ) : null
-        ) : (
-          msg.content
-        )}
-        {isBot && !msg.content && !msg.status && msg.error && (
-          <span className="chat-status chat-halted" aria-label="response halted">
-            <span className="halt-dot" aria-hidden="true" />
-            Stopped; no response was generated.
+        {/* Phase status indicator (shown while streaming with no content yet) */}
+        {isBot && !msg.content && (msg.status || (isStreaming && msg.tools.length === 0 && !msg.reasoning)) && (
+          <span className="chat-status chat-phase">
+            <span className="phase-spinner" aria-hidden="true" />
+            {msg.status ? phaseLabel(msg.status) : "Thinking…"}
           </span>
         )}
-        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}>: {msg.error}</span>}
 
+        {/* Tool calls — shown above content for prominence during streaming */}
         {isBot && msg.tools.length > 0 && (
           <div className="tools" aria-label="Tool calls">
             <div className="tool-chips">
@@ -193,13 +198,52 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
           </div>
         )}
 
-        {isBot && msg.reasoning && (
-          <details className="reasoning" aria-label="Reasoning trace">
-            <summary>Reasoning trace</summary>
-            <div className="reasoning-body">{msg.reasoning}</div>
+        {/* Content (streams in token-by-token) */}
+        {isBot ? (
+          msg.content ? (
+            <div className="md">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  table: (props) => (
+                    <div className="md-table-wrap"><table {...props} /></div>
+                  ),
+                }}
+              >
+                {normaliseMd(msg.content)}
+              </ReactMarkdown>
+            </div>
+          ) : null
+        ) : (
+          msg.content
+        )}
+
+        {/* Halted-before-content state */}
+        {isBot && !msg.content && !msg.status && msg.error && (
+          <span className="chat-status chat-halted" aria-label="response halted">
+            <span className="halt-dot" aria-hidden="true" />
+            Stopped; no response was generated.
+          </span>
+        )}
+        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}>: {msg.error}</span>}
+
+        {/* Agent plan (supervisor's reasoning, collapsible) */}
+        {isBot && msg.plan && msg.plan.trim() && (
+          <details className="plan-trace" aria-label="Agent plan">
+            <summary>Agent plan</summary>
+            <div className="plan-body">{msg.plan.trim()}</div>
           </details>
         )}
 
+        {/* Reasoning trace from Nemotron thinking mode (collapsible) */}
+        {isBot && msg.reasoning && msg.reasoning.trim() && (
+          <details className="reasoning" aria-label="Reasoning trace">
+            <summary>Reasoning trace</summary>
+            <div className="reasoning-body">{msg.reasoning.trim()}</div>
+          </details>
+        )}
+
+        {/* Citations */}
         {isBot && msg.citations.length > 0 && (
           <div className="cite">
             <strong>Citations:</strong>

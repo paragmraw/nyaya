@@ -128,6 +128,7 @@ export function useChat(): UseChat {
       let buffer = "";
       let accContent = "";
       let accReasoning = "";
+      let accPlan = "";
 
       const updateAssistant = (patch: Partial<ChatMessage>) => {
         setMessages((prev) =>
@@ -138,7 +139,17 @@ export function useChat(): UseChat {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, tools: [...m.tools.filter((t) => t.id !== ev.id), ev] }
+              ? {
+                  ...m,
+                  tools: [
+                    ...m.tools.filter((t) => t.id !== ev.id),
+                    // Preserve args from tool_start when tool_result arrives
+                    // (tool_result doesn't include args in the payload).
+                    ev.state === "result"
+                      ? { ...m.tools.find((t) => t.id === ev.id), ...ev }
+                      : ev,
+                  ],
+                }
               : m,
           ),
         );
@@ -169,6 +180,12 @@ export function useChat(): UseChat {
               const r = (payload.content as string) || "";
               accReasoning += r;
               updateAssistant({ reasoning: accReasoning });
+              break;
+            }
+            case "plan": {
+              const p = (payload.content as string) || "";
+              accPlan += p;
+              updateAssistant({ plan: accPlan });
               break;
             }
             case "tool_start": {

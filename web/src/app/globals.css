@@ -695,6 +695,41 @@ pre.mcp-json .n { color: var(--fg); }
   white-space: pre-wrap; word-break: break-word;
 }
 
+/* Phase status indicator with spinner — shown while the agent is working
+   (analyzing / searching / composing) and no content has arrived yet. */
+.chat-phase {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-style: normal; color: var(--accent);
+}
+.phase-spinner {
+  width: 10px; height: 10px;
+  border: 1.5px solid color-mix(in oklch, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: tool-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Agent plan (supervisor's planning text, collapsible — like reasoning). */
+.plan-trace {
+  margin-top: 8px; font-size: 11px;
+}
+.plan-trace summary {
+  cursor: pointer; color: var(--muted); font-family: var(--font-mono);
+  user-select: none; padding: 2px 0;
+}
+.plan-trace summary:hover { color: var(--fg); }
+.plan-body {
+  margin-top: 4px; padding: 6px 10px; border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 3%, transparent);
+  border: 1px solid var(--border); color: var(--muted);
+  font-family: var(--font-mono); font-size: 10px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+/* Tool chip with args — allow slightly wider to fit args label. */
+.tool-chip-name { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
+
 /* ─── home page split frame ─────────────────────────────────────── */
 .frame {
   flex: 1; min-height: 0;

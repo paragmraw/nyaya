@@ -73,7 +73,9 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             </div>
           </div>
         ) : (
-          messages.map((m) => <ChatMessageView key={m.id} msg={m} />)
+          messages.map((m) => (
+            <ChatMessageView key={m.id} msg={m} isStreaming={isStreaming} />
+          ))
         )}
       </div>
 
