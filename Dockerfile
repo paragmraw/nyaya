@@ -24,7 +24,7 @@ RUN npm run build
 
 # --- Stage 2: build the Python package (Alpine, no semantic search) ----------
 # python:3.12-alpine pinned by digest for reproducible builds (amd64).
-FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS py-builder
+FROM python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS py-builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -60,7 +60,7 @@ RUN uv pip install --system --no-cache ./chat
 
 # --- Stage 3: runtime -------------------------------------------------------
 # python:3.12-alpine pinned by digest for reproducible builds (amd64).
-FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS runtime
+FROM python:3.14-alpine@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
