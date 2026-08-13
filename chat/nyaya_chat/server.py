@@ -139,4 +139,4 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 def _sse_status(rid: str) -> bytes:
     import json
-    return f"event: status\ndata: {json.dumps({'msg': 'thinking', 'rid': rid})}\n\n".encode()
+    return f'event: status\ndata: {json.dumps({"msg": "analyzing", "rid": rid})}\n\n'.encode()

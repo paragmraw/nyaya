@@ -19,7 +19,7 @@ export const SERVICES: StackRow[] = [
   { name: "Embedding model", role: "Converts text queries and corpus passages into dense vectors for semantic search.", tool: "bge-large-en-v1.5" },
   { name: "Vector store", role: "Stores and retrieves passage embeddings with cosine similarity search at scale.", tool: "pgvector" },
   { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query.", tool: "[planned]" },
-  { name: "LLM", role: "Drafts the cited answer from retrieved context. Constrained to cite only from the retrieved set.", tool: "[model: TBD]" },
+  { name: "LLM", role: "Drafts the cited answer from retrieved context. Constrained to cite only from the retrieved set.", tool: "Nemotron-3.5 Lightning 30B" },
   { name: "Citation resolver", role: "Parses a citation string and fetches the matching provision from the corpus.", tool: "nyaya/resolve_citation" },
 ];
 
@@ -32,10 +32,10 @@ export const INFRA: StackRow[] = [
 ];
 
 export const FLOW: FlowStep[] = [
-  { num: "1", text: "User submits a natural-language legal question through the web chat or MCP tool." },
-  { num: "2", text: "Query is embedded and the vector store returns the top-k matching passages from the indexed corpus." },
-  { num: "3", text: "Optional reranker reorders the results by relevance (planned; not yet implemented)." },
-  { num: "4", text: "LLM drafts an answer using only the retrieved passages, with inline citations to articles, sections, or cases." },
+  { num: "1", text: "User submits a natural-language legal question through the web chat or an MCP client." },
+  { num: "2", text: "Supervisor LLM reasons briefly about which corpus tools to call, then emits all tool calls in one message for parallel execution." },
+  { num: "3", text: "MCP tools (hybrid_search, get_section, get_article, …) retrieve matching provisions and judgments from the indexed corpus in parallel." },
+  { num: "4", text: "Synthesis LLM composes the final answer using only the retrieved tool results, with inline [[act: X, ref: Y]] citations." },
   { num: "5", text: "Citation resolver parses each reference and fetches the matching provision from the corpus before the answer is displayed." },
 ];
 
@@ -43,7 +43,7 @@ export const TODAY: OpennessItem[] = [
   { on: true, text: "MCP server (HTTP endpoint at /mcp)", meta: "live" },
   { on: true, text: "Open-source MCP server (Apache-2.0)", meta: "live" },
   { on: true, text: "Self-host recipe (Docker + docker-compose)", meta: "live" },
-  { on: false, text: "Web chat + citation engine", meta: "coming soon" },
+  { on: true, text: "Web chat + citation engine (Nemotron-3.5 Lightning)", meta: "live" },
   { on: false, text: "Corpus data dumps", meta: "closed" },
 ];
 
@@ -93,6 +93,14 @@ export const CURATED: CuratedRow[] = [
   { short_name: "BSA", name: "Bharatiya Sakshya Adhiniyam, 2023", type: "Statute", coverage: "All sections (replaces Evidence Act)", status: "live", fallback_date: "" },
   { short_name: "IPC", name: "Indian Penal Code, 1860", type: "Statute", coverage: "All 511 sections (legacy reference)", status: "live", fallback_date: "" },
   { short_name: "CrPC", name: "Code of Criminal Procedure, 1973", type: "Statute", coverage: "All 484 sections (legacy reference)", status: "live", fallback_date: "" },
+  { short_name: "EvidenceAct", name: "Indian Evidence Act, 1872", type: "Statute", coverage: "All sections (legacy reference)", status: "live", fallback_date: "" },
+  { short_name: "CPC", name: "Code of Civil Procedure, 1908", type: "Statute", coverage: "All sections (legacy reference)", status: "live", fallback_date: "" },
+  { short_name: "Companies", name: "Companies Act, 2013", type: "Statute", coverage: "Commercial statute", status: "live", fallback_date: "" },
+  { short_name: "IGST", name: "Integrated Goods and Services Tax Act, 2017", type: "Statute", coverage: "Commercial statute", status: "live", fallback_date: "" },
+  { short_name: "CGST", name: "Central Goods and Services Tax Act, 2017", type: "Statute", coverage: "Commercial statute", status: "live", fallback_date: "" },
+  { short_name: "ITAct", name: "Information Technology Act, 2000", type: "Statute", coverage: "Commercial statute", status: "live", fallback_date: "" },
+  { short_name: "Arbitration", name: "Arbitration and Conciliation Act, 1996", type: "Statute", coverage: "Commercial statute", status: "live", fallback_date: "" },
+  { short_name: "ConsumerProtection", name: "Consumer Protection Act, 2019", type: "Statute", coverage: "Commercial statute", status: "live", fallback_date: "" },
   { short_name: "", name: "Supreme Court landmark judgments", type: "Case law", coverage: "5 curated judgments (Kesavananda, Maneka, Puttaswamy, Shah Bano, Navtej Johar)", status: "live", fallback_date: "2026-07-01" },
   { short_name: "", name: "High Court reported judgments", type: "Case law", coverage: "Planned", status: "coming", fallback_date: "" },
   { short_name: "", name: "Subordinate legislation & rules", type: "Regulation", coverage: "Planned", status: "coming", fallback_date: "" },

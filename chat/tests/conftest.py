@@ -121,6 +121,22 @@ class FakeChatModel:
     async def ainvoke(self, messages, **kw):
         return self.invoke(messages, **kw)
 
+    async def astream(self, messages, **kw):
+        """Stream the next scripted response as a single chunk.
+
+        The synthesis node uses ``astream_with_retry`` which calls
+        ``model.astream()``. We yield the full scripted AIMessage as one
+        chunk so the synthesis node can collect and combine it.
+        """
+        self.calls.append(messages)
+        if self._i < len(self.responses):
+            r = self.responses[self._i]
+            self._i += 1
+            yield r
+        else:
+            from langchain_core.messages import AIMessage
+            yield AIMessage(content="(no more scripted responses)")
+
 
 class _FakeStructuredRunnable:
     """Stand-in for the Runnable returned by ``with_structured_output``.

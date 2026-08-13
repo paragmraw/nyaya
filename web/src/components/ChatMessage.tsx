@@ -8,6 +8,30 @@ import BalanceIcon from "@mui/icons-material/Balance";
 import CitationChip from "./CitationChip";
 import type { ChatMessage, ChatToolEvent } from "@/lib";
 
+// Build a compact label for a tool chip, showing the most relevant arg.
+function toolArgsLabel(name: string, args?: Record<string, unknown>): string {
+  if (!args) return name;
+  const act = args.act || args.act_short_name;
+  const section = args.section_number || args.article_number || args.section;
+  const query = args.query;
+  if (act && section) return `${name}(${act} §${section})`;
+  if (query) return `${name}("${String(query).slice(0, 30)}…")`;
+  if (act) return `${name}(${act})`;
+  if (section) return `${name}(§${section})`;
+  return name;
+}
+
+// Map backend status codes to user-friendly phase labels.
+function phaseLabel(status: string): string {
+  const labels: Record<string, string> = {
+    thinking: "Thinking…",
+    analyzing: "Analysing your question…",
+    searching: "Searching legal corpus…",
+    composing: "Composing answer…",
+  };
+  return labels[status] ?? `${status}…`;
+}
+
 // Render a tool-result value as a compact, readable string. Long strings are
 // left intact — the panel truncates with CSS ellipsis + a scroll fallback so
 // nothing overflows the bubble.
@@ -51,7 +75,7 @@ function ToolChipView({
           </svg>
         )}
       </span>
-      <span className="tool-chip-name">{tool.name}</span>
+      <span className="tool-chip-name">{toolArgsLabel(tool.name, tool.args)}</span>
       {hasDetail && (
         <span className="tool-chip-caret" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -101,23 +125,95 @@ function ToolResultPanel({ tool, onClose }: { tool: ChatToolEvent; onClose: () =
 // Normalise streamed markdown so block-level constructs (headings, blockquotes,
 // lists, tables, code fences) are recognised by CommonMark even when the model
 // emits them without the required preceding blank line. Also collapses 3+
-// newlines to a paragraph break.
+// newlines to a paragraph break, and splits jammed-together block elements
+// (e.g. "### Heading- list item") onto separate lines so they parse correctly.
 function normaliseMd(src: string): string {
   if (!src) return src;
   // Collapse runs of 3+ newlines to exactly two (a single blank line).
   let s = src.replace(/\n{3,}/g, "\n\n");
+
+  // Fix jammed emphasis markers: when the model emits "**text1****text2**",
+  // the inner "****" is a closing-then-opening bold delimiter with no space.
+  // Insert a space so it becomes "**text1** **text2**" and both parse as bold.
+  // Only matches exactly 4 * (not 6+) to avoid touching *** (bold+italic).
+  s = s.replace(/\*\*\*\*(?!\*)/g, "** **");
+  s = s.replace(/____(?!_)/g, "__ __");
+
+  // Split jammed-together block elements that the model emits on a single line.
+  // The model frequently emits headings, list items, table rows, blockquotes,
+  // and horizontal rules all on the same line without newline separators.
+  //
+  // We insert a newline before any block-start marker that appears mid-line.
+  // This runs BEFORE the line-based blank-line insertion below.
+  //
+  // Patterns to split (insert \n before the marker):
+  //  1. "text ### Heading"  /  "text - item"  /  "text > quote"  (whitespace before marker)
+  //     NOTE: Only - and * as list markers after whitespace, NOT + (which
+  //     appears in regular text like "imprisonment + fine").
+  //  2. "word- Capital"  /  "word.- Capital"  /  "word.- **Bold"  (list marker jammed after word/punct)
+  //  3. "**bold**| table"  /  "text)| table"  /  "**bold**- list"  /  "**bold**1. ordered"
+  //  4. "text.> quote"  /  "text)> quote"  (blockquote jammed after punctuation, no space)
+  //  5. "text.---"  /  "text ---"  (horizontal rule jammed after text)
+  s = s.replace(/(\s)(#{1,6}\s|>\s?|[-*]\s)/g, "$1\n$2");
+  s = s.replace(/([a-zA-Z.,\)])(- (?:[A-Z*]|\*\*))/g, "$1\n$2");
+  s = s.replace(/(\*\*)(\|)/g, "$1\n$2");
+  s = s.replace(/(\*\*)(- (?:[A-Z*]|\*\*))/g, "$1\n$2");
+  s = s.replace(/(\*\*)(\d+\.\s)/g, "$1\n$2");
+  // Split | from any preceding non-whitespace, non-pipe character (table row start).
+  // The regex requires at least one | in the captured row and the text before
+  // the first | must NOT be only dashes/colons (which would be a GFM separator
+  // row like |---|---|). We use a negative-lookahead-ish approach: match a
+  // non-pipe/non-space char followed by |, but only if what follows the | is
+  // not just dashes and pipes (i.e., it's a real data row with text).
+  // To keep it simple and avoid breaking separator rows, we only split when
+  // the character before | is NOT a dash or colon.
+  s = s.replace(/([a-zA-Z0-9\)\.\u2019\u201c\u201d"'])\|/g, "$1\n|");
+  // Split > from preceding punctuation (blockquote after sentence end)
+  s = s.replace(/([.,\)])(>)/g, "$1\n$2");
+  // Split --- (horizontal rule) from preceding text on the same line.
+  // Only match when --- is at the start of what looks like a standalone
+  // horizontal rule (preceded by whitespace or sentence-ending punctuation),
+  // NOT when --- is part of a GFM table separator row (|---|---|).
+  s = s.replace(/([.,])(---)/g, "$1\n$2");
+  s = s.replace(/(\s)(---\s*$)/g, "$1\n$2");
+  // Split ATX headings from following text on the same line. The model emits
+  // "### Heading titleParagraph text..." with no newline after the title.
+  // We detect a lowercase letter immediately followed by an uppercase letter
+  // within a heading line and split there (e.g. "saysSection" → "says\nSection").
+  // This runs after the earlier heading split, so it only applies to lines
+  // that already start with ###.
+  s = s.replace(/(#{1,6} .+?[a-z])([A-Z][a-z])/g, "$1\n$2");
+
   // Ensure a blank line before block-start markers when they follow text on
   // the previous line. Matches: ATX headings (#…), blockquotes (>), unordered
   // list items (- * +), ordered list items (1.), fenced code (```), tables
   // (a line starting & ending with |), and horizontal rules (--- / *** / ___).
+  //
+  // EXCEPTION: GFM table rows must NOT be separated from each other — GFM
+  // requires the header, separator, and data rows on consecutive lines.
+  // We detect:
+  //  - separator row: a line of |, -, :, and spaces only (|---|---|…|)
+  //  - table data row: a line containing | that starts and ends with |
   const blockStart =
     /^(#{1,6}\s|>\s?|[-*+]\s|\d+[.)]\s|```| {4,}|\|.*\|\s*$|([-*_]\s?){3,}$)/;
+  const tableSeparator = /^\s*\|?\s*:?-{2,}(:?\s*\|\s*:?-{2,})*:?\s*\|?\s*$/;
+  const tableDataRow = /^\s*\|.*\|\s*$/;
   const lines = s.split("\n");
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const cur = lines[i];
     const prev = out[out.length - 1];
-    if (prev !== undefined && prev.trim() !== "" && cur.trim() !== "" && blockStart.test(cur)) {
+    // Insert a blank line before a block-start marker, but not between
+    // consecutive GFM table rows (header, separator, data) — those must
+    // stay on consecutive lines for GFM to recognise the table.
+    const isTableSep = tableSeparator.test(cur.trim());
+    const isTableData = tableDataRow.test(cur.trim());
+    const prevIsTable = prev !== undefined && (tableDataRow.test(prev.trim()) || tableSeparator.test(prev.trim()));
+    const isTableLine = (isTableSep || isTableData) && prevIsTable;
+    if (
+      prev !== undefined && prev.trim() !== "" && cur.trim() !== "" &&
+      blockStart.test(cur) && !isTableLine
+    ) {
       out.push(""); // insert blank line separator
     }
     out.push(cur);
@@ -132,7 +228,7 @@ function normaliseMd(src: string): string {
 //   class on the last bot message), list tool calls as interactive chips with
 //   an expandable result panel, and render citation chips for any
 //   [[act: X, ref: Y]] markers the model emitted.
-export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
+export default function ChatMessageView({ msg, isStreaming = false }: { msg: ChatMessage; isStreaming?: boolean }) {
   const isBot = msg.role === "assistant";
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   return (
@@ -141,34 +237,15 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
         {isBot ? <BalanceIcon fontSize="small" /> : <PersonIcon fontSize="small" />}
       </div>
       <div className="bubble" data-error={msg.error ? "" : undefined}>
-        {isBot ? (
-          msg.content ? (
-            <div className="md">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  table: (props) => (
-                    <div className="md-table-wrap"><table {...props} /></div>
-                  ),
-                }}
-              >
-                {normaliseMd(msg.content)}
-              </ReactMarkdown>
-            </div>
-          ) : msg.status ? (
-            <span className="chat-status">{msg.status}…</span>
-          ) : null
-        ) : (
-          msg.content
-        )}
-        {isBot && !msg.content && !msg.status && msg.error && (
-          <span className="chat-status chat-halted" aria-label="response halted">
-            <span className="halt-dot" aria-hidden="true" />
-            Stopped; no response was generated.
+        {/* Phase status indicator (shown while streaming with no content yet) */}
+        {isBot && !msg.content && (msg.status || (isStreaming && msg.tools.length === 0 && !msg.reasoning)) && (
+          <span className="chat-status chat-phase">
+            <span className="phase-spinner" aria-hidden="true" />
+            {msg.status ? phaseLabel(msg.status) : "Thinking…"}
           </span>
         )}
-        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}>: {msg.error}</span>}
 
+        {/* Tool calls — shown above content for prominence during streaming */}
         {isBot && msg.tools.length > 0 && (
           <div className="tools" aria-label="Tool calls">
             <div className="tool-chips">
@@ -193,13 +270,52 @@ export default function ChatMessageView({ msg }: { msg: ChatMessage }) {
           </div>
         )}
 
-        {isBot && msg.reasoning && (
-          <details className="reasoning" aria-label="Reasoning trace">
-            <summary>Reasoning trace</summary>
-            <div className="reasoning-body">{msg.reasoning}</div>
+        {/* Content (streams in token-by-token) */}
+        {isBot ? (
+          msg.content ? (
+            <div className="md">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  table: (props) => (
+                    <div className="md-table-wrap"><table {...props} /></div>
+                  ),
+                }}
+              >
+                {normaliseMd(msg.content)}
+              </ReactMarkdown>
+            </div>
+          ) : null
+        ) : (
+          msg.content
+        )}
+
+        {/* Halted-before-content state */}
+        {isBot && !msg.content && !msg.status && msg.error && (
+          <span className="chat-status chat-halted" aria-label="response halted">
+            <span className="halt-dot" aria-hidden="true" />
+            Stopped; no response was generated.
+          </span>
+        )}
+        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}>: {msg.error}</span>}
+
+        {/* Agent plan (supervisor's reasoning, collapsible) */}
+        {isBot && msg.plan && msg.plan.trim() && (
+          <details className="plan-trace" aria-label="Agent plan">
+            <summary>Agent plan</summary>
+            <div className="plan-body">{msg.plan.trim()}</div>
           </details>
         )}
 
+        {/* Reasoning trace from Nemotron thinking mode (collapsible) */}
+        {isBot && msg.reasoning && msg.reasoning.trim() && (
+          <details className="reasoning" aria-label="Reasoning trace">
+            <summary>Reasoning trace</summary>
+            <div className="reasoning-body">{msg.reasoning.trim()}</div>
+          </details>
+        )}
+
+        {/* Citations */}
         {isBot && msg.citations.length > 0 && (
           <div className="cite">
             <strong>Citations:</strong>

@@ -5,17 +5,19 @@
 //
 // The backend (chat/nyaya_chat/server.py) responds to POST /chat/turn with a
 // text/event-stream of typed SSE events:
-//   event: token       data: {"content": "..."}        — LLM token deltas
-//   event: reasoning   data: {"content": "..."}        — reasoning_content deltas
+//   event: status      data: {"msg": "analyzing"|"searching"|"composing"} — phase transition
+//   event: plan        data: {"content": "..."}        — supervisor plan text (routed separately)
+//   event: token       data: {"content": "..."}        — synthesis LLM token deltas (the answer)
+//   event: reasoning   data: {"content": "..."}        — reasoning_content deltas (forward-compat)
 //   event: tool_start  data: {"id","name","args"}      — a tool was called
 //   event: tool_result data: {"id","name","summary"}   — a tool returned
-//   event: status      data: {"msg": "thinking"}       — progress
 //   event: error       data: {"message","detail"}      — failure
 //   event: done        data: {}                         — stream complete
 //
 // The hook assembles token deltas into a single assistant message, collects
-// tool events and the reasoning trace, parses inline [[act: X, ref: Y]]
-// citation markers into citation chips, and reports isStreaming/error.
+// tool events, the supervisor plan, and the reasoning trace, parses inline
+// [[act: X, ref: Y]] citation markers into citation chips, and reports
+// isStreaming/error.
 
 import { useCallback, useRef, useState } from "react";
 import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolEvent } from "./api";
@@ -128,6 +130,7 @@ export function useChat(): UseChat {
       let buffer = "";
       let accContent = "";
       let accReasoning = "";
+      let accPlan = "";
 
       const updateAssistant = (patch: Partial<ChatMessage>) => {
         setMessages((prev) =>
@@ -138,7 +141,17 @@ export function useChat(): UseChat {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, tools: [...m.tools.filter((t) => t.id !== ev.id), ev] }
+              ? {
+                  ...m,
+                  tools: [
+                    ...m.tools.filter((t) => t.id !== ev.id),
+                    // Preserve args from tool_start when tool_result arrives
+                    // (tool_result doesn't include args in the payload).
+                    ev.state === "result"
+                      ? { ...m.tools.find((t) => t.id === ev.id), ...ev }
+                      : ev,
+                  ],
+                }
               : m,
           ),
         );
@@ -169,6 +182,12 @@ export function useChat(): UseChat {
               const r = (payload.content as string) || "";
               accReasoning += r;
               updateAssistant({ reasoning: accReasoning });
+              break;
+            }
+            case "plan": {
+              const p = (payload.content as string) || "";
+              accPlan += p;
+              updateAssistant({ plan: accPlan });
               break;
             }
             case "tool_start": {

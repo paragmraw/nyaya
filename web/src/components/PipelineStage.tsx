@@ -29,13 +29,13 @@ const STAGES: Stage[] = [
     id: "pipe-retrieve",
     num: "02",
     title: "Retrieve",
-    desc: "Vector store returns top-k matching passages from the indexed corpus.",
+    desc: "MCP tools fetch matching provisions and judgments from the indexed corpus (hybrid search fuses FTS + vector).",
     detail: (
       <>
-        <strong>Store:</strong> pgvector (pgvector extension on PostgreSQL).<br />
-        <strong>k:</strong> top-k passages (default 5, max 20).<br />
+        <strong>Store:</strong> pgvector + Postgres tsvector (GIN indexes).<br />
+        <strong>Search:</strong> hybrid_search (RRF-fused FTS + semantic), get_section, get_article, get_judgment.<br />
         <strong>Reranker:</strong> planned; not yet implemented.<br />
-        <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA/IPC/CrPC, SC judgments.
+        <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA, IPC/CrPC/IEA/CPC, commercial statutes, SC judgments.
       </>
     ),
   },
@@ -43,10 +43,11 @@ const STAGES: Stage[] = [
     id: "pipe-cite",
     num: "03",
     title: "Cite",
-    desc: "LLM drafts the answer with inline citations from retrieved passages.",
+    desc: "Synthesis LLM drafts the answer with inline citations from retrieved passages.",
     detail: (
       <>
-        <strong>Model:</strong> instruction-tuned LLM (configuration TBD).<br />
+        <strong>Model:</strong> NVIDIA Nemotron-3.5 Lightning 30B.<br />
+        <strong>Architecture:</strong> supervisor-synthesis LangGraph (supervisor plans, synthesis composes).<br />
         <strong>Constraint:</strong> no answer without a citation in the retrieved context.<br />
         <strong>Output:</strong> answer text + structured citation list.
       </>
@@ -56,12 +57,12 @@ const STAGES: Stage[] = [
     id: "pipe-mcp",
     num: "04",
     title: "MCP",
-    desc: "Citation resolver fetches each reference from the corpus; MCP exposes the pipeline to editors.",
+    desc: "Citation resolver fetches each reference from the corpus; MCP exposes 24 tools to editors.",
     detail: (
       <>
         <strong>Resolver:</strong> parse → match → fetch (see Citations).<br />
-        <strong>MCP server:</strong> HTTP endpoint at /mcp that exposes search_law, get_article, resolve_citation.<br />
-        <strong>Clients:</strong> Claude, Cursor, Windsurf.
+        <strong>MCP server:</strong> HTTP endpoint at /mcp that exposes 24 tools + 11 resources.<br />
+        <strong>Clients:</strong> Claude, Cursor, opencode.
       </>
     ),
   },

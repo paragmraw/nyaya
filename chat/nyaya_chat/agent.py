@@ -31,7 +31,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
 from .config import Settings, get_settings
-from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, get_model
+from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, astream_with_retry, get_model
 from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
@@ -104,12 +104,62 @@ def _tool_call_key(name: str, args: dict) -> str:
     return f"{name}:{normalised}"
 
 
+def _clean_tool_content(content: Any) -> str:
+    """Normalise a ToolMessage's content to a clean string.
+
+    MCP adapters return tool results as a list of content blocks like
+    ``[{'type': 'text', 'text': '{"act": "IPC", ...}', 'id': 'lc_...'}]``.
+    LangGraph's ``ToolNode`` wraps this in a ``ToolMessage`` with
+    ``content=str(result)``, producing the Python repr
+    ``"[{'type': 'text', 'text': '...', 'id': 'lc_...'}]"`` — a string that
+    is unreadable by both the synthesis model and the UI.
+
+    This function detects that pattern and extracts the ``text`` field from
+    each block, producing a clean JSON string (or plain text) that the model
+    can use and the UI can format.
+    """
+    if isinstance(content, str):
+        # Check if it looks like a stringified list of content blocks
+        stripped = content.strip()
+        if stripped.startswith("[{") and "'type'" in stripped and "'text'" in stripped:
+            try:
+                import ast
+                parsed = ast.literal_eval(stripped)
+                if isinstance(parsed, list):
+                    parts = []
+                    for block in parsed:
+                        if isinstance(block, dict):
+                            t = block.get("text") or block.get("content")
+                            if t:
+                                parts.append(str(t))
+                        elif isinstance(block, str):
+                            parts.append(block)
+                    return (" ".join(parts))[:8000]
+            except Exception:
+                pass  # not a valid Python literal — return as-is
+        return content[:8000]
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                t = block.get("text") or block.get("content")
+                if t:
+                    parts.append(str(t))
+            elif isinstance(block, str):
+                parts.append(block)
+        return (" ".join(parts))[:8000]
+    return str(content)[:8000]
+
+
 class DedupToolNode:
     """A ToolNode wrapper that skips duplicate (name+args) tool calls.
 
     If a tool call with the same ``_tool_call_key`` has already been executed
     in this graph run, the duplicate gets a synthetic ToolMessage with the
     cached result — the underlying MCP tool is not called again.
+
+    Also post-processes ToolMessage content to extract clean text from the
+    MCP adapter's list-of-blocks format (see ``_clean_tool_content``).
     """
 
     def __init__(self, tools: list[Any]):
@@ -140,15 +190,23 @@ class DedupToolNode:
 
         if not duplicate_calls:
             result = await self._tool_node.ainvoke(state)
-            # Cache results for future dedup lookups
+            # Clean and cache results for future dedup lookups
+            cleaned_msgs: list[BaseMessage] = []
             for m in result.get("messages", []):
                 if isinstance(m, ToolMessage):
+                    cleaned = _clean_tool_content(m.content)
+                    m = ToolMessage(
+                        content=cleaned,
+                        tool_call_id=m.tool_call_id,
+                        name=m.name,
+                    )
                     for tc in last_ai.tool_calls:
                         if tc.get("id") == m.tool_call_id:
                             key = _tool_call_key(tc["name"], tc.get("args", {}))
-                            self._results[key] = str(m.content)
+                            self._results[key] = cleaned
                             break
-            return result
+                cleaned_msgs.append(m)
+            return {"messages": cleaned_msgs}
 
         # Run unique calls through the real ToolNode
         new_msgs: list[ToolMessage] = []
@@ -159,10 +217,16 @@ class DedupToolNode:
             result = await self._tool_node.ainvoke(modified_state)
             for m in result.get("messages", []):
                 if isinstance(m, ToolMessage):
+                    cleaned = _clean_tool_content(m.content)
+                    m = ToolMessage(
+                        content=cleaned,
+                        tool_call_id=m.tool_call_id,
+                        name=m.name,
+                    )
                     for tc in unique_calls:
                         if tc.get("id") == m.tool_call_id:
                             key = _tool_call_key(tc["name"], tc.get("args", {}))
-                            self._results[key] = str(m.content)
+                            self._results[key] = cleaned
                             break
                     new_msgs.append(m)
 
@@ -264,10 +328,20 @@ def _make_synthesis_node(model: Any, settings: Settings):
             if isinstance(m, SystemMessage):
                 continue  # drop the supervisor's system prompt
             out_msgs.append(m)
-        response = await ainvoke_with_retry(
+        # Stream the synthesis model so LangGraph's stream_mode="messages"
+        # intercepts each token via on_llm_new_token and yields it to the SSE
+        # stream. Collect chunks for the final state update.
+        chunks: list[Any] = []
+        async for chunk in astream_with_retry(
             model, out_msgs, max_retries=settings.llm_max_retries,
-        )
-        return {"messages": [response]}
+        ):
+            chunks.append(chunk)
+        if chunks:
+            final = chunks[0]
+            for chunk in chunks[1:]:
+                final = final + chunk
+            return {"messages": [final]}
+        return {"messages": []}
 
     return _synthesis
 

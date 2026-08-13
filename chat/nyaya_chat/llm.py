@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+from collections.abc import AsyncIterator
 from typing import Any
 
 from .config import Settings, get_settings
@@ -117,7 +118,45 @@ async def ainvoke_with_retry(
                 attempt + 1, max_retries, delay, exc,
             )
             await asyncio.sleep(delay)
-    assert last_exc is not None
+    assert last_exc is not None  # pragma: no cover
+    raise last_exc  # pragma: no cover
+
+
+async def astream_with_retry(
+    model: Any,
+    messages: Any,
+    *,
+    max_retries: int = 4,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0,
+    **kwargs: Any,
+) -> AsyncIterator[Any]:
+    """Stream model tokens with exponential backoff on retryable errors.
+
+    Like :func:`ainvoke_with_retry` but yields ``AIMessageChunk`` objects as
+    they arrive from the model's streaming endpoint. If a retryable error
+    occurs mid-stream, the stream restarts from the beginning (the model has
+    no memory of partial output).
+    """
+    last_exc: BaseException | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            async for chunk in model.astream(messages, **kwargs):
+                yield chunk
+            return
+        except Exception as exc:
+            last_exc = exc
+            if attempt >= max_retries or not _is_retryable(exc):
+                raise
+            delay = min(max_delay, base_delay * (2**attempt))
+            delay = random.uniform(0, delay)
+            log.warning(
+                "retryable stream error (attempt %d/%d), backing off %.1fs: %s",
+                attempt + 1, max_retries, delay, exc,
+            )
+            await asyncio.sleep(delay)
+    assert last_exc is not None  # pragma: no cover
+    raise last_exc  # pragma: no cover
     raise last_exc
 
 

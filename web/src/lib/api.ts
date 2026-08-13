@@ -102,6 +102,7 @@ export type ChatMessage = {
   status?: string;
   error?: string;
   reasoning?: string;
+  plan?: string;
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────

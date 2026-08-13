@@ -88,7 +88,7 @@ export default function ArchitecturePage() {
           <div className="section-head">
             <h2>MCP server</h2>
             <p className="sec-desc">
-              Nyaya ships an MCP server so Claude, Cursor, and Windsurf can query the corpus directly from your editor. Add this config to your client:
+              Nyaya ships an MCP server so Claude, Cursor, and opencode can query the corpus directly from your editor. Add this config to your client:
             </p>
           </div>
 

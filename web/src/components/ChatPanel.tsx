@@ -12,6 +12,12 @@ import { useChat } from "@/lib";
 const GREETING =
   "Namaste. I'm Nyaya. I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
 
+// LLM powering the assistant. Must match the model id configured in
+// chat/nyaya_chat/config.py (SYNTHESIS_MODEL).
+const MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";
+const MODEL_NAME = "Nemotron-3.5 Lightning 30B";
+const MODEL_URL = `https://build.nvidia.com/${MODEL_ID}`;
+
 interface ChatPanelProps {
   /** When true, the chat panel is disabled and shown in a blurred/locked state */
   disabled?: boolean;
@@ -45,8 +51,17 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
           Nyaya Assistant
         </div>
         <div className="ch-meta">
-          <span className="pill">{isStreaming ? "Streaming…" : disabled ? "Disabled" : "Online"}</span>
-          <span className="tag">Citations on</span>
+          <a
+            href={MODEL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="powered-by"
+            title={MODEL_ID}
+          >
+            Powered by
+            <img className="ch-logo" src="/nvidia.svg" alt="NVIDIA" height="14" />
+            {MODEL_NAME}
+          </a>
           <button
             type="button"
             className="new-chat-btn"
@@ -73,7 +88,9 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             </div>
           </div>
         ) : (
-          messages.map((m) => <ChatMessageView key={m.id} msg={m} />)
+          messages.map((m) => (
+            <ChatMessageView key={m.id} msg={m} isStreaming={isStreaming} />
+          ))
         )}
       </div>
 

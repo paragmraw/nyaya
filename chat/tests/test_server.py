@@ -110,6 +110,7 @@ def test_turn_streams_sse(monkeypatch):
             assert "text/event-stream" in r.headers["content-type"]
             body = b"".join(r.iter_bytes())
             assert b"event: status" in body  # immediate status
+            assert b"analyzing" in body  # new initial phase label
             assert b'event: token\ndata: {"content": "Hello "}' in body
             assert b'event: token\ndata: {"content": "world"}' in body
             assert body.endswith(b"event: done\ndata: {}\n\n")

@@ -8,7 +8,7 @@ A monorepo for Indian-law tooling. The first component is an MCP server; other t
 |---|---|---|
 | [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 24 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
 | [`web/`](web/) | alpha | Next.js 16 (App Router, static export) frontend — Home, Corpus, Citations, Architecture pages. Served from the same container as the MCP server via Starlette `StaticFiles`; live data fetched client-side from `/api/*` REST endpoints. |
-| [`chat/`](chat/) | alpha | LangGraph + FastAPI chat backend — retrieval-grounded Indian-law assistant. A ReAct agent over the nyaya MCP tools, powered by NVIDIA Nemotron, streamed to the SPA over SSE. Mounted into the main server at `/chat`, so the SPA, REST, MCP, and chat share one origin and one Railway service. |
+| [`chat/`](chat/) | alpha | LangGraph + FastAPI chat backend — retrieval-grounded Indian-law assistant. A two-phase supervisor-synthesis agent over the nyaya MCP tools (supervisor plans + delegates parallel tool calls, synthesis composes the cited answer), powered by NVIDIA Nemotron, streamed to the SPA over SSE. Mounted into the main server at `/chat`, so the SPA, REST, MCP, and chat share one origin and one Railway service. |
 
 See [`mcp/README.md`](mcp/README.md) for setup, deployment, and client-configuration instructions.
 
