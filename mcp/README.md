@@ -21,7 +21,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 | Constitution (Articles 1–395) | `Vikhram-S/IndianConstitution` | Apache-2.0 |
 | Constitution Schedules + Amendments | PRS PDFs / official MoLJ PDF | CC BY 4.0 / public domain |
 | IPC, IEA (Evidence Act), CPC | `civictech-India/Indian-Law-Penal-Code-Json` (GitHub) | Public domain (government edicts) |
-| CrPC, Companies, GST (IGST+CGST), Arbitration, Consumer Protection | `mratanusarkar/Indian-Laws` (HuggingFace) | Public domain (government edicts) |
+| CrPC, Companies, GST (IGST+CGST), IT Act, Arbitration, Consumer Protection | `mratanusarkar/Indian-Laws` (HuggingFace) | Public domain (government edicts) |
 | BNS, BNSS, BSA (2023) | PRS PDFs | CC BY 4.0 |
 | Landmark SC judgments | Curated from indiankanoon.org browse view | Public domain |
 | IPC↔BNS cross-reference map | PRS comparison docs | — |

@@ -24,7 +24,7 @@ snippet post-processing). See the security review for details.
 | PRS Legislative Research | https://prsindia.org | BNS/BNSS/BSA 2023 PDFs | CC BY 4.0 | Manual review; no automated checksum |
 | constitutionofindia.net | https://constitutionofindia.net | Constitution articles | Public domain | Manual review; no automated checksum |
 | civictech-India (GitHub) | https://github.com/civictech-India/Indian-Law-Penal-Code-Json | IPC, IEA (Evidence Act), CPC JSON | Public domain | Manual review; no automated checksum |
-| mratanusarkar/Indian-Laws (HuggingFace) | https://huggingface.co/datasets/mratanusarkar/Indian-Laws | CrPC + commercial statutes (Companies, GST, Arbitration, Consumer Protection) bare acts JSON | Public domain | Manual review; no automated checksum |
+| mratanusarkar/Indian-Laws (HuggingFace) | https://huggingface.co/datasets/mratanusarkar/Indian-Laws | CrPC + commercial statutes (Companies, GST, IT Act, Arbitration, Consumer Protection) bare acts JSON | Public domain | Manual review; no automated checksum |
 | Vikhram-S/IndianConstitution (PyPI) | https://pypi.org/project/indianconstitution | Constitution articles | Apache-2.0 | Manual review; no automated checksum |
 
 ## Recommended Hardening (Future Work)

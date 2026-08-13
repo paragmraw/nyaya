@@ -65,7 +65,7 @@ export default function CorpusPage() {
           <div className="cadence">
             <div className="cadence-row">
               <span className="cad-when">Manual</span>
-              <span className="cad-what">Constitution + BNS/BNSS/BSA/IPC/CrPC, re-pulled from openly-licensed sources (Vikhram-S/IndianConstitution, PRS, HuggingFace) and diff-merged into the index on demand.</span>
+              <span className="cad-what">Constitution + BNS/BNSS/BSA + IPC/CrPC/IEA/CPC + commercial statutes, re-pulled from openly-licensed sources (Vikhram-S/IndianConstitution, PRS, civictech-India, mratanusarkar/Indian-Laws on HuggingFace) and diff-merged into the index on demand.</span>
             </div>
             <div className="cadence-row">
               <span className="cad-when">Manual</span>
