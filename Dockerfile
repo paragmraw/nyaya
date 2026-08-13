@@ -6,7 +6,7 @@
 
 # --- Stage 1: build the SPA (static export -> /web/out) -----------------------
 # node:20-alpine pinned by digest for reproducible builds (amd64).
-FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb AS web-builder
+FROM node:26-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS web-builder
 ENV NODE_ENV=production
 # Feature flag for chat UI (embedded at build time for static export)
 ARG NEXT_PUBLIC_CHAT_ENABLED=false
