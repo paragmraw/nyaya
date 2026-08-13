@@ -9,7 +9,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 - **24 tools**: `search_law`, `get_section`, `get_article`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `semantic_query`, `get_judgment`, `search_judgments`, `get_sections_by_range`, `get_chapter`, `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment` / `get_amendments_for_article`, `get_definition`, `corpus_stats`, `hybrid_search`, `resolve_citation`, `search_by_kind`
 - **11 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
 - **Full-text search** via Postgres `tsvector` + GIN indexes, with true total counts and `offset` pagination
-- **Semantic search** via `pgvector` + local `fastembed` embeddings (BAAI/bge-large-en-v1.5, 1024-d) — available in local dev and the slim-based image; **disabled in the Alpine image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants)). CUDAExecutionProvider is used on NVIDIA GPUs with automatic CPU fallback.
+- **Semantic search** via `pgvector` + local `fastembed` embeddings (BAAI/bge-large-en-v1.5, 1024-d) — available in local dev (install with `pip install -e ".[semantic]"`); **disabled in the Alpine Docker image** (onnxruntime has no musllinux wheels — see [Image variants](#image-variants)). CUDAExecutionProvider is used on NVIDIA GPUs with automatic CPU fallback.
 - **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
 - **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
 - **Structured errors**: `NotFound` with `kind` (act/section/article/judgment/schedule/amendment) and `hint`; `EmbeddingUnavailable` distinct from "no matches"
@@ -20,7 +20,8 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 |---|---|---|
 | Constitution (Articles 1–395) | `Vikhram-S/IndianConstitution` | Apache-2.0 |
 | Constitution Schedules + Amendments | PRS PDFs / official MoLJ PDF | CC BY 4.0 / public domain |
-| IPC, CrPC, CPC, Evidence Act, Companies, GST, IT, Arbitration, Consumer Protection | `mratanusarkar/Indian-Laws` (HuggingFace) | Public domain (government edicts) |
+| IPC, IEA (Evidence Act), CPC | `civictech-India/Indian-Law-Penal-Code-Json` (GitHub) | Public domain (government edicts) |
+| CrPC, Companies, GST (IGST+CGST), Arbitration, Consumer Protection | `mratanusarkar/Indian-Laws` (HuggingFace) | Public domain (government edicts) |
 | BNS, BNSS, BSA (2023) | PRS PDFs | CC BY 4.0 |
 | Landmark SC judgments | Curated from indiankanoon.org browse view | Public domain |
 | IPC↔BNS cross-reference map | PRS comparison docs | — |
@@ -169,6 +170,19 @@ The Dockerfile (`mcp/Dockerfile`) builds an **Alpine** image — the smallest op
 
 ### Claude Desktop
 
+Add to `claude_desktop_config.json` (under Settings → Developer):
+
+```json
+{
+  "mcpServers": {
+    "nyaya": {
+      "url": "https://<your-domain>/mcp",
+      "transport": "http"
+    }
+  }
+}
+```
+
 ### Cursor
 
 **Settings → MCP → Add server**:
@@ -211,7 +225,7 @@ asyncio.run(main())
 | `list_articles` | `part: str?`, `limit: int=100`, `offset: int=0` | Constitution articles by Part (paginated, with total) |
 | `list_judgments` | `limit: int=50`, `offset: int=0` | All landmark judgments (paginated, with total) |
 | `cross_reference` | `act: str`, `section: str`, `direction: str="both"` | Bidirectional cross-refs (from+to) |
-| `semantic_query` | `query: str`, `act: str?`, `limit: int=5` | Embedding-NN hits (raises `EmbeddingUnavailable` if disabled) |
+| `semantic_query` | `query: str`, `act: str?`, `limit: int=5` | Embedding-NN hits; returns empty `SearchResponse` with `fallback_reason="embedding_unavailable"` if the model is not installed (e.g. Alpine image) |
 | `get_judgment` | `case_slug: str` | Full judgment by citation or slug |
 | `search_judgments` | `query: str`, `court: str?`, `date_from: str?`, `date_to: str?`, `limit: int=10`, `offset: int=0` | FTS over judgments (validates ISO dates) |
 | `get_sections_by_range` | `act: str`, `start: str`, `end: str`, `limit: int=500` | Sections in a numeric range |
