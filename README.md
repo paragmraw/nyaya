@@ -1,6 +1,8 @@
 # nyaya
 
-A monorepo for Indian-law tooling. The first component is an MCP server; other tools will follow.
+**A monorepo for Indian-law tooling** — MCP server, Next.js frontend, and LangGraph chat assistant for Indian legal research (Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark Supreme Court judgments).
+
+The first component is an MCP server; other tools will follow.
 
 ## Components
 
