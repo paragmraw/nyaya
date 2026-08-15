@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Sub-app lifespan: no agent building here (lazy init on first request).
     # Host lifespan handles agent building and injection.
     s = get_settings()
-    log.info("nyaya-chat sub-app lifespan starting: %s", s.as_log_dict())
+    log.info("nyaya-chat sub-app lifespan starting: model=%s mcp_url=%s", s.llm_model, s.mcp_url)
     app.state.settings = s
     try:
         yield
@@ -94,10 +94,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 graph, tools = await get_agent()
                 app.state.graph = graph
                 app.state.tools = tools
-            except Exception as e:
+            except Exception:
                 log.exception("failed to build chat agent for turn")
                 return JSONResponse(
-                    {"error": "agent_unavailable", "detail": str(e)},
+                    {"error": "agent_unavailable", "detail": "chat agent temporarily unavailable"},
                     status_code=503,
                 )
 

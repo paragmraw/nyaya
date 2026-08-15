@@ -74,8 +74,9 @@ def _extract_current_block(html: str) -> str:
     blocks. We extract visible text and trim at the first VERSION/SUMMARY marker.
     """
     # Strip script/style blocks first so their contents don't pollute the text.
-    html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
-    html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
+    # Use regex that also matches malformed closing tags like </script foo="bar">
+    html = re.sub(r"(?i)<script[^>]*>.*?</script\s*[^>]*>", "", html, flags=re.DOTALL)
+    html = re.sub(r"(?i)<style[^>]*>.*?</style\s*[^>]*>", "", html, flags=re.DOTALL)
     # Convert <br>, <p>, </li>, </tr>, </h*>, </td> to newlines for structure.
     html = re.sub(r"<br\s*/?>", "\n", html, flags=re.IGNORECASE)
     html = re.sub(r"</(p|li|tr|h[1-6]|td|div)>", "\n", html, flags=re.IGNORECASE)
