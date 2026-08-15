@@ -58,9 +58,11 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             className="powered-by"
             title={MODEL_ID}
           >
-            Powered by
+            <span className="pb-label">Powered by</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="ch-logo" src="/nvidia.svg" alt="NVIDIA" height="14" />
-            {MODEL_NAME}
+            <span className="model-full">{MODEL_NAME}</span>
+            <span className="model-short" aria-hidden="true">Nemotron-3.5</span>
           </a>
           <button
             type="button"
@@ -73,7 +75,7 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 5v14M5 12h14" />
             </svg>
-            New chat
+            <span className="nc-label">New chat</span>
           </button>
         </div>
       </div>
