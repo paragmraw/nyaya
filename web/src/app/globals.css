@@ -997,6 +997,32 @@ pre.mcp-json .n { color: var(--fg); }
   .pane-right { height: 60vh; }
 }
 
+@media (max-width: 640px) {
+  .chat-head { padding: 9px 10px; }
+  .chat-head .ch-title { font-size: 13px; gap: 6px; }
+  .chat-head .ch-meta { gap: 8px; }
+  .chat-head .powered-by { gap: 4px; font-size: 9.5px; }
+  .chat-head .ch-logo { height: 12px; }
+  .chat-head .model-full { display: none; }
+  .chat-head .model-short { display: inline; }
+  .chat-head .pb-label { display: none; }
+  .new-chat-btn { padding: 3px 7px; font-size: 9.5px; gap: 4px; }
+  .new-chat-btn svg { width: 12px; height: 12px; }
+  .new-chat-btn .nc-label { display: none; }
+}
+
+@media (max-width: 480px) {
+  .chat-head { flex-wrap: wrap; gap: 6px; }
+  .chat-head .ch-title { font-size: 12.5px; }
+  .chat-head .model-short { display: none; }
+  .chat-head .ch-logo { height: 14px; }
+  .chat-head .powered-by { gap: 6px; }
+}
+
+@media (min-width: 641px) {
+  .chat-head .model-short { display: none; }
+}
+
 /* ─── reduced motion (vestibular / 2.2.2) ────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .status-dot.live { animation: none; }
