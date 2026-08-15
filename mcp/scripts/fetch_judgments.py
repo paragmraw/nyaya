@@ -50,8 +50,9 @@ def _extract_body(html: str) -> str:
     body_html = html[start:end]
 
     # Strip scripts/styles.
-    body_html = re.sub(r"<script[^>]*>.*?</script>", "", body_html, flags=re.DOTALL | re.IGNORECASE)
-    body_html = re.sub(r"<style[^>]*>.*?</style>", "", body_html, flags=re.DOTALL | re.IGNORECASE)
+    # Use regex that also matches malformed closing tags like </script foo="bar">
+    body_html = re.sub(r"(?i)<script[^>]*>.*?</script\s*[^>]*>", "", body_html, flags=re.DOTALL)
+    body_html = re.sub(r"(?i)<style[^>]*>.*?</style\s*[^>]*>", "", body_html, flags=re.DOTALL)
 
     # Convert to text: preserve paragraph breaks.
     body_html = re.sub(r"<br\s*/?>", "\n", body_html, flags=re.IGNORECASE)
