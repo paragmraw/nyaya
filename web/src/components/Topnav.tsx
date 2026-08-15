@@ -135,7 +135,7 @@ export default function Topnav() {
         className={`mobile-nav${menuOpen ? " open" : ""}`}
         id="mobile-nav"
         ref={navRef}
-        inert={!menuOpen ? "" : undefined}
+        inert={!menuOpen || undefined}
         aria-hidden={!menuOpen}
       >
         <div className="mobile-nav-scroll">

@@ -59,6 +59,7 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             title={MODEL_ID}
           >
             <span className="pb-label">Powered by</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="ch-logo" src="/nvidia.svg" alt="NVIDIA" height="14" />
             <span className="model-full">{MODEL_NAME}</span>
             <span className="model-short" aria-hidden="true">Nemotron-3.5</span>
