@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import json
 import logging
-import traceback
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -231,6 +230,6 @@ async def stream_turn(
 
     except Exception as exc:  # noqa: BLE001 — we want to surface any failure.
         log.error("agent stream failed: %s", exc, exc_info=True)
-        yield _sse("error", {"message": "agent_error", "detail": str(exc), "trace": traceback.format_exc(limit=3)})
+        yield _sse("error", {"message": "agent_error", "detail": "internal server error"})
 
     yield _sse("done", {})
