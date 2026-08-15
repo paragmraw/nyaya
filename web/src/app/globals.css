@@ -151,6 +151,8 @@ body.home .lead { max-width: 46ch; }
 .topnav nav a.active { color: var(--fg); font-weight: 600; }
 .topnav .nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .topnav .meta { color: var(--muted); }
+.topnav .github-link { display: inline-flex; align-items: center; color: var(--muted); padding: 4px; border-radius: 6px; transition: color 0.2s ease, background 0.2s ease; }
+.topnav .github-link:hover { color: var(--fg); background: var(--accent-soft); }
 /* Mobile menu toggle — hidden on desktop, shown at ≤640px */
 .topnav .menu-toggle {
   display: none;
