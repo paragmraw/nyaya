@@ -34,10 +34,11 @@ ingest = [
     "tqdm>=4.66,<5",
 ]
 semantic = [
-    "fastembed>=0.3.0,<0.6",
+    "fastembed>=0.6,<1",
+    "pillow>=12.3.0,<13",
 ]
 dev = [
-    "pytest>=8.0,<9",
+    "pytest>=9.0.3,<10",
     "pytest-asyncio>=0.23,<0.25",
     "pytest-cov>=5.0,<7",
     "ruff>=0.6,<1",
