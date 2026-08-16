@@ -25,7 +25,7 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
   variable: "--font-jetbrains-mono",
-  display: "swap",
+  display: "fallback",
 });
 
 export const metadataBase = new URL("https://nyaya.example.com");
