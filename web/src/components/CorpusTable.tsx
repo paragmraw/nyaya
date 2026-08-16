@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Act } from "@/lib/api";
 import { CURATED } from "@/lib";
 
 // Curated metadata for the corpus table. The design ships these rows with
@@ -9,6 +8,11 @@ import { CURATED } from "@/lib";
 // onto this metadata by short_name. Acts not in the curated list still
 // render with a default "Live" status and the act's as_of date. Non-act rows
 // (judgments, legislation) use a fallback date from the design export.
+
+type ActLike = {
+  short_name: string;
+  as_of?: string | null;
+};
 
 type Row = {
   key: string;
@@ -22,14 +26,14 @@ type Row = {
 const STATUS_FILTERS = ["all", "live", "beta", "coming"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-export default function CorpusTable({ acts }: { acts: Act[] | undefined }) {
+export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
   // -1 means "unsorted" (curated order); clicking a header sets sortCol.
   const [sortCol, setSortCol] = useState<number>(-1);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filter, setFilter] = useState<StatusFilter>("all");
 
   const actsByShort = useMemo(() => {
-    const m = new Map<string, Act>();
+    const m = new Map<string, ActLike>();
     (acts ?? []).forEach((a) => m.set(a.short_name, a));
     return m;
   }, [acts]);

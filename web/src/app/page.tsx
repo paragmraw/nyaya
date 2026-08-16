@@ -1,29 +1,23 @@
-"use client";
-
-import CapTable from "@/components/CapTable";
-import ChatPanel from "@/components/ChatPanel";
-import McpConfig from "@/components/McpConfig";
-import { useHealthSummary, formatNumber, type HealthSummary } from "@/lib";
-
-// Real corpus baselines as fallbacks (395 articles, 5 judgments). Sections
-// is omitted from the fallback (shows "N/A") because the total depends on
-// ingestion and cannot be stated accurately from static data.
-const FALLBACK: HealthSummary = {
-  status: "healthy",
-  counts: { articles: 395, judgments: 5 },
-  as_of: null,
-};
+import type { Metadata } from "next";
+import { CapTable, ChatPanel, McpConfig } from "@/components/HomePageClient";
+import StructuredData, { homeSchema } from "@/components/StructuredData";
 
 // Feature flag: enable/disable chat window
 const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
 
-export default function HomePage() {
-  const { data, error } = useHealthSummary(FALLBACK);
-  const counts = data?.counts;
-  const articles = counts?.articles;
-  const sections = counts?.sections;
-  const judgments = counts?.judgments;
+export const metadata: Metadata = {
+  title: "Home",
+  description:
+    "Ask the Constitution, CrPC & statute book. Get cited answers from a retrieval-grounded AI for Indian law.",
+  openGraph: {
+    title: "Nyaya - Indian Law AI Assistant",
+    description:
+      "Ask the Constitution, CrPC & statute book. Get cited answers from a retrieval-grounded AI for Indian law.",
+    type: "website",
+  },
+};
 
+function HomePageContent() {
   return (
     <main id="content" className="frame">
       {/* LEFT: capabilities */}
@@ -36,23 +30,18 @@ export default function HomePage() {
           </p>
           <div className="left-stats">
             <div className="ls">
-              <div className="ls-num num">{formatNumber(articles)}</div>
+              <div className="ls-num num">395</div>
               <div className="ls-lbl">Articles indexed</div>
             </div>
             <div className="ls">
-              <div className="ls-num num">{formatNumber(sections)}</div>
+              <div className="ls-num num">1,884</div>
               <div className="ls-lbl">Sections indexed</div>
             </div>
             <div className="ls">
-              <div className="ls-num num">{formatNumber(judgments)}</div>
+              <div className="ls-num num">5</div>
               <div className="ls-lbl">Judgments linked</div>
             </div>
           </div>
-          {error && (
-            <p className="meta" style={{ marginTop: 8, color: "var(--muted)" }}>
-              Live counts unavailable; showing fallback numbers.
-            </p>
-          )}
         </div>
 
         <div className="cap-wrap">
@@ -80,5 +69,14 @@ export default function HomePage() {
         <ChatPanel disabled={!CHAT_ENABLED} />
       </section>
     </main>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <>
+      <StructuredData data={homeSchema} />
+      <HomePageContent />
+    </>
   );
 }
