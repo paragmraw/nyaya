@@ -29,3 +29,7 @@ next-env.d.ts
 # The root .gitignore has a top-level `lib/` pattern (Python build artifact).
 # Un-ignore the SPA's src/lib barrel so api.ts/swr.ts/index.ts are tracked.
 !src/lib/
+
+# Generated corpus stats (build-time)
+/public/corpus-stats.json
+/src/data/corpus-stats.json

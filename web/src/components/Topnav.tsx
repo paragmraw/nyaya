@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const NAV_LINKS = [
-  { href: "/corpus", label: "Corpus" },
-  { href: "/citations", label: "Citations" },
-  { href: "/architecture", label: "Architecture" },
+  { href: "/corpus/", label: "Corpus" },
+  { href: "/citations/", label: "Citations" },
+  { href: "/architecture/", label: "Architecture" },
 ];
 
 function renderNavLink(
@@ -15,7 +16,7 @@ function renderNavLink(
   current: string,
   onNavigate?: () => void,
 ) {
-  const isActive = current === link.href || current.startsWith(link.href + "/");
+  const isActive = current === link.href || current.startsWith(link.href);
   return (
     <Link
       key={link.href}
@@ -31,7 +32,7 @@ function renderNavLink(
 
 export default function Topnav() {
   const pathname = usePathname();
-  const current = (pathname ?? "/").replace(/\/$/, "") || "/";
+  const current = pathname ?? "/";
   const isHome = current === "/";
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -108,8 +109,14 @@ export default function Topnav() {
     <header className={`topnav${isHome ? "" : " topnav-sticky"}`}>
       <div className="container topnav-inner">
         <Link href="/" className="logo" aria-label="Nyaya">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Nyaya" />
+          <Image
+            src="/logo.svg"
+            alt="Nyaya"
+            width={30}
+            height={30}
+            priority
+            sizes="30px"
+          />
         </Link>
         <nav>
           {NAV_LINKS.map((l) => renderNavLink(l, current))}

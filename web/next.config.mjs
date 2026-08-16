@@ -4,7 +4,9 @@ const nextConfig = {
   // The Python MCP container serves the built `out/` via Starlette StaticFiles.
   output: "export",
 
-  // No image optimization in static export — serve images as-is.
+  // Image optimization requires a Node server; for static export we use the
+  // Image component with unoptimized: true to still get proper sizing/CLS prevention
+  // without the optimization API. Images are served as-is from the public/ folder.
   images: {
     unoptimized: true,
   },

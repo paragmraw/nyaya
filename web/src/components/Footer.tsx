@@ -1,7 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback } from "react";
 import { usePathname } from "next/navigation";
+
+const FOOTER_LINKS = [
+  { href: "/corpus/", label: "Corpus" },
+  { href: "/citations/", label: "Citations" },
+  { href: "/architecture/", label: "Architecture" },
+  { href: "https://github.com/paragmraw/nyaya", label: "GitHub", external: true },
+];
 
 export default function Footer() {
   const pathname = usePathname();
@@ -20,10 +28,25 @@ export default function Footer() {
   return (
     <footer className="footer">
       <div className="container footer-inner">
-        <span className="meta">Nyaya · indexed legal corpus · v0.1 alpha</span>
-        <button type="button" className="back-to-top" onClick={backToTop}>
-          Back to top ↑
-        </button>
+        <nav className="footer-nav" aria-label="Footer navigation">
+          {FOOTER_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="footer-link"
+              target={link.external ? "_blank" : undefined}
+              rel={link.external ? "noopener noreferrer" : undefined}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+        <div className="footer-meta">
+          <span className="meta">Nyaya · indexed legal corpus · v0.1 alpha</span>
+          <button type="button" className="back-to-top" onClick={backToTop}>
+            Back to top ↑
+          </button>
+        </div>
       </div>
     </footer>
   );
