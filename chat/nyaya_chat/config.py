@@ -56,11 +56,10 @@ MAX_HISTORY = 8                   # max prior (role, content) turns the client m
 # Chat logger level.
 LOG_LEVEL = "INFO"
 
-# Curated default tool set. The nyaya MCP server exposes 24 tools; we expose
+# Curated default tool set. The nyaya MCP server exposes ~20 tools; we expose
 # the ones most useful for grounded Q&A.
 DEFAULT_TOOLS: tuple[str, ...] = (
-    "hybrid_search",
-    "search_law",
+    "semantic_query",
     "get_section",
     "get_article",
     "get_judgment",

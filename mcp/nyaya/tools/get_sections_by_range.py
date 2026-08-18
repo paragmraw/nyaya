@@ -6,7 +6,7 @@ import re
 
 from .. import db
 from ..exceptions import NotFound, SearchError
-from ..models import SectionsList
+from ..models import DocumentsList
 from ._util import run_sync
 
 _NUM_PREFIX_RE = re.compile(r"^\d+")
@@ -19,14 +19,13 @@ def register(mcp) -> None:
             "Fetch all sections of an act between two section numbers (inclusive). Useful "
             "for retrieving a whole chapter after list_chapters shows a range like "
             "'Sections 299 to 377' — instead of calling get_section 79 times. Section "
-            "numbers are compared by their numeric prefix; the alpha suffix is used as a "
-            "tiebreaker. Act names are normalized."
+            "numbers are compared by their numeric prefix. Act names are normalized."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get sections by range"},
     )
     @run_sync
     def get_sections_by_range(act: str, start: str, end: str,
-                              limit: int = 500) -> SectionsList:
+                              limit: int = 500) -> DocumentsList:
         """Fetch sections in a range.
 
         Args:
@@ -36,7 +35,6 @@ def register(mcp) -> None:
             limit: Max sections to return (default 500, max 1000).
         """
         limit = max(1, min(int(limit), 1000))
-        # Validate start/end have a numeric prefix to avoid a SQL cast error.
         for label, val in (("start", start), ("end", end)):
             v = db.normalize_ref(val) or ""
             if not _NUM_PREFIX_RE.match(v):
@@ -52,5 +50,4 @@ def register(mcp) -> None:
                     kind="act",
                     hint="Call list_acts to enumerate the corpus.",
                 )
-        return SectionsList(act=act, sections=sections, total=len(sections),
-                            offset=0, limit=limit)
+        return DocumentsList(documents=sections, total=len(sections), offset=0, limit=limit)

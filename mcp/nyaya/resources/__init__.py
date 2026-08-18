@@ -76,11 +76,6 @@ def register(mcp) -> None:
         mime_type="application/json",
     )
     def act_metadata(short_name: str) -> str:
-        # NOTE: optimization opportunity — get_act + list_chapters are two round
-        # trips. They could be combined into a single query (e.g. a join or a
-        # CTE returning the act row plus its chapters), but db.py has no such
-        # combined function today. Left as-is: both calls are cheap and the code
-        # is clearer with them separated.
         act = db.get_act(short_name)
         if act is None:
             raise NotFound(
@@ -92,7 +87,7 @@ def register(mcp) -> None:
         return json.dumps(
             {
                 "act": act.model_dump(mode="json"),
-                "chapters": [c.model_dump(mode="json") for c in chapters],
+                "chapters": chapters,
             },
             indent=2,
         )
@@ -109,7 +104,7 @@ def register(mcp) -> None:
             raise NotFound(
                 f"Section {number} of {act} not found in corpus.",
                 kind="section",
-                hint="Call search_law or list_chapters to find the right section.",
+                hint="Call semantic_query or list_chapters to find the right section.",
             )
         return sec.model_dump_json(indent=2)
 
@@ -125,14 +120,14 @@ def register(mcp) -> None:
             raise NotFound(
                 f"Article {number!r} not found in corpus.",
                 kind="article",
-                hint="Call search_law or list_articles to find the right article.",
+                hint="Call semantic_query or list_articles to find the right article.",
             )
         return art.model_dump_json(indent=2)
 
     @mcp.resource(
         "judgment://{case_slug}",
         name="Landmark judgment",
-        description="Full text of a landmark Supreme Court judgment by citation or slugified case name, e.g. judgment://kesavananda-bharati-v-state-of-kerala.",
+        description="Full text of a landmark Supreme Court judgment by citation or slugified case name.",
         mime_type="application/json",
     )
     def judgment_resource(case_slug: str) -> str:
@@ -141,7 +136,7 @@ def register(mcp) -> None:
             raise NotFound(
                 f"Judgment {case_slug!r} not found in corpus.",
                 kind="judgment",
-                hint="Call judgments:// or search_judgments to find cases.",
+                hint="Call judgments:// or semantic_query to find cases.",
             )
         return jud.model_dump_json(indent=2)
 

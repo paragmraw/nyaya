@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .. import db
 from ..exceptions import NotFound
-from ..models import Section
+from ..models import Document
 from ._util import run_sync
 
 
@@ -22,7 +22,7 @@ def register(mcp) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a section by number"},
     )
     @run_sync
-    def get_section(act: str, section: str) -> Section:
+    def get_section(act: str, section: str) -> Document:
         """Get a section by act and number.
 
         Args:
@@ -35,8 +35,8 @@ def register(mcp) -> None:
             raise NotFound(
                 f"Section {section} of {act} is not in the nyaya corpus. "
                 "The corpus is a frozen snapshot; some sections may be missing. "
-                "Try search_law to find related provisions.",
+                "Try semantic_query to find related provisions.",
                 kind="section",
-                hint="Call search_law with a topical query, or list_chapters to see the act's structure.",
+                hint="Call semantic_query with a topical query, or list_chapters to see the act's structure.",
             )
         return result

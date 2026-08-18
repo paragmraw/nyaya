@@ -6,7 +6,7 @@ import re
 
 from .. import db
 from ..exceptions import NotFound, SearchError
-from ..models import Article, Judgment, Section
+from ..models import Document
 from ._util import run_sync
 
 # Matches "IPC s.302", "s.302 IPC", "Art.21", "AIR 1973 SC 1461".
@@ -30,7 +30,7 @@ def register(mcp) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Resolve a citation"},
     )
     @run_sync
-    def resolve_citation(citation: str) -> Section | Article | Judgment:
+    def resolve_citation(citation: str) -> Document:
         """Resolve a legal citation to a section, article, or judgment.
 
         Args:
@@ -66,5 +66,5 @@ def register(mcp) -> None:
         raise NotFound(
             f"Could not resolve citation {citation!r}.",
             kind="unknown",
-            hint="Try search_law with the citation text to find related provisions.",
+            hint="Try semantic_query with the citation text to find related provisions.",
         )

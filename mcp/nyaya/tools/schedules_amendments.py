@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .. import db
 from ..exceptions import NotFound
-from ..models import Amendment, AmendmentsList, Schedule, SchedulesList
+from ..models import Document
 from ._util import run_sync
 
 
@@ -19,9 +19,9 @@ def register(mcp) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List Constitution schedules"},
     )
     @run_sync
-    def list_schedules() -> SchedulesList:
+    def list_schedules() -> list[Document]:
         """List all Constitution schedules."""
-        return SchedulesList(schedules=db.list_schedules())
+        return db.list_schedules()
 
     @mcp.tool(
         name="get_schedule",
@@ -32,7 +32,7 @@ def register(mcp) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a Constitution schedule"},
     )
     @run_sync
-    def get_schedule(number: int) -> Schedule:
+    def get_schedule(number: int) -> Document:
         """Get a schedule by number.
 
         Args:
@@ -58,14 +58,14 @@ def register(mcp) -> None:
     )
     @run_sync
     def list_amendments(year_from: int | None = None,
-                        year_to: int | None = None) -> AmendmentsList:
+                        year_to: int | None = None) -> list[Document]:
         """List Constitutional amendments.
 
         Args:
             year_from: Optional minimum year (inclusive).
             year_to: Optional maximum year (inclusive).
         """
-        return AmendmentsList(amendments=db.list_amendments(year_from=year_from, year_to=year_to))
+        return db.list_amendments(year_from=year_from, year_to=year_to)
 
     @mcp.tool(
         name="get_amendment",
@@ -76,7 +76,7 @@ def register(mcp) -> None:
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a Constitutional amendment"},
     )
     @run_sync
-    def get_amendment(number: int) -> Amendment:
+    def get_amendment(number: int) -> Document:
         """Get an amendment by number.
 
         Args:

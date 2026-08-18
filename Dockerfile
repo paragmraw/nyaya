@@ -79,8 +79,6 @@ COPY --from=py-builder /usr/local/bin /usr/local/bin
 
 # Application code (server.py mounts StaticFiles at web/out/)
 COPY --chown=nyaya:nyaya mcp/nyaya/ /app/nyaya/
-COPY --chown=nyaya:nyaya mcp/scripts/ /app/scripts/
-COPY --chown=nyaya:nyaya mcp/data/ /app/data/
 COPY --chown=nyaya:nyaya mcp/pyproject.toml mcp/README.md /app/
 
 # Built SPA from stage 1 — served at / by Starlette StaticFiles

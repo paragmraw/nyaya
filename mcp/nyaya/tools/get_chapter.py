@@ -26,9 +26,8 @@ def register(mcp) -> None:
             act: Act short name or alias, e.g. 'IPC', 'BNS'.
             chapter: Chapter number, e.g. 16.
         """
-        chapters = db.list_chapters(act)
-        ch = next((c for c in chapters if c.number == chapter), None)
-        if ch is None:
+        result = db.get_chapter(act, chapter)
+        if result is None:
             if db.get_act(act) is None:
                 raise NotFound(
                     f"Act {act!r} not found in the corpus.",
@@ -40,8 +39,7 @@ def register(mcp) -> None:
                 kind="chapter",
                 hint="Call list_chapters to see available chapters.",
             )
-        sections, _ = db.list_sections(act, chapter=chapter, limit=500)
         return ChapterWithSections(
-            act=act, number=ch.number, title=ch.title,
-            section_range=ch.section_range, sections=sections,
+            act=result["act"], number=result["number"], title=result["title"],
+            section_range=result.get("section_range"), sections=result["sections"],
         )

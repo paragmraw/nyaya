@@ -4,13 +4,7 @@ from __future__ import annotations
 
 from .. import db
 from ..exceptions import NotFound
-from ..models import (
-    ActsList,
-    ArticlesList,
-    ChaptersList,
-    JudgmentsList,
-    SectionsList,
-)
+from ..models import ActsList, DocumentsList
 from ._util import run_sync
 
 
@@ -33,14 +27,14 @@ def register(mcp) -> None:
     @mcp.tool(
         name="list_chapters",
         description=(
-            "List the chapters of a specific act with their section ranges. Useful for "
-            "navigating a large act (e.g. IPC has 23 chapters) before fetching individual "
-            "sections. Act names are normalized (case-insensitive, aliases accepted)."
+            "List the chapters of a specific act. Chapters are derived from section metadata. "
+            "Useful for navigating a large act (e.g. IPC has 23 chapters) before fetching "
+            "individual sections. Act names are normalized (case-insensitive, aliases accepted)."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List chapters of an act"},
     )
     @run_sync
-    def list_chapters(act: str) -> ChaptersList:
+    def list_chapters(act: str) -> dict:
         """List chapters of an act.
 
         Args:
@@ -54,8 +48,7 @@ def register(mcp) -> None:
                     kind="act",
                     hint="Call list_acts to enumerate the corpus.",
                 )
-            return ChaptersList(act=act, chapters=[])
-        return ChaptersList(act=act, chapters=chapters)
+        return {"act": act, "chapters": chapters}
 
     @mcp.tool(
         name="list_sections",
@@ -69,7 +62,7 @@ def register(mcp) -> None:
     )
     @run_sync
     def list_sections(act: str, chapter: int | None = None,
-                      limit: int = 100, offset: int = 0) -> SectionsList:
+                      limit: int = 100, offset: int = 0) -> DocumentsList:
         """List sections of an act.
 
         Args:
@@ -81,7 +74,7 @@ def register(mcp) -> None:
         limit = max(1, min(int(limit), 500))
         offset = max(0, int(offset))
         sections, total = db.list_sections(act, chapter=chapter, limit=limit, offset=offset)
-        return SectionsList(act=act, sections=sections, total=total, offset=offset, limit=limit)
+        return DocumentsList(documents=sections, total=total, offset=offset, limit=limit)
 
     @mcp.tool(
         name="list_articles",
@@ -95,7 +88,7 @@ def register(mcp) -> None:
     )
     @run_sync
     def list_articles(part: str | None = None,
-                      limit: int = 100, offset: int = 0) -> ArticlesList:
+                      limit: int = 100, offset: int = 0) -> DocumentsList:
         """List Constitution articles.
 
         Args:
@@ -106,19 +99,19 @@ def register(mcp) -> None:
         limit = max(1, min(int(limit), 500))
         offset = max(0, int(offset))
         articles, total = db.list_articles(part=part, limit=limit, offset=offset)
-        return ArticlesList(articles=articles, total=total, offset=offset, limit=limit)
+        return DocumentsList(documents=articles, total=total, offset=offset, limit=limit)
 
     @mcp.tool(
         name="list_judgments",
         description=(
             "List landmark judgments in the corpus, with pagination. Use this to browse "
             "available cases before fetching full text with get_judgment or searching with "
-            "search_judgments."
+            "semantic_query."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List landmark judgments"},
     )
     @run_sync
-    def list_judgments(limit: int = 50, offset: int = 0) -> JudgmentsList:
+    def list_judgments(limit: int = 50, offset: int = 0) -> DocumentsList:
         """List all landmark judgments.
 
         Args:
@@ -128,4 +121,4 @@ def register(mcp) -> None:
         limit = max(1, min(int(limit), 1000))
         offset = max(0, int(offset))
         judgments, total = db.list_judgments(limit=limit, offset=offset)
-        return JudgmentsList(judgments=judgments, total=total, offset=offset, limit=limit)
+        return DocumentsList(documents=judgments, total=total, offset=offset, limit=limit)

@@ -44,9 +44,9 @@ def _build_mcp() -> FastMCP:
         name="nyaya",
         instructions=(
             "nyaya is an Indian law MCP server. Use list_acts first to discover the corpus, "
-            "then get_section / get_article to read specific provisions, search_law for "
-            "keyword search, semantic_query for meaning-based search, and cross_reference "
-            "to find related provisions (especially the bidirectional IPC<->BNS mapping). "
+            "then get_section / get_article to read specific provisions, semantic_query for "
+            "semantic search (embedding retrieval + reranking), and cross_reference to find "
+            "related provisions (especially the bidirectional IPC<->BNS mapping). "
             "Every result includes source/license provenance — cite it when answering."
         ),
         lifespan=nyaya_lifespan,
@@ -70,7 +70,7 @@ def _build_mcp() -> FastMCP:
             {
                 "status": status,
                 "service": "nyaya",
-                "version": "0.1.0",
+                "version": "0.2.0",
                 "counts": stats,
             }
         )

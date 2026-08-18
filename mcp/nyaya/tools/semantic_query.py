@@ -1,60 +1,62 @@
-"""semantic_query: embedding-based similarity search via pgvector."""
+"""semantic_query: embedding-based retrieval + reranking (the primary search tool).
+
+Replaces the v0.1 search_law / hybrid_search / search_by_kind / search_judgments
+tools. Uses the NVIDIA nemotron-3-embed-1b embedder + llama-nemotron-rerank-1b-v2
+reranker via the NVIDIA API.
+"""
 
 from __future__ import annotations
 
 from .. import db
-from ..exceptions import EmbeddingUnavailable
 from ..models import SearchResponse
-from ._util import run_sync
+from ._util import run_sync, validate_query_length
 
 
 def register(mcp) -> None:
     @mcp.tool(
         name="semantic_query",
         description=(
-            "Semantic (meaning-based) search across the entire nyaya corpus using vector "
-            "embeddings. Better than search_law when the user's phrasing doesn't match the "
-            "statutory wording — e.g. 'can police search my phone without a warrant?' finds "
-            "relevant CrPC/BNS provisions and Article 21 even without keyword overlap. "
-            "Returns matching provisions ranked by cosine similarity. If the semantic-search "
-            "model is not installed in this build (e.g. the Alpine Docker image), returns an "
-            "empty result with fallback_reason='embedding_unavailable' — fall back to "
-            "search_law in that case. The ``act`` parameter scopes the search to sections of "
-            "one act (use 'Constitution' or 'judgment' to scope to articles or judgments "
-            "respectively)."
+            "Semantic search over the Indian law corpus using embedding retrieval + "
+            "cross-encoder reranking. Returns the most relevant sections, articles, "
+            "and judgments for a natural-language query. Better than keyword search "
+            "for paraphrased queries and cross-act comparisons (e.g. 'punishment "
+            "for murder' finds both IPC s.302 and BNS s.103). "
+            "Optional 'kind' filters to 'section', 'article', or 'judgment'. "
+            "Optional 'act' scopes to one act short-name (e.g. 'IPC', 'BNS')."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Semantic search"},
     )
     @run_sync
-    def semantic_query(query: str, act: str | None = None,
-                       limit: int = 5) -> SearchResponse:
-        """Semantic search across the corpus.
+    def semantic_query(
+        query: str,
+        kind: str | None = None,
+        act: str | None = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> SearchResponse:
+        """Semantic search (embed + ANN + rerank).
 
         Args:
-            query: Natural-language query, e.g. 'right to silence during interrogation'.
-                Must be non-empty.
-            act: Optional act short-name to scope the search (e.g. 'IPC', 'Constitution',
-                'judgment'). When omitted, searches sections + articles + judgments.
-            limit: Maximum number of hits (1–20, default 5).
+            query: Free-text or natural-language query.
+            kind: Optional filter: 'section', 'article', 'judgment', 'schedule', or 'amendment'.
+            act: Optional act short-name to scope the search (e.g. 'IPC', 'BNS').
+            limit: Max hits (1–50, default 10).
+            offset: Pagination offset (default 0).
         """
-        limit = max(1, min(int(limit), 20))
+        limit = max(1, min(int(limit), 50))
+        offset = max(0, int(offset))
         if not query or not query.strip():
-            return SearchResponse(query=query or "", total=0, returned=0, offset=0,
-                                  results=[], as_of=db.corpus_as_of(), limit=limit)
-        try:
-            from ..embeddings import embed_query
-            embedding = embed_query(query)
-            results = db.semantic_search_all(embedding, act=act, limit=limit)
-        except EmbeddingUnavailable:
-            # The embedding model is not installed (e.g. Alpine image).
-            # Return an empty structured response with fallback_reason so
-            # the MCP client (LLM) can decide to fall back to search_law.
             return SearchResponse(
-                query=query, total=0, returned=0, offset=0, results=[],
-                as_of=db.corpus_as_of(), limit=limit,
-                fallback_reason="embedding_unavailable",
+                query=query or "", total=0, returned=0, offset=offset,
+                results=[], as_of=db.corpus_as_of(), limit=limit,
             )
+        validate_query_length(query)
+
+        results, total, fallback_reason = db.rerank_search(
+            query, kind=kind, act=act, limit=limit, offset=offset
+        )
         return SearchResponse(
-            query=query, total=len(results), returned=len(results), offset=0,
+            query=query, total=total, returned=len(results), offset=offset,
             results=results, as_of=db.corpus_as_of(), limit=limit,
+            fallback_reason=fallback_reason,
         )

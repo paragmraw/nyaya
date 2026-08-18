@@ -23,6 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from . import db
+from .exceptions import DatabaseUnavailable
 
 log = logging.getLogger("nyaya.rest")
 
@@ -42,7 +43,7 @@ def _error_response(exc: Exception, request: Request | None = None) -> JSONRespo
     """
     request_id = getattr(getattr(request, "state", None), "request_id", None) if request else None
 
-    if isinstance(exc, db.DatabaseUnavailable) or "DatabaseUnavailable" in type(exc).__name__:
+    if isinstance(exc, DatabaseUnavailable) or "DatabaseUnavailable" in type(exc).__name__:
         log.warning("Database unavailable (request_id=%s)", request_id, exc_info=True)
         body: dict[str, Any] = {"error": "database_unavailable"}
         if request_id:
