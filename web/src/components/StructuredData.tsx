@@ -193,7 +193,7 @@ export const architectureSchema = {
   operatingSystem: "Cloud",
   featureList: [
     "Query understanding via Supervisor LLM",
-    "Parallel tool execution (hybrid_search, get_section, get_article)",
+    "Parallel tool execution (semantic_query, get_section, get_article)",
     "Reranking of retrieved passages",
     "Synthesis LLM with citation constraints",
     "Citation resolution and verification",

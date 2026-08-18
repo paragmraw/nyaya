@@ -29,12 +29,12 @@ const STAGES: Stage[] = [
     id: "pipe-retrieve",
     num: "02",
     title: "Retrieve",
-    desc: "MCP tools fetch matching provisions and judgments from the indexed corpus (hybrid search fuses FTS + vector).",
+    desc: "MCP tools fetch matching provisions and judgments from the indexed corpus (semantic search fuses embedding retrieval + reranking).",
     detail: (
       <>
         <strong>Store:</strong> pgvector + Postgres tsvector (GIN indexes).<br />
-        <strong>Search:</strong> hybrid_search (RRF-fused FTS + semantic), get_section, get_article, get_judgment.<br />
-        <strong>Reranker:</strong> planned; not yet implemented.<br />
+        <strong>Search:</strong> semantic_query (embedding retrieval + reranking), get_section, get_article, get_judgment.<br />
+        <strong>Reranker:</strong> llama-nemotron-rerank-1b-v2 (cross-encoder).<br />
         <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA, IPC/CrPC/IEA/CPC, commercial statutes, SC judgments.
       </>
     ),
@@ -57,11 +57,11 @@ const STAGES: Stage[] = [
     id: "pipe-mcp",
     num: "04",
     title: "MCP",
-    desc: "Citation resolver fetches each reference from the corpus; MCP exposes 24 tools to editors.",
+    desc: "get_section / get_article parse and fetch each reference from the corpus; MCP exposes 16 tools to editors.",
     detail: (
       <>
-        <strong>Resolver:</strong> parse → match → fetch (see Citations).<br />
-        <strong>MCP server:</strong> HTTP endpoint at /mcp that exposes 24 tools + 11 resources.<br />
+        <strong>Resolver:</strong> parse → match → fetch (built into get_section / get_article).<br />
+        <strong>MCP server:</strong> HTTP endpoint at /mcp that exposes 16 tools + 11 resources.<br />
         <strong>Clients:</strong> Claude, Cursor, opencode.
       </>
     ),

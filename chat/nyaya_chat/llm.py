@@ -37,8 +37,9 @@ SUPERVISOR_PROMPT = (
     "3. Do not answer the question yourself; the synthesis step will do that.\n"
     "4. Call each tool at most once per turn with the best query you can formulate.\n"
     "5. Think briefly (2-3 sentences) about which sources are needed, then delegate.\n"
-    "6. For topical questions use hybrid_search or search_law. For exact references "
-    "use get_section, get_article, get_judgment, or resolve_citation. For comparisons "
+    "6. For topical questions use semantic_query. For exact references "
+    "use get_section, get_article, or get_judgment (they also accept citation "
+    "strings like 'IPC s.302' or 'Art.21'). For comparisons "
     "across acts use cross_reference. For corpus overview use list_acts or corpus_stats.\n"
 )
 

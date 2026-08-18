@@ -18,7 +18,8 @@ def test_defaults(monkeypatch):
     assert s.llm_max_tokens == 2048
     assert s.max_history == 8
     assert s.tool_allowlist == config.DEFAULT_TOOLS
-    assert "hybrid_search" in s.tool_allowlist
+    assert "semantic_query" in s.tool_allowlist
+    assert "hybrid_search" not in s.tool_allowlist
     assert s.nvidia_api_key.get_secret_value() == "nvapi-abcdef1234567890"
 
 

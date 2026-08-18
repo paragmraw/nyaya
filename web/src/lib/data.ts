@@ -20,7 +20,7 @@ export const SERVICES: StackRow[] = [
   { name: "Vector store", role: "Stores and retrieves passage embeddings with cosine similarity search at scale.", tool: "pgvector" },
   { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query using a cross-encoder model.", tool: "llama-nemotron-rerank-1b-v2" },
   { name: "LLM", role: "Drafts the cited answer from retrieved context. Constrained to cite only from the retrieved set.", tool: "Nemotron-3.5 Lightning 30B" },
-  { name: "Citation resolver", role: "Parses a citation string and fetches the matching provision from the corpus.", tool: "nyaya/resolve_citation" },
+  { name: "Citation parser", role: "Parses citation strings ('IPC s.302', 'Art.21') and fetches the matching provision. Built into get_section / get_article.", tool: "nyaya/get_section + get_article" },
 ];
 
 export const INFRA: StackRow[] = [
@@ -34,9 +34,9 @@ export const INFRA: StackRow[] = [
 export const FLOW: FlowStep[] = [
   { num: "1", text: "User submits a natural-language legal question through the web chat or an MCP client." },
   { num: "2", text: "Supervisor LLM reasons briefly about which corpus tools to call, then emits all tool calls in one message for parallel execution." },
-  { num: "3", text: "MCP tools (hybrid_search, get_section, get_article, …) retrieve matching provisions and judgments from the indexed corpus in parallel." },
+  { num: "3", text: "MCP tools (semantic_query, get_section, get_article, …) retrieve matching provisions and judgments from the indexed corpus in parallel." },
   { num: "4", text: "Synthesis LLM composes the final answer using only the retrieved tool results, with inline [[act: X, ref: Y]] citations." },
-  { num: "5", text: "Citation resolver parses each reference and fetches the matching provision from the corpus before the answer is displayed." },
+  { num: "5", text: "get_section / get_article parse each [[act, ref]] citation inline and fetch the matching provision from the corpus before the answer is displayed." },
 ];
 
 export const TODAY: OpennessItem[] = [
