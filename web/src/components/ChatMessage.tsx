@@ -320,11 +320,11 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
                   // Inline citation links emitted by parseCitations carry a
                   // title="ic" sentinel; style them as compact chips. Other
                   // links render with the default .md a styling.
-                  a: ({ node, ...props }) =>
+                  a: ({ ...props }) =>
                     props.title === "ic" ? (
                       <a {...props} title={undefined} className="inline-cite" />
                     ) : (
-                      <a {...props} />
+                      <a {...props}>{props.children ?? props.href}</a>
                     ),
                 }}
               >

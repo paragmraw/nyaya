@@ -91,7 +91,7 @@ async def test_stream_turn_emits_error_on_exception():
     payload_line = [ln for ln in out.split(b"\n") if ln.startswith(b"data:")][0]
     data = json.loads(payload_line[len(b"data: "):])
     assert data["message"] == "agent_error"
-    assert "boom" in data["detail"]
+    assert data["detail"] == "internal server error"
     assert out.endswith(b"event: done\ndata: {}\n\n")
 
 

@@ -10,7 +10,6 @@ pytestmark = pytest.mark.integration
 # so a plain import gives us the ready app — no importlib.reload needed.
 from nyaya.server import app  # noqa: E402
 
-
 _EMPTY_STATS = {
     "acts": 0, "section": 0, "article": 0, "judgment": 0,
     "amendment": 0, "schedule": 0, "cross_refs": 0,

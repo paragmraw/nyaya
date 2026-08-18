@@ -9,11 +9,11 @@ import StructuredData, { architectureSchema } from "@/components/StructuredData"
 export const metadata: Metadata = {
   title: "Architecture",
   description:
-    "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, bge-large-en-v1.5, Nemotron-3.5 Lightning.",
+    "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
   openGraph: {
     title: "Nyaya Architecture - Retrieval-Grounded Legal AI Pipeline",
     description:
-      "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, bge-large-en-v1.5, Nemotron-3.5 Lightning.",
+"How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
     type: "website",
   },
 };

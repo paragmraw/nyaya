@@ -6,7 +6,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 
 ## What it gives you
 
-- **~20 tools**: `semantic_query` (embedding retrieval + reranking), `get_section`, `get_article`, `get_judgment`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `get_sections_by_range`, `get_chapter`, `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment` / `get_amendments_for_article`, `get_definition`, `corpus_stats`, `resolve_citation`
+- **16 tools**: `semantic_query` (embedding retrieval + reranking), `get_section`, `get_article`, `get_judgment`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment`, `get_amendments_for_article`, `corpus_stats`
 - **11 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
 - **Semantic search** via pgvector + NVIDIA `nemotron-3-embed-1b` (2048-d, 32k context, 34 Indic languages) and `llama-nemotron-rerank-1b-v2` reranker — works on any platform including Alpine (API-based, no native wheels needed)
 - **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
@@ -56,7 +56,7 @@ cp .env.example .env
 From the `mcp/` directory:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e .
 
 # Hydrate Supabase (one-time) — open and run the notebook:
 #   mcp/notebooks/hydrate.ipynb
@@ -202,7 +202,7 @@ nyaya/                          # repo root
     │   ├── embeddings.py       # NVIDIA API embed + rerank services
     │   ├── models.py           # Pydantic models (structured output)
     │   ├── exceptions.py       # NotFound etc.
-    │   ├── tools/              # ~20 MCP tools across 13 modules
+    │   ├── tools/              # 16 MCP tools across 11 modules
     │   └── resources/          # 11 MCP resources + templates
     ├── notebooks/
     │   └── hydrate.ipynb       # end-to-end hydration (fetch + embed + write)

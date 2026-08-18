@@ -16,16 +16,16 @@ import type {
 
 // ─── architecture/page.tsx ────────────────────────────────────────
 export const SERVICES: StackRow[] = [
-  { name: "Embedding model", role: "Converts text queries and corpus passages into dense vectors for semantic search.", tool: "bge-large-en-v1.5" },
+  { name: "Embedding model", role: "Converts text queries and corpus passages into dense vectors for semantic search.", tool: "nvidia/nemotron-3-embed-1b" },
   { name: "Vector store", role: "Stores and retrieves passage embeddings with cosine similarity search at scale.", tool: "pgvector" },
-  { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query.", tool: "[planned]" },
+  { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query using a cross-encoder model.", tool: "llama-nemotron-rerank-1b-v2" },
   { name: "LLM", role: "Drafts the cited answer from retrieved context. Constrained to cite only from the retrieved set.", tool: "Nemotron-3.5 Lightning 30B" },
   { name: "Citation resolver", role: "Parses a citation string and fetches the matching provision from the corpus.", tool: "nyaya/resolve_citation" },
 ];
 
 export const INFRA: StackRow[] = [
   { name: "Hosting", role: "Web app + API + MCP server, served from one container. Deploy region chosen at deploy time.", tool: "Railway / Docker" },
-  { name: "Refresh jobs", role: "Ingestion is manual via the nyaya-ingest CLI. Automated scheduled crawlers are planned.", tool: "[planned]" },
+  { name: "Refresh jobs", role: "Ingestion is manual via the nyaya-ingest CLI. Automated scheduled crawlers are planned.", tool: "nyaya-ingest CLI" },
   { name: "Observability", role: "Latency, retrieval quality, and error tracking.", tool: "[tool: TBD]" },
   { name: "Object storage", role: "Stores raw PDFs and parsed text from sources for audit and re-indexing.", tool: "[planned]" },
   { name: "Search index", role: "Full-text fallback alongside vector search for exact-match section/article lookups.", tool: "Postgres FTS" },

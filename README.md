@@ -8,7 +8,7 @@ The first component is an MCP server; other tools will follow.
 
 | Path | Status | Description |
 |---|---|---|
-| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 24 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
+| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 16 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
 | [`web/`](web/) | alpha | Next.js 16 (App Router, static export) frontend — Home, Corpus, Citations, Architecture pages. Served from the same container as the MCP server via Starlette `StaticFiles`; live data fetched client-side from `/api/*` REST endpoints. |
 | [`chat/`](chat/) | alpha | LangGraph + FastAPI chat backend — retrieval-grounded Indian-law assistant. A two-phase supervisor-synthesis agent over the nyaya MCP tools (supervisor plans + delegates parallel tool calls, synthesis composes the cited answer), powered by NVIDIA Nemotron, streamed to the SPA over SSE. Mounted into the main server at `/chat`, so the SPA, REST, MCP, and chat share one origin and one Railway service. |
 
@@ -33,12 +33,12 @@ A single Railway service serves the SPA, the REST API, the MCP endpoint, and the
 
 ## Local development
 
-- **MCP + REST + Chat**: `cd mcp && uv venv && uv pip install -e ".[dev]" && uv pip install -e ../chat && nyaya` → uvicorn on `:8000`. The chat sub-app mounts at `/chat` automatically when `NVIDIA_API_KEY` is set (Swagger UI at `http://localhost:8000/chat/docs`). The agent calls the same-process MCP server at `http://localhost:8000/mcp` (configured in `chat/nyaya_chat/config.py`).
+- **MCP + REST + Chat**: `cd mcp && uv venv && pip install -e . && pip install -e ../chat && nyaya` → uvicorn on `:8000`. The chat sub-app mounts at `/chat` automatically when `NVIDIA_API_KEY` is set (Swagger UI at `http://localhost:8000/chat/docs`). The agent calls the same-process MCP server at `http://localhost:8000/mcp` (configured in `chat/nyaya_chat/config.py`).
 - **SPA (HMR)**: `cd web && npm run dev` → Next dev server on `:3000`. `next.config.mjs` rewrites `/api/*`, `/mcp`, and `/chat/*` to `localhost:8000`.
 - **Build check**: `cd web && npx eslint . && npm run build` → produces `web/out/`.
 - **Serve the production bundle locally**: `python -m nyaya.server` from `mcp/` → visit `http://localhost:8000/`.
 - **Python tests / lint**:
-  - `cd mcp && pytest` and `ruff check .` (chat tests run here too via the installed package)
+  - `cd mcp && pytest` and `ruff check .` (runs mcp + chat unit tests via installed package)
   - `cd chat && pytest` and `ruff check .` (chat package's own unit tests)
 
 ## License
