@@ -306,29 +306,61 @@ def get_amendment(number: int) -> Document | None:
 
 
 def list_sections(
-    act_short_name: str, chapter: int | None = None, limit: int = 100, offset: int = 0
-) -> tuple[list[Document], int]:
+    act_short_name: str,
+    chapter: int | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[Document], int, str | None]:
+    """List sections of an act, optionally filtered by chapter or numeric range.
+
+    Returns (sections, total, chapter_title). ``chapter_title`` is the title of
+    the chapter when ``chapter`` is set, otherwise None.
+    """
     sn = normalize_act(act_short_name)
     if sn is None:
-        return [], 0
-    params: list[Any] = [sn, limit, offset]
-    chapter_clause = ""
+        return [], 0, None
+    clauses = ["d.kind = 'section'", "lower(a.short_name) = lower(%s)"]
+    params: list[Any] = [sn]
+    chapter_title: str | None = None
     if chapter is not None:
-        chapter_clause = " and (d.metadata->>'chapter_num')::int = %s"
-        params.insert(1, chapter)
+        clauses.append("(d.metadata->>'chapter_num')::int = %s")
+        params.append(chapter)
+    if start is not None:
+        s = normalize_ref(start)
+        if s and s.isdigit():
+            clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) >= %s")
+            params.append(int(s))
+    if end is not None:
+        e = normalize_ref(end)
+        if e and e.isdigit():
+            clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) <= %s")
+            params.append(int(e))
+    where = " where " + " and ".join(clauses)
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + f" where d.kind = 'section' and lower(a.short_name) = lower(%s){chapter_clause} "
-            "order by d.ref limit %s offset %s",
-            params,
+            _DOC_SELECT + where + " order by d.ref limit %s offset %s",
+            params + [limit, offset],
         ).fetchall()
         total_row = c.execute(
-            "select count(*) as n from documents d join acts a on a.id = d.act_id "
-            f"where d.kind = 'section' and lower(a.short_name) = lower(%s){chapter_clause}",
-            [p for p in params[: 2 if chapter is not None else 1]],
+            "select count(*) as n from documents d join acts a on a.id = d.act_id" + where,
+            params,
         ).fetchone()
+        # Fetch chapter title if filtered by chapter.
+        if chapter is not None:
+            title_row = c.execute(
+                """
+                select distinct d.metadata->>'chapter_title' as title
+                from documents d join acts a on a.id = d.act_id
+                where d.kind = 'section' and lower(a.short_name) = lower(%s)
+                  and (d.metadata->>'chapter_num')::int = %s limit 1
+                """,
+                (sn, chapter),
+            ).fetchone()
+            chapter_title = title_row["title"] if title_row else None
     total = int(total_row["n"]) if total_row else 0
-    return [_row_to_document(r) for r in rows], total
+    return [_row_to_document(r) for r in rows], total, chapter_title
 
 
 def list_articles(part: str | None = None, limit: int = 100, offset: int = 0) -> tuple[list[Document], int]:
@@ -410,55 +442,6 @@ def list_chapters(act_short_name: str) -> list[dict[str, Any]]:
     return [dict(number=r["number"], title=r["title"]) for r in rows]
 
 
-def get_chapter(act_short_name: str, chapter_number: int) -> dict[str, Any] | None:
-    sn = normalize_act(act_short_name)
-    if sn is None:
-        return None
-    with _conn() as c:
-        title_row = c.execute(
-            """
-            select distinct d.metadata->>'chapter_title' as title
-            from documents d join acts a on a.id = d.act_id
-            where d.kind = 'section' and lower(a.short_name) = lower(%s)
-              and (d.metadata->>'chapter_num')::int = %s
-            limit 1
-            """,
-            (sn, chapter_number),
-        ).fetchone()
-        if not title_row:
-            return None
-        rows = c.execute(
-            _DOC_SELECT + " where d.kind = 'section' and lower(a.short_name) = lower(%s)"
-            " and (d.metadata->>'chapter_num')::int = %s order by d.ref",
-            (sn, chapter_number),
-        ).fetchall()
-    return {
-        "act": sn,
-        "number": chapter_number,
-        "title": title_row["title"],
-        "section_range": None,
-        "sections": [_row_to_document(r) for r in rows],
-    }
-
-
-def get_sections_by_range(
-    act_short_name: str, start: str, end: str, limit: int = 500
-) -> list[Document]:
-    sn = normalize_act(act_short_name)
-    s = normalize_ref(start)
-    e = normalize_ref(end)
-    if sn is None or s is None or e is None:
-        return []
-    with _conn() as c:
-        rows = c.execute(
-            _DOC_SELECT + " where d.kind = 'section' and lower(a.short_name) = lower(%s)"
-            " and coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) between %s and %s"
-            " order by d.ref limit %s",
-            (sn, int(s) if s.isdigit() else 0, int(e) if e.isdigit() else 99999, limit),
-        ).fetchall()
-    return [_row_to_document(r) for r in rows]
-
-
 def get_amendments_for_article(article_number: str) -> list[Document]:
     num = normalize_ref(article_number)
     if num is None:
@@ -469,27 +452,6 @@ def get_amendments_for_article(article_number: str) -> list[Document]:
             " and (d.metadata->>'articles_affected') ~ %s order by d.metadata->>'number'",
             (rf"\b{re.escape(num)}\b",),
         ).fetchall()
-    return [_row_to_document(r) for r in rows]
-
-
-def get_definition(term: str, act: str | None = None, limit: int = 10) -> list[Document]:
-    """Find sections whose title contains 'definition' or 'interpretation' and matches the term."""
-    sn = normalize_act(act)
-    with _conn() as c:
-        if sn:
-            rows = c.execute(
-                _DOC_SELECT + " where d.kind = 'section' and lower(a.short_name) = lower(%s)"
-                " and (d.title ilike %s or d.text ilike %s) order by "
-                "case when d.title ilike '%%defin%%' then 0 when d.title ilike '%%interpret%%' then 1 else 2 end, d.ref limit %s",
-                (sn, f"%{term}%", f"%{term}%", limit),
-            ).fetchall()
-        else:
-            rows = c.execute(
-                _DOC_SELECT + " where d.kind in ('section','article')"
-                " and (d.title ilike %s or d.text ilike %s) order by "
-                "case when d.title ilike '%%defin%%' then 0 when d.title ilike '%%interpret%%' then 1 else 2 end, d.ref limit %s",
-                (f"%{term}%", f"%{term}%", limit),
-            ).fetchall()
     return [_row_to_document(r) for r in rows]
 
 
@@ -617,11 +579,17 @@ def rerank_search(
     act: str | None = None,
     limit: int = 10,
     offset: int = 0,
+    promote_definitions: bool = False,
 ) -> tuple[list[SearchResult], int, str | None]:
     """Retrieve + rerank: embed query → ANN top-50 → rerank → top-N.
 
     Returns (results, total, fallback_reason). If the reranker fails, falls
     back to raw ANN scores with fallback_reason='reranker_unavailable'.
+
+    When ``promote_definitions`` is True, re-sorts the reranked results to
+    promote those whose title contains 'defin' or 'interpret' (matching IPC s.2
+    'Definitions', BNS s.2 'Definitions', etc.) — useful for statutory term
+    lookups.
     """
     from .embeddings import EmbeddingUnavailable, embed_query, rerank_query
 
@@ -638,15 +606,12 @@ def rerank_search(
     # Stage 2: rerank
     fallback_reason: str | None = None
     try:
-        # Build enriched text for reranking: act + ref + title + snippet.
         cand_texts = [
             f"{r.act} {r.ref} {r.title or ''} {r.snippet}" for r in candidates
         ]
         scores = rerank_query(query, cand_texts)
-        # Sort by rerank score descending
         paired = list(zip(candidates, scores))
         paired.sort(key=lambda x: -x[1])
-        # Update ranks with rerank scores
         reranked = []
         for r, score in paired:
             reranked.append(r.model_copy(update={"rank": float(score)}))
@@ -657,47 +622,14 @@ def rerank_search(
         reranked = candidates
         fallback_reason = "reranker_unavailable"
 
-    # Apply offset + limit after rerank
+    # Stage 3 (optional): promote definition-titled results to the top.
+    if promote_definitions:
+        _DEF_RE = re.compile(r"defin|interpret", re.IGNORECASE)
+        reranked.sort(key=lambda r: (0 if (r.title and _DEF_RE.search(r.title)) else 1, -r.rank))
+
+    # Apply offset + limit after rerank (and after definition promotion)
     results = reranked[offset : offset + limit]
     return results, total, fallback_reason
-
-
-# ---------------------------------------------------------------------------
-# Citation resolution
-# ---------------------------------------------------------------------------
-
-_CITATION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # "IPC s.302" / "CrPC s.437" / "BNS s.103"
-    (re.compile(r"^(?P<act>[A-Za-z]+)\s+s\.?\s*(?P<num>\d+[A-Z]?)$", re.IGNORECASE), "section"),
-    # "Art.21" / "Article 21" / "art 21"
-    (re.compile(r"^art(?:icle)?\.?\s*(?P<num>\d+[A-Z]?)$", re.IGNORECASE), "article"),
-    # "section 302 of IPC"
-    (re.compile(r"^s(?:ec(?:tion)?)?\.?\s*(?P<num>\d+[A-Z]?)\s+of\s+(?P<act>.+)$", re.IGNORECASE), "section_of"),
-]
-
-
-def resolve_citation(citation: str) -> Document | None:
-    """Parse a citation string like 'IPC s.302' / 'Art.21' and fetch the document."""
-    cite = citation.strip()
-    if not cite:
-        return None
-    for pattern, kind in _CITATION_PATTERNS:
-        m = pattern.match(cite)
-        if not m:
-            continue
-        if kind == "section":
-            act = m.group("act")
-            num = m.group("num")
-            return get_section(act, num)
-        elif kind == "article":
-            num = m.group("num")
-            return get_article(num)
-        elif kind == "section_of":
-            num = m.group("num")
-            act = m.group("act")
-            return get_section(act, num)
-    # Try as a judgment citation (exact ref match)
-    return get_judgment(cite)
 
 
 # ---------------------------------------------------------------------------

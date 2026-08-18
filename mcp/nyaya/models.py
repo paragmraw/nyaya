@@ -124,6 +124,9 @@ class DocumentsList(BaseModel):
     total: int = Field(default=0, description="Total documents matching (before limit/offset).")
     offset: int = Field(default=0)
     limit: int = Field(default=100)
+    # When list_sections is filtered by chapter, these are set to the chapter metadata.
+    chapter_title: str | None = Field(default=None, description="Title of the chapter when filtered by chapter.")
+    chapter_number: int | None = Field(default=None, description="Chapter number when filtered by chapter.")
 
 
 class CorpusStats(BaseModel):
@@ -137,13 +140,3 @@ class CorpusStats(BaseModel):
     schedules: int
     cross_refs: int
     as_of: Date | None = None
-
-
-class ChapterWithSections(BaseModel):
-    """A chapter with its full section list — returned by get_chapter."""
-
-    act: str
-    number: int
-    title: str
-    section_range: str | None = None
-    sections: list[Document]

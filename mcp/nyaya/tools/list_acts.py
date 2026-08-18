@@ -53,28 +53,42 @@ def register(mcp) -> None:
     @mcp.tool(
         name="list_sections",
         description=(
-            "List sections of an act, optionally filtered to a chapter, with pagination. "
-            "Use this when an act has no chapter structure (list_chapters returns empty) or "
-            "to enumerate all sections of a specific chapter. Act names are normalized. "
+            "List sections of an act, optionally filtered by chapter or by numeric range, "
+            "with pagination. Use 'chapter' to filter to one chapter, or 'start' and 'end' "
+            "to filter by section-number range (e.g. start='299', end='377'). When filtered "
+            "by chapter, the response includes the chapter title. Act names are normalized. "
             "The ``total`` field gives the true section count for pagination."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List sections of an act"},
     )
     @run_sync
-    def list_sections(act: str, chapter: int | None = None,
-                      limit: int = 100, offset: int = 0) -> DocumentsList:
-        """List sections of an act.
+    def list_sections(
+        act: str,
+        chapter: int | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> DocumentsList:
+        """List sections of an act, optionally filtered by chapter or range.
 
         Args:
             act: Act short name or alias, e.g. 'IPC', 'BNS'.
             chapter: Optional chapter number to filter to.
+            start: Optional starting section number (inclusive), e.g. '299'. Must have a numeric prefix.
+            end: Optional ending section number (inclusive), e.g. '377'. Must have a numeric prefix.
             limit: Max sections to return (default 100, max 500).
             offset: Pagination offset (default 0, clamped to >= 0).
         """
         limit = max(1, min(int(limit), 500))
         offset = max(0, int(offset))
-        sections, total = db.list_sections(act, chapter=chapter, limit=limit, offset=offset)
-        return DocumentsList(documents=sections, total=total, offset=offset, limit=limit)
+        sections, total, chapter_title = db.list_sections(
+            act, chapter=chapter, start=start, end=end, limit=limit, offset=offset
+        )
+        return DocumentsList(
+            documents=sections, total=total, offset=offset, limit=limit,
+            chapter_title=chapter_title, chapter_number=chapter,
+        )
 
     @mcp.tool(
         name="list_articles",
