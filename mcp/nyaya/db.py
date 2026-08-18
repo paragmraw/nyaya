@@ -270,6 +270,11 @@ def get_document(kind: str, act: str | None, ref: str) -> Document | None:
                 _DOC_SELECT + " where d.kind = 'judgment' and (d.ref = %s or lower(d.title) = lower(%s))",
                 (num, num),
             ).fetchone()
+            if row is None and len(num) >= 8:
+                row = c.execute(
+                    _DOC_SELECT + " where d.kind = 'judgment' and lower(d.title) like '%%' || lower(%s) || '%%'",
+                    (num,),
+                ).fetchone()
         elif kind == "schedule":
             row = c.execute(
                 _DOC_SELECT + " where d.kind = 'schedule' and lower(d.ref) = lower(%s)",
@@ -450,7 +455,7 @@ def get_amendments_for_article(article_number: str) -> list[Document]:
         rows = c.execute(
             _DOC_SELECT + " where d.kind = 'amendment'"
             " and (d.metadata->>'articles_affected') ~ %s order by d.metadata->>'number'",
-            (rf"\b{re.escape(num)}\b",),
+            (rf"[[:<:]]{re.escape(num)}[[:>:]]",),
         ).fetchall()
     return [_row_to_document(r) for r in rows]
 

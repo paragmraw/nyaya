@@ -5,6 +5,7 @@ from __future__ import annotations
 from .. import db
 from ..exceptions import NotFound
 from ..models import Document
+from ._error import structured_errors
 from ._util import run_sync
 
 
@@ -31,6 +32,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a Constitution schedule"},
     )
+    @structured_errors
     @run_sync
     def get_schedule(number: int) -> Document:
         """Get a schedule by number.
@@ -44,7 +46,7 @@ def register(mcp) -> None:
             raise NotFound(
                 f"Schedule {number} is not in the corpus. The Constitution has 12 Schedules.",
                 kind="schedule",
-                hint="Call list_schedules to see all available schedules.",
+                hint="Call list_schedules to see all available schedules, or semantic_query with a topical query.",
             )
         return result
 
@@ -76,6 +78,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a Constitutional amendment"},
     )
+    @structured_errors
     @run_sync
     def get_amendment(number: int) -> Document:
         """Get an amendment by number.
@@ -89,6 +92,6 @@ def register(mcp) -> None:
             raise NotFound(
                 f"Amendment {number} is not in the corpus.",
                 kind="amendment",
-                hint="Call list_amendments to see all available amendments.",
+                hint="Call list_amendments to see all available amendments, or semantic_query with a topical query.",
             )
         return result

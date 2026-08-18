@@ -7,6 +7,7 @@ import re
 from .. import db
 from ..exceptions import NotFound
 from ..models import Document
+from ._error import structured_errors
 from ._util import run_sync
 
 # Matches "IPC s.302", "s.302 IPC", "s.302 of IPC", "BNS s.103".
@@ -32,6 +33,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a section by number"},
     )
+    @structured_errors
     @run_sync
     def get_section(act: str = "", section: str = "") -> Document:
         """Get a section by act and number, or by a combined citation string.

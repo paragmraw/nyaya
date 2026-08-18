@@ -7,6 +7,7 @@ import re
 from .. import db
 from ..exceptions import NotFound
 from ..models import Document
+from ._error import structured_errors
 from ._util import run_sync
 
 # Matches "Art.21", "Article 21", "art 21", "article21".
@@ -26,6 +27,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a Constitution article"},
     )
+    @structured_errors
     @run_sync
     def get_article(article: str) -> Document:
         """Get a Constitution article by number or citation string.
