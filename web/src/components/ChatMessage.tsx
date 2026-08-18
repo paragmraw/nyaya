@@ -127,7 +127,8 @@ function ToolResultPanel({ tool, onClose }: { tool: ChatToolEvent; onClose: () =
 // emits them without the required preceding blank line. Also collapses 3+
 // newlines to a paragraph break, and splits jammed-together block elements
 // (e.g. "### Heading- list item") onto separate lines so they parse correctly.
-function normaliseMd(src: string): string {
+// Exported for unit testing (see tests/normalise-md.test.ts).
+export function normaliseMd(src: string): string {
   if (!src) return src;
   // Collapse runs of 3+ newlines to exactly two (a single blank line).
   let s = src.replace(/\n{3,}/g, "\n\n");
@@ -138,6 +139,13 @@ function normaliseMd(src: string): string {
   // Only matches exactly 4 * (not 6+) to avoid touching *** (bold+italic).
   s = s.replace(/\*\*\*\*(?!\*)/g, "** **");
   s = s.replace(/____(?!_)/g, "__ __");
+
+  // Normalise malformed ATX headings the model emits as "##3." (no space
+  // between the hashes and the number) → "## 3." so CommonMark recognises
+  // them as headings rather than leaving them glued to surrounding text.
+  // Only fires when the digits are immediately followed by "." (a heading
+  // number like "##1.", "##3."), avoiding false positives like "#1" in prose.
+  s = s.replace(/(#{1,6})(\d+\.)/g, "$1 $2");
 
   // Split jammed-together block elements that the model emits on a single line.
   // The model frequently emits headings, list items, table rows, blockquotes,
@@ -184,6 +192,40 @@ function normaliseMd(src: string): string {
   // that already start with ###.
   s = s.replace(/(#{1,6} .+?[a-z])([A-Z][a-z])/g, "$1\n$2");
 
+  // Shared GFM table-row detectors (used by the header-repair pass below and
+  // the blank-line inserter after it).
+  //  - separator row: a line of |, -, :, and spaces only (|---|---|…)
+  //  - table data row: a line containing | that starts and ends with |
+  const tableSeparator = /^\s*\|?\s*:?-{2,}(:?\s*\|\s*:?-{2,})*:?\s*\|?\s*$/;
+  const tableDataRow = /^\s*\|.*\|\s*$/;
+
+  // Repair GFM table headers jammed onto the same line as preceding text
+  // (commonly a heading or sentence-end). The model frequently emits:
+  //   "## 3. Key terms (…) | Term | Explanation |"
+  // with the table header glued to the heading, and the separator on the NEXT
+  // line. GFM requires the header row and separator on consecutive lines, so
+  // we split the current line before its first `|` to give the header its own
+  // line. We only split when the text before the first `|` looks like a heading
+  // (contains #) or a sentence (contains whitespace and ends with sentence
+  // punctuation), so valid no-leading-pipe header rows like "Score | Result"
+  // are left intact.
+  {
+    const lines = s.split("\n");
+    for (let i = 0; i + 1 < lines.length; i++) {
+      if (!tableSeparator.test(lines[i + 1].trim())) continue;
+      const pipeIdx = lines[i].indexOf("|");
+      if (pipeIdx <= 0) continue; // already starts with |, or no pipe at all
+      const before = lines[i].slice(0, pipeIdx).trim();
+      if (!before) continue;
+      const looksLikeHeadingOrSentence =
+        /#/.test(before) ||
+        (/\s/.test(before) && /[\])!?:."']$/.test(before));
+      if (!looksLikeHeadingOrSentence) continue;
+      lines.splice(i, 1, before, lines[i].slice(pipeIdx));
+    }
+    s = lines.join("\n");
+  }
+
   // Ensure a blank line before block-start markers when they follow text on
   // the previous line. Matches: ATX headings (#…), blockquotes (>), unordered
   // list items (- * +), ordered list items (1.), fenced code (```), tables
@@ -191,13 +233,8 @@ function normaliseMd(src: string): string {
   //
   // EXCEPTION: GFM table rows must NOT be separated from each other — GFM
   // requires the header, separator, and data rows on consecutive lines.
-  // We detect:
-  //  - separator row: a line of |, -, :, and spaces only (|---|---|…|)
-  //  - table data row: a line containing | that starts and ends with |
   const blockStart =
     /^(#{1,6}\s|>\s?|[-*+]\s|\d+[.)]\s|```| {4,}|\|.*\|\s*$|([-*_]\s?){3,}$)/;
-  const tableSeparator = /^\s*\|?\s*:?-{2,}(:?\s*\|\s*:?-{2,})*:?\s*\|?\s*$/;
-  const tableDataRow = /^\s*\|.*\|\s*$/;
   const lines = s.split("\n");
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -280,6 +317,15 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
                   table: (props) => (
                     <div className="md-table-wrap"><table {...props} /></div>
                   ),
+                  // Inline citation links emitted by parseCitations carry a
+                  // title="ic" sentinel; style them as compact chips. Other
+                  // links render with the default .md a styling.
+                  a: ({ ...props }) =>
+                    props.title === "ic" ? (
+                      <a {...props} title={undefined} className="inline-cite" />
+                    ) : (
+                      <a {...props}>{props.children ?? props.href}</a>
+                    ),
                 }}
               >
                 {normaliseMd(msg.content)}

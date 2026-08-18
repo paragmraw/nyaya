@@ -565,6 +565,24 @@ pre.mcp-json .n { color: var(--fg); }
   text-underline-offset: 2px;
 }
 .msg.bot .bubble .md a:hover { text-decoration-thickness: 2px; }
+/* Inline citation chip rendered in place of [[act: X, ref: Y]] markers.
+   The link's title="ic" sentinel is set by parseCitations and matched by the
+   `a` component override in ChatMessage.tsx, which adds the .inline-cite
+   class. */
+.msg.bot .bubble .md .inline-cite {
+  display: inline; font-family: var(--font-mono); font-size: 10.5px;
+  font-weight: 600; color: var(--accent); text-decoration: none;
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--accent) 30%, transparent);
+  border-radius: 999px; padding: 1px 6px; margin: 0 1px;
+  line-height: 1.4; white-space: nowrap; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.msg.bot .bubble .md .inline-cite:hover {
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
+  border-color: color-mix(in oklch, var(--accent) 45%, transparent);
+  text-decoration: none;
+}
 .msg.bot .bubble .md hr {
   border: none;
   border-top: 1px solid var(--border);

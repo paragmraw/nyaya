@@ -1,19 +1,15 @@
-"""Postgres data access for nyaya.
+"""Postgres data access for nyaya — v0.2 unified documents schema.
 
 All functions are synchronous and intended to be wrapped with
 ``asyncio.to_thread`` by the (async) tool layer — see ``tools/_util.py``.
 
 Design notes
 ------------
-* Input normalization: act/section/article strings are stripped and resolved
-  via an alias map; act lookups are case-insensitive at the SQL level.
-* Search: ``search_all`` uses a single UNION ALL query with a global
-  ORDER BY + LIMIT/OFFSET so pagination is correct across corpora. The total
-  is computed via a separate ``count(*)`` query so it remains accurate when
-  ``offset >= total`` (a window-function approach returns 0 for an empty page).
-* Errors: DB exceptions are translated to ``DatabaseUnavailable`` /
-  ``SearchError`` so the MCP client receives a structured error code instead
-  of a raw psycopg traceback.
+* The v0.2 schema collapses per-kind tables into a single ``documents`` table
+  with a ``kind`` discriminator and ``metadata jsonb`` for per-kind fields.
+* Retrieval is embedding-based + reranker (NVIDIA API). FTS is removed.
+* Input normalization: act/ref strings are stripped and alias-resolved;
+  act lookups are case-insensitive at the SQL level.
 """
 
 from __future__ import annotations
@@ -33,23 +29,12 @@ from psycopg_pool import ConnectionPool
 
 from .config import get_settings
 from .exceptions import DatabaseUnavailable
-from .models import (
-    Act,
-    Amendment,
-    Article,
-    Chapter,
-    CrossRef,
-    Judgment,
-    Schedule,
-    SearchResult,
-    Section,
-)
+from .models import Act, CrossRef, Document, SearchResult
 
 # Fallback provenance date used when an act row lacks a current ``as_of``.
 CORPUS_AS_OF = date(2026, 7, 1)
 
-# Strips Unicode bidi/format characters that could spoof act-name lookups
-# (zero-width joiners, RTL/LTR overrides, isolates).
+# Strips Unicode bidi/format characters that could spoof act-name lookups.
 _BIDI_RE = re.compile(r"[\u200B-\u200F\u202A-\u202E\u2066-\u2069]")
 
 # Maps common act names / case variants to the canonical short_name stored
@@ -102,32 +87,16 @@ _ACT_ALIASES: dict[str, str] = {
     "cases": "judgment",
 }
 
-_pool: ConnectionPool | None = None
-_pool_lock = threading.Lock()
-
-# 5-minute TTL: ``as_of`` changes only on re-ingestion, so caching avoids an
-# extra round-trip on every search call. Failures are not cached.
-_as_of_cache: tuple[float, date | None] = (0.0, None)
-_AS_OF_TTL = 300.0  # seconds
-
-# ts_headline option strings, passed as SQL parameters so the option syntax
-# (quotes, angle brackets) never appears in the SQL literal.
-TS_HEADLINE_OPTS = (
-    'MaxWords=60, MinWords=20, MaxFragments=3, '
-    'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
-)
-TS_HEADLINE_OPTS_LONG = (
-    'MaxWords=80, MinWords=20, MaxFragments=3, '
-    'FragmentDelimiter=" … ", StartSel="<<", StopSel=">>"'
-)
-
-# Strips a leading "s."/"section"/"art."/"article" prefix from a section or
-# article number, with or without a separator ("s.302", "s302", "section 302",
-# "section302", "art.21", "art21", "article 21").
 _REF_PREFIX_RE = re.compile(
     r"^(?:s(?:ec(?:tion)?)?\.?|art(?:icle)?\.?)\s*",
     re.IGNORECASE,
 )
+
+_pool: ConnectionPool | None = None
+_pool_lock = threading.Lock()
+
+_as_of_cache: tuple[float, date | None] = (0.0, None)
+_AS_OF_TTL = 300.0
 
 
 # ---------------------------------------------------------------------------
@@ -135,15 +104,7 @@ _REF_PREFIX_RE = re.compile(
 # ---------------------------------------------------------------------------
 
 def normalize_act(act: str | None) -> str | None:
-    """Normalize an act short-name: strip, resolve aliases (case-insensitive).
-
-    Returns the canonical ``short_name`` (e.g. 'IPC') or ``None`` if the input
-    is empty/None. Unknown values are returned stripped (original case
-    preserved) — the DB lookup is case-insensitive so this is fine.
-
-    Also strips Unicode bidi/format characters (U+200B-200F, U+202A-202E,
-    U+2066-2069) that could be used to spoof lookups.
-    """
+    """Normalize an act short-name: strip, resolve aliases (case-insensitive)."""
     if act is None:
         return None
     key = _BIDI_RE.sub("", act).strip()
@@ -156,10 +117,7 @@ def normalize_act(act: str | None) -> str | None:
 
 
 def normalize_ref(ref: str | None) -> str | None:
-    """Strip whitespace and a leading 's.'/'section'/'art.'/'article' prefix.
-
-    Handles both "s. 302" (with separator) and "s302" (without separator).
-    """
+    """Strip whitespace and a leading 's.'/'section'/'art.'/'article' prefix."""
     if ref is None:
         return None
     r = ref.strip()
@@ -170,7 +128,6 @@ def normalize_ref(ref: str | None) -> str | None:
 
 
 def _escape_like(s: str) -> str:
-    """Escape ``%`` and ``_`` so they match literally in LIKE/ILIKE patterns."""
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
@@ -180,28 +137,16 @@ def _escape_like(s: str) -> str:
 
 def _get_pool() -> ConnectionPool:
     global _pool
-    # Lazy initialization: ``asyncio.to_thread`` can race on the first call,
-    # so the lock ensures only one pool is created.
     with _pool_lock:
         if _pool is None or _pool.closed:
             settings = get_settings()
 
             def _configure(conn: psycopg.Connection) -> None:
-                # Configure runs once per new connection. SET commands start
-                # a transaction in psycopg's default autocommit=False mode, so
-                # we must commit (or use autocommit) — otherwise the pool
-                # sees the connection left in INTRANS and discards it.
                 conn.autocommit = True
                 try:
                     if settings.statement_timeout_ms > 0:
-                        # String formatting is safe: statement_timeout_ms is a
-                        # validated int from config. Required because Supabase's
-                        # PgBouncer in transaction mode doesn't support
-                        # parameterized SET.
                         with conn.cursor() as cur:
-                            cur.execute(
-                                f"set statement_timeout = {int(settings.statement_timeout_ms)}"
-                            )
+                            cur.execute(f"set statement_timeout = {int(settings.statement_timeout_ms)}")
                     with conn.cursor() as cur:
                         cur.execute("set application_name = 'nyaya'")
                 finally:
@@ -228,7 +173,7 @@ def _conn() -> Iterator[psycopg.Connection]:
             yield conn
     except psycopg_pool.PoolTimeout as e:
         raise DatabaseUnavailable(
-            "Could not acquire a database connection in time. The pool may be exhausted or the database is unreachable.",
+            "Could not acquire a database connection in time.",
             hint="Check DATABASE_URL, pool size, and Supabase status.",
         ) from e
     except psycopg.OperationalError as e:
@@ -247,7 +192,34 @@ def close_db() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Acts / chapters
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _row_to_document(r: dict[str, Any]) -> Document:
+    """Map a joined documents+acts row to a Document model."""
+    meta = r.get("metadata") or {}
+    return Document(
+        kind=r["kind"],
+        ref=r["ref"],
+        act=r.get("act_short_name") or (r.get("act") if "act" in r else None),
+        title=r.get("title"),
+        text=r.get("text", ""),
+        metadata=meta,
+        source=meta.get("source", "nyaya"),
+        source_license=meta.get("source_license"),
+        as_of=r.get("as_of"),
+    )
+
+
+_DOC_SELECT = """
+    select d.id, d.kind, d.ref, d.title, d.text, d.metadata,
+           a.short_name as act_short_name, a.as_of
+    from documents d left join acts a on a.id = d.act_id
+"""
+
+
+# ---------------------------------------------------------------------------
+# Acts
 # ---------------------------------------------------------------------------
 
 def list_acts() -> list[Act]:
@@ -272,585 +244,271 @@ def get_act(short_name: str) -> Act | None:
     return Act(**row) if row else None
 
 
-def list_chapters(act_short_name: str) -> list[Chapter]:
-    sn = normalize_act(act_short_name)
-    if sn is None:
-        return []
-    with _conn() as c:
-        rows = c.execute(
-            "select c.number, c.title, c.section_range "
-            "from chapters c join acts a on a.id = c.act_id "
-            "where lower(a.short_name) = lower(%s) order by c.number",
-            (sn,),
-        ).fetchall()
-    return [Chapter(**r) for r in rows]
-
-
 # ---------------------------------------------------------------------------
-# Sections
+# Documents (unified: sections, articles, judgments, schedules, amendments)
 # ---------------------------------------------------------------------------
 
-def get_section(act_short_name: str, section_number: str) -> Section | None:
-    sn = normalize_act(act_short_name)
-    num = normalize_ref(section_number)
-    if sn is None or num is None:
-        return None
-    with _conn() as c:
-        row = c.execute(
-            """
-            select s.number, s.title, s.text, s.url,
-                   c.number as chapter_number, c.title as chapter_title,
-                   a.short_name as act, a.source, a.source_license, a.as_of
-            from sections s
-            join acts a on a.id = s.act_id
-            left join chapters c on c.id = s.chapter_id
-            where lower(a.short_name) = lower(%s) and s.number = %s
-            """,
-            (sn, num),
-        ).fetchone()
-    if not row:
-        return None
-    return Section(
-        act=row["act"], section=row["number"], title=row["title"],
-        text=row["text"], url=row["url"],
-        chapter_number=row["chapter_number"], chapter_title=row["chapter_title"],
-        source=row["source"], source_license=row["source_license"], as_of=row["as_of"],
-    )
-
-
-def list_sections(act_short_name: str, chapter: int | None = None,
-                  limit: int = 100, offset: int = 0) -> tuple[list[Section], int]:
-    """List sections of an act, optionally filtered to a chapter.
-
-    Returns ``(sections, total)`` where ``total`` is the true match count
-    before limit/offset.
-    """
-    sn = normalize_act(act_short_name)
-    if sn is None:
-        return [], 0
-    params: list[Any] = [sn]
-    where = "where lower(a.short_name) = lower(%s)"
-    if chapter is not None:
-        where += " and c.number = %s"
-        params.append(chapter)
-    with _conn() as c:
-        total = c.execute(
-            f"select count(*) as n from sections s join acts a on a.id = s.act_id "
-            f"left join chapters c on c.id = s.chapter_id {where}",
-            params,
-        ).fetchone()["n"]
-        rows = c.execute(
-            f"""
-            select s.number, s.title, s.text, s.url,
-                   c.number as chapter_number, c.title as chapter_title,
-                   a.short_name as act, a.source, a.source_license, a.as_of
-            from sections s
-            join acts a on a.id = s.act_id
-            left join chapters c on c.id = s.chapter_id
-            {where}
-            order by s.number
-            limit %s offset %s
-            """,
-            [*params, limit, offset],
-        ).fetchall()
-    return [Section(
-        act=r["act"], section=r["number"], title=r["title"], text=r["text"],
-        url=r["url"], chapter_number=r["chapter_number"], chapter_title=r["chapter_title"],
-        source=r["source"], source_license=r["source_license"], as_of=r["as_of"],
-    ) for r in rows], int(total)
-
-
-def get_sections_by_range(act_short_name: str, start: str, end: str,
-                          limit: int = 500) -> list[Section]:
-    """Fetch all sections of an act between two numbers (inclusive).
-
-    Section numbers are strings ('302', '354A'); the numeric prefix is
-    compared numerically and the full string is used as a secondary sort/bound
-    so '354A'..'354B' does not match '354'. Non-numeric section numbers are
-    guarded with ``NULLIF`` so they don't break the cast.
-    """
-    sn = normalize_act(act_short_name)
-    s = normalize_ref(start)
-    e = normalize_ref(end)
-    if sn is None or s is None or e is None:
-        return []
-    with _conn() as c:
-        rows = c.execute(
-            """
-            select s.number, s.title, s.text, s.url,
-                   c.number as chapter_number, c.title as chapter_title,
-                   a.short_name as act, a.source, a.source_license, a.as_of
-            from sections s
-            join acts a on a.id = s.act_id
-            left join chapters c on c.id = s.chapter_id
-            where lower(a.short_name) = lower(%s)
-              and coalesce(nullif(regexp_replace(s.number, '[^0-9].*$', ''), '')::int, 0)
-                  between coalesce(nullif(regexp_replace(%s, '[^0-9].*$', ''), '')::int, 0)
-                  and coalesce(nullif(regexp_replace(%s, '[^0-9].*$', ''), '')::int, 0)
-            order by coalesce(nullif(regexp_replace(s.number, '[^0-9].*$', ''), '')::int, 0), s.number
-            limit %s
-            """,
-            (sn, s, e, limit),
-        ).fetchall()
-    return [Section(
-        act=r["act"], section=r["number"], title=r["title"], text=r["text"],
-        url=r["url"], chapter_number=r["chapter_number"], chapter_title=r["chapter_title"],
-        source=r["source"], source_license=r["source_license"], as_of=r["as_of"],
-    ) for r in rows]
-
-
-def search_sections(query: str, act: str | None = None,
-                    limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    """FTS over sections. Returns ``(results, total)`` where ``total`` is the
-    true match count (via a separate count query, correct even when
-    ``offset >= total``).
-    """
-    where = "where s.act_id = a.id and s.search_tsv @@ q"
-    params: list[Any] = [TS_HEADLINE_OPTS, query]
-    if act:
-        where += " and lower(a.short_name) = lower(%s)"
-        params.append(act)
-    base = (
-        f"from sections s, acts a, plainto_tsquery('english', %s) q {where}"
-    )
-    with _conn() as c:
-        total = c.execute(
-            f"select count(*) as n {base.replace(TS_HEADLINE_OPTS + ', ', '')}",
-            params[1:],
-        ).fetchone()["n"]
-        rows = c.execute(
-            f"""
-            select a.short_name as act,
-                   's. ' || s.number as ref,
-                   s.title,
-                   ts_rank(s.search_tsv, q) as rank,
-                   ts_headline('english', s.text, q, %s) as snippet,
-                   a.citation,
-                   'section' as kind
-            {base}
-            order by rank desc limit %s offset %s
-            """,
-            [*params, limit, offset],
-        ).fetchall()
-    return [SearchResult(**r) for r in rows], int(total)
-
-
-# ---------------------------------------------------------------------------
-# Constitution articles
-# ---------------------------------------------------------------------------
-
-def get_article(number: str) -> Article | None:
-    num = normalize_ref(number)
+def get_document(kind: str, act: str | None, ref: str) -> Document | None:
+    """Fetch a single document by (kind, act, ref). Returns None if not found."""
+    sn = normalize_act(act)
+    num = normalize_ref(ref)
     if num is None:
         return None
     with _conn() as c:
-        row = c.execute(
-            "select number, title, text, part from articles where number = %s",
-            (num,),
-        ).fetchone()
-        prov = c.execute(
-            "select source, source_license, as_of from acts where lower(short_name) = 'constitution'"
-        ).fetchone()
-    if not row:
-        return None
-    source = prov["source"] if prov else "Vikhram-S/IndianConstitution (Apache-2.0)"
-    license_ = prov["source_license"] if prov else "Apache-2.0"
-    as_of = prov["as_of"] if prov else CORPUS_AS_OF
-    return Article(
-        number=row["number"], title=row["title"], text=row["text"], part=row["part"],
-        source=source, source_license=license_, as_of=as_of,
-    )
+        if sn and kind == "section":
+            row = c.execute(
+                _DOC_SELECT + " where d.kind = 'section' and lower(a.short_name) = lower(%s) and d.ref = %s",
+                (sn, num),
+            ).fetchone()
+        elif kind == "article":
+            row = c.execute(
+                _DOC_SELECT + " where d.kind = 'article' and d.ref = %s",
+                (num,),
+            ).fetchone()
+        elif kind == "judgment":
+            row = c.execute(
+                _DOC_SELECT + " where d.kind = 'judgment' and (d.ref = %s or lower(d.title) = lower(%s))",
+                (num, num),
+            ).fetchone()
+        elif kind == "schedule":
+            row = c.execute(
+                _DOC_SELECT + " where d.kind = 'schedule' and lower(d.ref) = lower(%s)",
+                (f"schedule {num}" if not num.lower().startswith("schedule ") else num,),
+            ).fetchone()
+        elif kind == "amendment":
+            row = c.execute(
+                _DOC_SELECT + " where d.kind = 'amendment' and lower(d.ref) = lower(%s)",
+                (f"amendment {num}" if not num.lower().startswith("amendment ") else num,),
+            ).fetchone()
+        else:
+            row = None
+    return _row_to_document(row) if row else None
 
 
-def list_articles(part: str | None = None,
-                   limit: int = 100, offset: int = 0) -> tuple[list[Article], int]:
-    """List Constitution articles, optionally filtered by Part."""
-    params: list[Any] = []
-    where = ""
-    if part:
-        where = "where part ilike %s escape '\\'"
-        params.append(f"%{_escape_like(part)}%")
-    with _conn() as c:
-        total = c.execute(
-            f"select count(*) as n from articles {where}", params
-        ).fetchone()["n"]
-        rows = c.execute(
-            f"select number, title, text, part from articles {where} "
-            f"order by number limit %s offset %s",
-            [*params, limit, offset],
-        ).fetchall()
-        prov = c.execute(
-            "select source, source_license, as_of from acts where lower(short_name) = 'constitution'"
-        ).fetchone()
-    source = prov["source"] if prov else "Vikhram-S/IndianConstitution (Apache-2.0)"
-    license_ = prov["source_license"] if prov else "Apache-2.0"
-    as_of = prov["as_of"] if prov else CORPUS_AS_OF
-    return [Article(
-        number=r["number"], title=r["title"], text=r["text"], part=r["part"],
-        source=source, source_license=license_, as_of=as_of,
-    ) for r in rows], int(total)
+def get_section(act_short_name: str, section_number: str) -> Document | None:
+    return get_document("section", act_short_name, section_number)
 
 
-def search_articles(query: str, limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    with _conn() as c:
-        total = c.execute(
-            "select count(*) as n from articles a, plainto_tsquery('english', %s) q where a.search_tsv @@ q",
-            (query,),
-        ).fetchone()["n"]
-        rows = c.execute(
-            """
-            select 'Constitution' as act,
-                   'art. ' || a.number as ref,
-                   a.title,
-                   ts_rank(a.search_tsv, q) as rank,
-                   ts_headline('english', a.text, q, %s) as snippet,
-                   null as citation,
-                   'article' as kind
-            from articles a, plainto_tsquery('english', %s) q
-            where a.search_tsv @@ q
-            order by rank desc limit %s offset %s
-            """,
-            (TS_HEADLINE_OPTS, query, limit, offset),
-        ).fetchall()
-    return [SearchResult(**r) for r in rows], int(total)
+def get_article(article_number: str) -> Document | None:
+    return get_document("article", None, article_number)
 
 
-# ---------------------------------------------------------------------------
-# Judgments
-# ---------------------------------------------------------------------------
+def get_judgment(case_slug: str) -> Document | None:
+    return get_document("judgment", None, case_slug)
 
-def get_judgment(case_slug: str) -> Judgment | None:
-    """Fetch a judgment by exact citation, slugified case name, or fuzzy name.
 
-    The match is tried in order of specificity (citation → slugified name →
-    fuzzy name) and only falls through to a looser match if the tighter one
-    returns nothing. This prevents short slugs like "v" from matching an
-    arbitrary judgment via substring LIKE.
+def get_schedule(number: int) -> Document | None:
+    return get_document("schedule", None, str(number))
+
+
+def get_amendment(number: int) -> Document | None:
+    return get_document("amendment", None, str(number))
+
+
+def list_sections(
+    act_short_name: str,
+    chapter: int | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> tuple[list[Document], int, str | None]:
+    """List sections of an act, optionally filtered by chapter or numeric range.
+
+    Returns (sections, total, chapter_title). ``chapter_title`` is the title of
+    the chapter when ``chapter`` is set, otherwise None.
     """
-    slug = case_slug.strip() if case_slug else ""
-    if not slug:
-        return None
+    sn = normalize_act(act_short_name)
+    if sn is None:
+        return [], 0, None
+    clauses = ["d.kind = 'section'", "lower(a.short_name) = lower(%s)"]
+    params: list[Any] = [sn]
+    chapter_title: str | None = None
+    if chapter is not None:
+        clauses.append("(d.metadata->>'chapter_num')::int = %s")
+        params.append(chapter)
+    if start is not None:
+        s = normalize_ref(start)
+        if s and s.isdigit():
+            clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) >= %s")
+            params.append(int(s))
+    if end is not None:
+        e = normalize_ref(end)
+        if e and e.isdigit():
+            clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) <= %s")
+            params.append(int(e))
+    where = " where " + " and ".join(clauses)
     with _conn() as c:
-        # 1. Exact citation match (uses judgments_citation_idx).
-        row = c.execute(
-            "select case_name, citation, court, date, summary, text "
-            "from judgments where citation = %s limit 1",
-            (slug,),
-        ).fetchone()
-        if not row:
-            # 2. Slugified case-name match (e.g. "kesavananda-bharati-v-state-of-kerala").
-            #    Strip periods so "v." -> "v" matches the common slug form.
-            row = c.execute(
-                "select case_name, citation, court, date, summary, text "
-                "from judgments where lower(replace(replace(case_name, ' ', '-'), '.', '')) = lower(replace(%s, '.', '')) limit 1",
-                (slug,),
-            ).fetchone()
-        if not row and len(slug) >= 8:
-            # 3. Fuzzy substring match ONLY for slugs >= 8 chars, to avoid
-            # "v" or "india" matching arbitrary cases.
-            escaped = _escape_like(slug.replace("-", " "))
-            row = c.execute(
-                "select case_name, citation, court, date, summary, text "
-                "from judgments where lower(case_name) like lower(%s) escape '\\' limit 1",
-                (f"%{escaped}%",),
-            ).fetchone()
-    if not row:
-        return None
-    return Judgment(
-        case_name=row["case_name"], citation=row["citation"], court=row["court"],
-        date=row["date"], summary=row["summary"], text=row["text"],
-        source="Curated from indiankanoon.org (public domain)",
-        source_license="Public domain (government edicts)",
-        as_of=CORPUS_AS_OF,
-    )
-
-
-def list_judgments(limit: int = 50, offset: int = 0) -> tuple[list[Judgment], int]:
-    """List all judgments in the corpus."""
-    with _conn() as c:
-        total = c.execute("select count(*) as n from judgments").fetchone()["n"]
         rows = c.execute(
-            "select case_name, citation, court, date, summary, text "
-            "from judgments order by date desc nulls last limit %s offset %s",
+            _DOC_SELECT + where + " order by d.ref limit %s offset %s",
+            params + [limit, offset],
+        ).fetchall()
+        total_row = c.execute(
+            "select count(*) as n from documents d join acts a on a.id = d.act_id" + where,
+            params,
+        ).fetchone()
+        # Fetch chapter title if filtered by chapter.
+        if chapter is not None:
+            title_row = c.execute(
+                """
+                select distinct d.metadata->>'chapter_title' as title
+                from documents d join acts a on a.id = d.act_id
+                where d.kind = 'section' and lower(a.short_name) = lower(%s)
+                  and (d.metadata->>'chapter_num')::int = %s limit 1
+                """,
+                (sn, chapter),
+            ).fetchone()
+            chapter_title = title_row["title"] if title_row else None
+    total = int(total_row["n"]) if total_row else 0
+    return [_row_to_document(r) for r in rows], total, chapter_title
+
+
+def list_articles(part: str | None = None, limit: int = 100, offset: int = 0) -> tuple[list[Document], int]:
+    with _conn() as c:
+        if part:
+            rows = c.execute(
+                _DOC_SELECT + " where d.kind = 'article' and d.metadata->>'part' ilike %s order by d.ref limit %s offset %s",
+                (f"%{part}%", limit, offset),
+            ).fetchall()
+            total_row = c.execute(
+                "select count(*) as n from documents where kind = 'article' and metadata->>'part' ilike %s",
+                (f"%{part}%",),
+            ).fetchone()
+        else:
+            rows = c.execute(
+                _DOC_SELECT + " where d.kind = 'article' order by d.ref limit %s offset %s",
+                (limit, offset),
+            ).fetchall()
+            total_row = c.execute(
+                "select count(*) as n from documents where kind = 'article'"
+            ).fetchone()
+    total = int(total_row["n"]) if total_row else 0
+    return [_row_to_document(r) for r in rows], total
+
+
+def list_judgments(limit: int = 50, offset: int = 0) -> tuple[list[Document], int]:
+    with _conn() as c:
+        rows = c.execute(
+            _DOC_SELECT + " where d.kind = 'judgment' order by d.metadata->>'date' desc nulls last limit %s offset %s",
             (limit, offset),
         ).fetchall()
-    return [Judgment(
-        case_name=r["case_name"], citation=r["citation"], court=r["court"],
-        date=r["date"], summary=r["summary"], text=r["text"],
-        source="Curated from indiankanoon.org (public domain)",
-        source_license="Public domain (government edicts)",
-        as_of=CORPUS_AS_OF,
-    ) for r in rows], int(total)
+        total_row = c.execute("select count(*) as n from documents where kind = 'judgment'").fetchone()
+    total = int(total_row["n"]) if total_row else 0
+    return [_row_to_document(r) for r in rows], total
 
 
-def search_judgments(query: str, court: str | None = None,
-                    date_from: str | None = None, date_to: str | None = None,
-                    limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    """Full-text search across judgments with optional court/date filters."""
-    where = "where j.search_tsv @@ q"
-    params: list[Any] = [query]
-    if court:
-        where += " and j.court ilike %s escape '\\'"
-        params.append(f"%{_escape_like(court)}%")
-    if date_from:
-        where += " and j.date >= %s::date"
-        params.append(date_from)
-    if date_to:
-        where += " and j.date <= %s::date"
-        params.append(date_to)
-    base = f"from judgments j, plainto_tsquery('english', %s) q {where}"
-    with _conn() as c:
-        total = c.execute(f"select count(*) as n {base}", params).fetchone()["n"]
-        rows = c.execute(
-            f"""
-            select 'judgment' as act,
-                   coalesce(j.citation, j.case_name) as ref,
-                   j.case_name as title,
-                   ts_rank(j.search_tsv, q) as rank,
-                   ts_headline('english', j.text, q, %s) as snippet,
-                   j.citation,
-                   'judgment' as kind
-            {base}
-            order by rank desc limit %s offset %s
-            """,
-            [TS_HEADLINE_OPTS_LONG, *params, limit, offset],
-        ).fetchall()
-    return [SearchResult(**r) for r in rows], int(total)
-
-
-# ---------------------------------------------------------------------------
-# Unified search (single UNION ALL query for correct global pagination)
-# ---------------------------------------------------------------------------
-
-def search_all(query: str, act: str | None = None,
-               limit: int = 10, offset: int = 0) -> tuple[list[SearchResult], int]:
-    """Search the whole corpus. Returns ``(results, total)`` where ``total``
-    is the true match count across all sub-corpora (before limit/offset).
-
-    For scoped search (``act`` set), delegates to the per-corpus search
-    function. For unscoped search, runs a single UNION ALL query with a global
-    ORDER BY + LIMIT/OFFSET so pagination is correct (the old fan-out approach
-    applied offset per-corpus, returning wrong results on page 2+).
-    """
-    normalized = normalize_act(act)
-    if normalized and normalized.lower() in {"constitution", "article", "articles"}:
-        return search_articles(query, limit=limit, offset=offset)
-    if normalized and normalized.lower() in {"judgment", "judgments", "case", "cases"}:
-        return search_judgments(query, limit=limit, offset=offset)
-    if normalized:
-        return search_sections(query, act=normalized, limit=limit, offset=offset)
-
-    # Unscoped: single UNION ALL over all three corpora with global pagination.
-    # Ranks from different corpora are not strictly comparable, so we normalize
-    # by dividing each by its sub-corpus max rank (window function) before the
-    # global sort. This mitigates the cross-corpus rank-scale conflation.
-    union_sql = """
-        with matched as (
-            select a.short_name as act,
-                   's. ' || s.number as ref,
-                   s.title,
-                   ts_rank(s.search_tsv, q) as raw_rank,
-                   ts_headline('english', s.text, q, %s) as snippet,
-                   a.citation,
-                   'section' as kind
-            from sections s, acts a, plainto_tsquery('english', %s) q
-            where s.act_id = a.id and s.search_tsv @@ q
-            union all
-            select 'Constitution', 'art. ' || ar.number, ar.title,
-                   ts_rank(ar.search_tsv, q),
-                   ts_headline('english', ar.text, q, %s), null, 'article'
-            from articles ar, plainto_tsquery('english', %s) q
-            where ar.search_tsv @@ q
-            union all
-            select 'judgment', coalesce(j.citation, j.case_name), j.case_name,
-                   ts_rank(j.search_tsv, q),
-                   ts_headline('english', j.text, q, %s), j.citation, 'judgment'
-            from judgments j, plainto_tsquery('english', %s) q
-            where j.search_tsv @@ q
-        )
-        select act, ref, title,
-               case when max(raw_rank) over () > 0
-                    then raw_rank / max(raw_rank) over ()
-                    else raw_rank end as rank,
-               snippet, citation, kind
-        from matched
-        order by rank desc
-        limit %s offset %s
-    """
-    union_params = [
-        TS_HEADLINE_OPTS, query,       # sections headline + query
-        TS_HEADLINE_OPTS, query,       # articles headline + query
-        TS_HEADLINE_OPTS_LONG, query,  # judgments headline + query
-        limit, offset,
-    ]
-    count_sql = """
-        select (
-            (select count(*) from sections s, plainto_tsquery('english', %s) q where s.search_tsv @@ q)
-            + (select count(*) from articles a, plainto_tsquery('english', %s) q where a.search_tsv @@ q)
-            + (select count(*) from judgments j, plainto_tsquery('english', %s) q where j.search_tsv @@ q)
-        ) as n
-    """
-    with _conn() as c:
-        total = c.execute(count_sql, (query, query, query)).fetchone()["n"]
-        rows = c.execute(union_sql, union_params).fetchall()
-    return [SearchResult(**r) for r in rows], int(total)
-
-
-# ---------------------------------------------------------------------------
-# Schedules / amendments
-# ---------------------------------------------------------------------------
-
-def list_schedules() -> list[Schedule]:
+def list_schedules() -> list[Document]:
     with _conn() as c:
         rows = c.execute(
-            "select number, title, text from schedules order by number"
+            _DOC_SELECT + " where d.kind = 'schedule' order by d.metadata->>'number'"
         ).fetchall()
-    return [
-        Schedule(
-            number=r["number"], title=r["title"], text=r["text"],
-            source="PRS (CC BY 4.0) / Government of India (public domain)",
-            source_license="CC BY 4.0",
-            as_of=CORPUS_AS_OF,
-        )
-        for r in rows
-    ]
+    return [_row_to_document(r) for r in rows]
 
 
-def get_schedule(number: int) -> Schedule | None:
-    with _conn() as c:
-        row = c.execute(
-            "select number, title, text from schedules where number = %s",
-            (number,),
-        ).fetchone()
-    if not row:
-        return None
-    return Schedule(
-        number=row["number"], title=row["title"], text=row["text"],
-        source="PRS (CC BY 4.0) / Government of India (public domain)",
-        source_license="CC BY 4.0",
-        as_of=CORPUS_AS_OF,
-    )
-
-
-def list_amendments(year_from: int | None = None,
-                    year_to: int | None = None) -> list[Amendment]:
+def list_amendments(year_from: int | None = None, year_to: int | None = None) -> list[Document]:
+    clauses = ["d.kind = 'amendment'"]
     params: list[Any] = []
-    where = ""
     if year_from is not None:
-        where = "where year >= %s"
+        clauses.append("(d.metadata->>'year')::int >= %s")
         params.append(year_from)
     if year_to is not None:
-        where = ("where " if not where else where + " and ") + "year <= %s"
+        clauses.append("(d.metadata->>'year')::int <= %s")
         params.append(year_to)
+    where = " where " + " and ".join(clauses)
     with _conn() as c:
         rows = c.execute(
-            f"select number, year, title, articles_affected, date from amendments {where} "
-            f"order by number",
-            params,
+            _DOC_SELECT + where + " order by d.metadata->>'number'", params
         ).fetchall()
-    return [
-        Amendment(
-            number=r["number"], year=r["year"], title=r["title"],
-            articles_affected=r["articles_affected"], date=r["date"],
-            source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
-        )
-        for r in rows
-    ]
+    return [_row_to_document(r) for r in rows]
 
 
-def get_amendment(number: int) -> Amendment | None:
-    with _conn() as c:
-        row = c.execute(
-            "select number, year, title, articles_affected, date from amendments where number = %s",
-            (number,),
-        ).fetchone()
-    if not row:
-        return None
-    return Amendment(
-        number=row["number"], year=row["year"], title=row["title"],
-        articles_affected=row["articles_affected"], date=row["date"],
-        source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
-    )
-
-
-def get_amendments_for_article(article: str) -> list[Amendment]:
-    """Reverse lookup: which amendments affected a given article number.
-
-    Queries the ``article_amendments`` junction table (the normalized form)
-    first. If that returns nothing, falls back to parsing the comma-separated
-    ``articles_affected`` text column — a legacy path for pre-migration data
-    that has not yet been loaded into the junction table.
-    """
-    art = normalize_ref(article)
-    if art is None:
+def list_chapters(act_short_name: str) -> list[dict[str, Any]]:
+    """List chapters for an act (derived from section metadata)."""
+    sn = normalize_act(act_short_name)
+    if sn is None:
         return []
     with _conn() as c:
         rows = c.execute(
-            "select a.number, a.year, a.title, a.articles_affected, a.date "
-            "from amendments a join article_amendments j on j.amendment_id = a.number "
-            "where j.article_id = %s order by a.number",
-            (art,),
+            """
+            select distinct (d.metadata->>'chapter_num')::int as number,
+                   d.metadata->>'chapter_title' as title
+            from documents d join acts a on a.id = d.act_id
+            where d.kind = 'section' and lower(a.short_name) = lower(%s)
+              and d.metadata->>'chapter_num' is not null
+            order by number
+            """,
+            (sn,),
         ).fetchall()
-        from_junction = bool(rows)
-        if not from_junction:
-            # Fallback: parse the legacy CSV column for pre-migration data.
-            rows = c.execute(
-                "select number, year, title, articles_affected, date from amendments "
-                "where articles_affected is not null order by number"
-            ).fetchall()
-    results: list[Amendment] = []
-    for r in rows:
-        if not from_junction:
-            # Only filter by the CSV column in the fallback path; junction rows
-            # are already matched by the join and may have a NULL articles_affected.
-            affected = (r["articles_affected"] or "")
-            # Word-boundary match so "31" doesn't match "314".
-            if not re.search(rf"\b{re.escape(art)}\b", affected):
-                continue
-        results.append(Amendment(
-            number=r["number"], year=r["year"], title=r["title"],
-            articles_affected=r["articles_affected"], date=r["date"],
-            source="PRS (CC BY 4.0)", source_license="CC BY 4.0", as_of=CORPUS_AS_OF,
-        ))
-    return results
+    return [dict(number=r["number"], title=r["title"]) for r in rows]
+
+
+def get_amendments_for_article(article_number: str) -> list[Document]:
+    num = normalize_ref(article_number)
+    if num is None:
+        return []
+    with _conn() as c:
+        rows = c.execute(
+            _DOC_SELECT + " where d.kind = 'amendment'"
+            " and (d.metadata->>'articles_affected') ~ %s order by d.metadata->>'number'",
+            (rf"\b{re.escape(num)}\b",),
+        ).fetchall()
+    return [_row_to_document(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
-# Cross-references (bidirectional)
+# Cross-references
 # ---------------------------------------------------------------------------
 
 def get_cross_refs(act: str, section: str, direction: str = "both") -> list[CrossRef]:
-    """Look up cross-references for a section (bidirectional by default).
-
-    ``direction``:
-      * ``"from"`` — only outgoing refs (act/section is the source).
-      * ``"to"`` — only incoming refs (act/section is the target).
-      * ``"both"`` — union of both (default).
-    """
-    a = normalize_act(act)
+    """Look up cross-references for a section (bidirectional by default)."""
+    sn = normalize_act(act)
     s = normalize_ref(section)
-    if a is None or s is None:
+    if sn is None or s is None:
         return []
     refs: list[CrossRef] = []
     with _conn() as c:
+        # Find the source document id.
+        doc_row = c.execute(
+            "select d.id::text from documents d join acts a on a.id = d.act_id "
+            "where d.kind = 'section' and lower(a.short_name) = lower(%s) and d.ref = %s",
+            (sn, s),
+        ).fetchone()
+        if not doc_row:
+            return []
+        doc_id = doc_row["id"]
         if direction in ("from", "both"):
             rows = c.execute(
-                "select from_act, from_section, to_act, to_section, kind "
-                "from cross_refs where lower(from_act) = lower(%s) and from_section = %s "
-                "order by kind, to_act, to_section",
-                (a, s),
+                """
+                select da.short_name as from_act, d_from.ref as from_section,
+                       db.short_name as to_act, d_to.ref as to_section, cr.kind
+                from cross_refs cr
+                join documents d_from on d_from.id = cr.from_doc
+                join acts da on da.id = d_from.act_id
+                join documents d_to on d_to.id = cr.to_doc
+                left join acts db on db.id = d_to.act_id
+                where cr.from_doc = %s::uuid
+                order by cr.kind, db.short_name, d_to.ref
+                """,
+                (doc_id,),
             ).fetchall()
             refs.extend(CrossRef(**r) for r in rows)
         if direction in ("to", "both"):
             rows = c.execute(
-                "select from_act, from_section, to_act, to_section, kind "
-                "from cross_refs where lower(to_act) = lower(%s) and to_section = %s "
-                "order by kind, from_act, from_section",
-                (a, s),
+                """
+                select da.short_name as from_act, d_from.ref as from_section,
+                       db.short_name as to_act, d_to.ref as to_section, cr.kind
+                from cross_refs cr
+                join documents d_from on d_from.id = cr.from_doc
+                left join acts da on da.id = d_from.act_id
+                join documents d_to on d_to.id = cr.to_doc
+                join acts db on db.id = d_to.act_id
+                where cr.to_doc = %s::uuid
+                order by cr.kind, da.short_name, d_from.ref
+                """,
+                (doc_id,),
             ).fetchall()
             refs.extend(CrossRef(**r) for r in rows)
-    # Dedupe exact duplicate rows. A from->to row and its inverse to->from
-    # row have different keys and are both kept (distinct directed edges).
+    # Dedupe exact duplicate rows.
     seen: set[tuple[str, str, str, str, str]] = set()
     unique: list[CrossRef] = []
     for r in refs:
@@ -862,92 +520,116 @@ def get_cross_refs(act: str, section: str, direction: str = "both") -> list[Cros
 
 
 # ---------------------------------------------------------------------------
-# Semantic search (pgvector)
+# Semantic search (pgvector) + reranking
 # ---------------------------------------------------------------------------
 
-def semantic_search_sections(embedding: list[float], act: str | None = None,
-                             limit: int = 5) -> list[SearchResult]:
-    sql = """
-        select a.short_name as act,
-               's. ' || s.number as ref,
-               s.title,
-               1 - (e.embedding <=> %s::vector) as rank,
-               left(s.text, 300) as snippet,
-               a.citation,
-               'section' as kind
-        from section_embeddings e
-        join sections s on s.id = e.section_id
-        join acts a on a.id = s.act_id
-    """
-    params: list[Any] = [embedding, embedding]
-    if act:
-        sql += " where lower(a.short_name) = lower(%s)"
-        params.append(act)
-    sql += " order by e.embedding <=> %s::vector limit %s"
+def semantic_search(
+    query_embedding: list[float],
+    kind: str | None = None,
+    act: str | None = None,
+    limit: int = 10,
+    offset: int = 0,
+) -> tuple[list[SearchResult], int]:
+    """Single pgvector ANN query over documents.embedding."""
+    clauses = ["d.embedding is not null"]
+    filter_params: list[Any] = []
+    if kind:
+        clauses.append("d.kind = %s")
+        filter_params.append(kind)
+    sn = normalize_act(act) if act else None
+    if sn:
+        clauses.append("lower(a.short_name) = lower(%s)")
+        filter_params.append(sn)
+    where = " where " + " and ".join(clauses)
     with _conn() as c:
-        rows = c.execute(sql, params).fetchall()
-    return [SearchResult(**r) for r in rows]
+        # SELECT params: embedding (for rank) + filter_params + embedding (for order) + limit + offset
+        rows = c.execute(
+            f"""
+            select coalesce(a.short_name, 'judgment') as act,
+                   d.ref, d.title, d.kind,
+                   1 - (d.embedding <=> %s::vector) as rank,
+                   left(d.text, 300) as snippet,
+                   d.metadata->>'citation' as citation
+            from documents d left join acts a on a.id = d.act_id
+            {where}
+            order by d.embedding <=> %s::vector
+            limit %s offset %s
+            """,
+            [query_embedding] + filter_params + [query_embedding, limit, offset],
+        ).fetchall()
+        total_row = c.execute(
+            f"select count(*) as n from documents d left join acts a on a.id = d.act_id {where}",
+            filter_params,
+        ).fetchone()
+    total = int(total_row["n"]) if total_row else 0
+    results = [
+        SearchResult(
+            act=r["act"], ref=r["ref"], title=r.get("title"),
+            snippet=r.get("snippet", ""), rank=float(r["rank"]),
+            citation=r.get("citation"), kind=r.get("kind"),
+        )
+        for r in rows
+    ]
+    return results, total
 
 
-def semantic_search_articles(embedding: list[float], limit: int = 5) -> list[SearchResult]:
-    sql = """
-        select 'Constitution' as act,
-               'art. ' || a.number as ref,
-               a.title,
-               1 - (e.embedding <=> %s::vector) as rank,
-               left(a.text, 300) as snippet,
-               null as citation,
-               'article' as kind
-        from article_embeddings e
-        join articles a on a.id = e.article_id
-        order by e.embedding <=> %s::vector
-        limit %s
+def rerank_search(
+    query: str,
+    kind: str | None = None,
+    act: str | None = None,
+    limit: int = 10,
+    offset: int = 0,
+    promote_definitions: bool = False,
+) -> tuple[list[SearchResult], int, str | None]:
+    """Retrieve + rerank: embed query → ANN top-50 → rerank → top-N.
+
+    Returns (results, total, fallback_reason). If the reranker fails, falls
+    back to raw ANN scores with fallback_reason='reranker_unavailable'.
+
+    When ``promote_definitions`` is True, re-sorts the reranked results to
+    promote those whose title contains 'defin' or 'interpret' (matching IPC s.2
+    'Definitions', BNS s.2 'Definitions', etc.) — useful for statutory term
+    lookups.
     """
-    with _conn() as c:
-        rows = c.execute(sql, (embedding, embedding, limit)).fetchall()
-    return [SearchResult(**r) for r in rows]
+    from .embeddings import EmbeddingUnavailable, embed_query, rerank_query
 
+    try:
+        query_emb = embed_query(query)
+    except EmbeddingUnavailable:
+        return [], 0, "embedding_unavailable"
 
-def semantic_search_judgments(embedding: list[float], limit: int = 5) -> list[SearchResult]:
-    sql = """
-        select 'judgment' as act,
-               coalesce(j.citation, j.case_name) as ref,
-               j.case_name as title,
-               1 - (e.embedding <=> %s::vector) as rank,
-               left(j.text, 300) as snippet,
-               j.citation,
-               'judgment' as kind
-        from judgment_embeddings e
-        join judgments j on j.id = e.judgment_id
-        order by e.embedding <=> %s::vector
-        limit %s
-    """
-    with _conn() as c:
-        rows = c.execute(sql, (embedding, embedding, limit)).fetchall()
-    return [SearchResult(**r) for r in rows]
+    # Stage 1: ANN retrieval (top 50 candidates)
+    candidates, total = semantic_search(query_emb, kind=kind, act=act, limit=50, offset=0)
+    if not candidates:
+        return [], 0, None
 
+    # Stage 2: rerank
+    fallback_reason: str | None = None
+    try:
+        cand_texts = [
+            f"{r.act} {r.ref} {r.title or ''} {r.snippet}" for r in candidates
+        ]
+        scores = rerank_query(query, cand_texts)
+        paired = list(zip(candidates, scores))
+        paired.sort(key=lambda x: -x[1])
+        reranked = []
+        for r, score in paired:
+            reranked.append(r.model_copy(update={"rank": float(score)}))
+    except EmbeddingUnavailable:
+        reranked = candidates
+        fallback_reason = "reranker_unavailable"
+    except Exception:
+        reranked = candidates
+        fallback_reason = "reranker_unavailable"
 
-def semantic_search_all(embedding: list[float], act: str | None = None,
-                         limit: int = 5) -> list[SearchResult]:
-    """Semantic search across the corpus.
+    # Stage 3 (optional): promote definition-titled results to the top.
+    if promote_definitions:
+        _DEF_RE = re.compile(r"defin|interpret", re.IGNORECASE)
+        reranked.sort(key=lambda r: (0 if (r.title and _DEF_RE.search(r.title)) else 1, -r.rank))
 
-    ``act`` optionally scopes to sections of one act. Articles and judgments
-    are not scoped by act.
-    """
-    normalized = normalize_act(act)
-    if normalized and normalized.lower() in {"constitution", "article", "articles"}:
-        return semantic_search_articles(embedding, limit=limit)
-    if normalized and normalized.lower() in {"judgment", "judgments", "case", "cases"}:
-        return semantic_search_judgments(embedding, limit=limit)
-    if normalized:
-        return semantic_search_sections(embedding, act=normalized, limit=limit)
-
-    sec = semantic_search_sections(embedding, limit=limit)
-    art = semantic_search_articles(embedding, limit=limit)
-    jud = semantic_search_judgments(embedding, limit=limit)
-    merged = sec + art + jud
-    merged.sort(key=lambda r: r.rank, reverse=True)
-    return merged[:limit]
+    # Apply offset + limit after rerank (and after definition promotion)
+    results = reranked[offset : offset + limit]
+    return results, total, fallback_reason
 
 
 # ---------------------------------------------------------------------------
@@ -955,29 +637,24 @@ def semantic_search_all(embedding: list[float], act: str | None = None,
 # ---------------------------------------------------------------------------
 
 def corpus_stats() -> dict[str, int]:
-    """Counts for all corpus tables in a single round-trip (UNION ALL)."""
     with _conn() as c:
         rows = c.execute(
             """
-            select 'acts' as k, count(*) as n from acts
-            union all select 'sections', count(*) from sections
-            union all select 'articles', count(*) from articles
-            union all select 'judgments', count(*) from judgments
-            union all select 'amendments', count(*) from amendments
-            union all select 'schedules', count(*) from schedules
-            union all select 'chapters', count(*) from chapters
-            union all select 'cross_refs', count(*) from cross_refs
+            select kind, count(*) as n from documents group by kind
             """
         ).fetchall()
-    return {r["k"]: int(r["n"]) for r in rows}
+        stats = {r["kind"]: int(r["n"]) for r in rows}
+        # Ensure all kinds are present
+        for k in ("section", "article", "judgment", "schedule", "amendment"):
+            stats.setdefault(k, 0)
+        cr_row = c.execute("select count(*) as n from cross_refs").fetchone()
+        stats["cross_refs"] = int(cr_row["n"]) if cr_row else 0
+        act_row = c.execute("select count(*) as n from acts").fetchone()
+        stats["acts"] = int(act_row["n"]) if act_row else 0
+    return stats
 
 
 def corpus_as_of() -> date | None:
-    """Return the latest ``as_of`` date across acts (cached for 5 minutes).
-
-    Caching avoids an extra round-trip on every search call. Database
-    failures return ``None`` without caching so the next call retries.
-    """
     global _as_of_cache
     now = time.monotonic()
     cached_time, cached_val = _as_of_cache
@@ -988,7 +665,6 @@ def corpus_as_of() -> date | None:
             row = c.execute("select max(as_of) as d from acts").fetchone()
         val = row["d"] if row else None
     except DatabaseUnavailable:
-        # Don't cache failures — let the next call retry immediately.
         return None
     _as_of_cache = (now, val)
     return val

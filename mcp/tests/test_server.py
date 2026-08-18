@@ -10,14 +10,17 @@ pytestmark = pytest.mark.integration
 # so a plain import gives us the ready app — no importlib.reload needed.
 from nyaya.server import app  # noqa: E402
 
+_EMPTY_STATS = {
+    "acts": 0, "section": 0, "article": 0, "judgment": 0,
+    "amendment": 0, "schedule": 0, "cross_refs": 0,
+}
+
 
 def test_health_endpoint(monkeypatch):
     from starlette.testclient import TestClient
 
     from nyaya import db
-    monkeypatch.setattr(db, "corpus_stats",
-                       lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
-                                "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
+    monkeypatch.setattr(db, "corpus_stats", lambda: dict(_EMPTY_STATS))
 
     with TestClient(app) as client:
         r = client.get("/health")
@@ -26,7 +29,7 @@ def test_health_endpoint(monkeypatch):
         assert body["service"] == "nyaya"
         assert body["status"] == "healthy"
         assert "counts" in body
-        assert body["version"] == "0.1.0"
+        assert body["version"] == "0.2.0"
 
 
 def test_health_degraded(monkeypatch):
@@ -53,9 +56,7 @@ def test_mcp_endpoint_reachable(monkeypatch):
     from starlette.testclient import TestClient
 
     from nyaya import db
-    monkeypatch.setattr(db, "corpus_stats",
-                       lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
-                                "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
+    monkeypatch.setattr(db, "corpus_stats", lambda: dict(_EMPTY_STATS))
 
     with TestClient(app) as client:
         r = client.post(
@@ -71,9 +72,7 @@ def test_mcp_initialize_handshake(monkeypatch):
     from starlette.testclient import TestClient
 
     from nyaya import db
-    monkeypatch.setattr(db, "corpus_stats",
-                       lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
-                                "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
+    monkeypatch.setattr(db, "corpus_stats", lambda: dict(_EMPTY_STATS))
 
     with TestClient(app) as client:
         r = client.post(
@@ -82,7 +81,6 @@ def test_mcp_initialize_handshake(monkeypatch):
             json={"jsonrpc": "2.0", "method": "initialize", "id": 1,
                   "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "test", "version": "0.1"}}},
         )
-        # Accept 200/202 (success) or 400 (bad protocol version) — but NOT 404/500.
         assert r.status_code in (200, 202, 400), f"unexpected status {r.status_code}: {r.text}"
 
 
@@ -91,9 +89,7 @@ def test_cors_headers(monkeypatch):
     from starlette.testclient import TestClient
 
     from nyaya import db
-    monkeypatch.setattr(db, "corpus_stats",
-                       lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
-                                "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
+    monkeypatch.setattr(db, "corpus_stats", lambda: dict(_EMPTY_STATS))
 
     with TestClient(app) as client:
         r = client.get("/health", headers={"Origin": "https://nyaya.parag.tech"})
@@ -106,9 +102,7 @@ def test_lifespan_close_db_called(monkeypatch):
     from starlette.testclient import TestClient
 
     from nyaya import db
-    monkeypatch.setattr(db, "corpus_stats",
-                       lambda: {"acts": 0, "sections": 0, "articles": 0, "judgments": 0,
-                                "amendments": 0, "schedules": 0, "chapters": 0, "cross_refs": 0})
+    monkeypatch.setattr(db, "corpus_stats", lambda: dict(_EMPTY_STATS))
 
     closed = {"called": False}
     original_close = db.close_db
@@ -121,5 +115,4 @@ def test_lifespan_close_db_called(monkeypatch):
 
     with TestClient(app) as client:
         client.get("/health")
-    # After the context manager exits, close_db should have been called.
     assert closed["called"], "db.close_db was not called on shutdown"

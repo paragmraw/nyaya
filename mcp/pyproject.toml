@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nyaya"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for Indian law: Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments."
 readme = "README.md"
 license = "Apache-2.0"
@@ -19,6 +19,7 @@ dependencies = [
     "pgvector>=0.5.0,<1",
     "pydantic>=2.7,<3",
     "httpx>=0.27,<1",
+    "openai>=1.0,<2",
     "PyYAML>=6.0,<7",
     "typing-extensions>=4.12,<5",
     "cachetools>=5.5,<7",
@@ -26,17 +27,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ingest = [
-    "datasets>=2.20,<4",
-    "pypdf>=6.15.0,<7",
-    "beautifulsoup4>=4.12,<5",
-    "indianconstitution>=1.3,<2",
-    "tqdm>=4.66,<5",
-]
-semantic = [
-    "fastembed>=0.6,<1",
-    "pillow>=12.3.0,<13",
-]
 dev = [
     "pytest>=9.0.3,<10",
     "pytest-asyncio>=0.23,<0.25",
@@ -51,7 +41,6 @@ Issues = "https://github.com/your-org/nyaya/issues"
 
 [project.scripts]
 nyaya = "nyaya.server:main"
-nyaya-ingest = "nyaya.scripts.ingest_cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nyaya"]
@@ -72,7 +61,7 @@ markers = [
 
 [tool.coverage.run]
 source = ["nyaya"]
-omit = ["*/tests/*", "*/scripts/*"]
+omit = ["*/tests/*"]
 
 [tool.coverage.report]
 show_missing = true
@@ -100,15 +89,7 @@ disable_error_code = ["no-any-return"]
 # the code is correct at runtime. Suppress until psycopg ships better stubs.
 [[tool.mypy.overrides]]
 module = "nyaya.db"
-disable_error_code = ["arg-type", "call-overload", "index", "assignment"]
-
-[[tool.mypy.overrides]]
-module = "nyaya.scripts.db"
-disable_error_code = ["arg-type", "call-overload", "index", "return-value"]
-
-[[tool.mypy.overrides]]
-module = "nyaya.tools.hybrid_search"
-disable_error_code = ["arg-type"]
+disable_error_code = ["arg-type", "call-overload", "index", "assignment", "attr-defined"]
 
 [[tool.mypy.overrides]]
 module = "nyaya.tools.cross_reference"
@@ -119,17 +100,9 @@ module = "nyaya.server"
 disable_error_code = ["misc", "attr-defined"]
 
 [[tool.mypy.overrides]]
-module = "nyaya.scripts.ingest_sanhitas"
-disable_error_code = ["return"]
-
-[[tool.mypy.overrides]]
-module = "nyaya.scripts.*"
-ignore_errors = true
-
-[[tool.mypy.overrides]]
 module = "cachetools.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "nyaya.embeddings"
-disable_error_code = ["import-untyped"]
+module = "openai.*"
+ignore_missing_imports = true

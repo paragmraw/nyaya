@@ -34,8 +34,8 @@ request-id, rate limiting, body-size cap) is provided by the host.
 - **Tools**: the agent calls the nyaya MCP server over streamable HTTP via
   `langchain-mcp-adapters`' `MultiServerMCPClient`. In the same-process
   deploy, `MCP_URL` in `chat/nyaya_chat/config.py` points at the same
-  origin's `/mcp`. A curated 9-tool allowlist (`DEFAULT_TOOLS` in
-  `config.py`) is exposed to the agent; the full 24-tool surface is
+  origin's `/mcp`. A curated 6-tool allowlist (`DEFAULT_TOOLS` in
+  `config.py`) is exposed to the agent; the full 16-tool surface is
   available to direct MCP clients.
 - **LLM**: `ChatNVIDIA`, reads `NVIDIA_API_KEY` from the environment. The
   default model is `nvidia/nemotron-3.5-lightning-30b-a3b` (see `config.py`).

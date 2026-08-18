@@ -122,7 +122,7 @@ export default function Topnav() {
           {NAV_LINKS.map((l) => renderNavLink(l, current))}
         </nav>
         <div className="nav-right">
-          <span className="meta">v0.1 · alpha</span>
+          <span className="meta">v0.2.0 · alpha</span>
           <a
             className="github-link"
             href="https://github.com/paragmraw/nyaya"
