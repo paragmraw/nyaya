@@ -29,7 +29,7 @@ export default function CorpusPage() {
         <div className="container">
           {/* hero */}
           <section>
-            <p className="eyebrow">Corpus · v0.1</p>
+            <p className="eyebrow">Corpus · v0.2.0</p>
             <h1>What Nyaya has indexed</h1>
             <p className="lead">
               Constitution, statutes, and reported case law, ingested from openly-licensed sources. Every number below is traceable to the source it was drawn from.

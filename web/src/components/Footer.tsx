@@ -42,7 +42,7 @@ export default function Footer() {
           ))}
         </nav>
         <div className="footer-meta">
-          <span className="meta">Nyaya · indexed legal corpus · v0.1 alpha</span>
+          <span className="meta">Nyaya · indexed legal corpus · v0.2.0 alpha</span>
           <button type="button" className="back-to-top" onClick={backToTop}>
             Back to top ↑
           </button>
