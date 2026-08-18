@@ -25,13 +25,23 @@ import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolE
 // Matches [[act: <short_name>, ref: <ref>]] inline citation markers.
 const CITE_RE = /\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]/g;
 
+// Replace an inline [[act: X, ref: Y]] marker with a compact markdown link
+// that renders as a styled inline citation chip (see .inline-cite in globals.css
+// and the `a` component override in ChatMessage.tsx). Using a real link keeps
+// the citation visible inline — the previous approach deleted the marker
+// entirely, which left orphaned emphasis like "** ** – Culpable homicide"
+// when the model wrapped the citation in bold.
+function citeToMarkdown(act: string, ref: string): string {
+  const href = `/corpus/?act=${encodeURIComponent(act)}&ref=${encodeURIComponent(ref)}`;
+  return `[${act} · ${ref}](${href} "ic")`;
+}
+
 function parseCitations(text: string): { text: string; citations: ChatCitation[] } {
   const citations: ChatCitation[] = [];
   const seen = new Set<string>();
-  let cleaned = text;
-  let m: RegExpExecArray | null;
   // Use a fresh regex each call (stateful with /g).
   const re = new RegExp(CITE_RE);
+  let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const act = m[1].trim();
     const ref = m[2].trim();
@@ -41,7 +51,10 @@ function parseCitations(text: string): { text: string; citations: ChatCitation[]
       citations.push({ act, ref });
     }
   }
-  cleaned = text.replace(re, "").replace(/\s{2,}/g, " ").trim();
+  // Replace each marker with an inline citation link (instead of deleting it),
+  // then collapse any double spaces left behind. The `"ic"` title is a
+  // sentinel used by the `a` renderer override to apply the .inline-cite style.
+  const cleaned = text.replace(re, (_, act: string, ref: string) => citeToMarkdown(act.trim(), ref.trim())).replace(/\s{2,}/g, " ").trim();
   return { text: cleaned, citations };
 }
 

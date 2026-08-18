@@ -317,6 +317,15 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
                   table: (props) => (
                     <div className="md-table-wrap"><table {...props} /></div>
                   ),
+                  // Inline citation links emitted by parseCitations carry a
+                  // title="ic" sentinel; style them as compact chips. Other
+                  // links render with the default .md a styling.
+                  a: ({ node, ...props }) =>
+                    props.title === "ic" ? (
+                      <a {...props} title={undefined} className="inline-cite" />
+                    ) : (
+                      <a {...props} />
+                    ),
                 }}
               >
                 {normaliseMd(msg.content)}
