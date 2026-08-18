@@ -273,12 +273,12 @@ def get_document(kind: str, act: str | None, ref: str) -> Document | None:
         elif kind == "schedule":
             row = c.execute(
                 _DOC_SELECT + " where d.kind = 'schedule' and lower(d.ref) = lower(%s)",
-                (f"schedule {num}" if not num.lower().startswith("schedule ") else num),
+                (f"schedule {num}" if not num.lower().startswith("schedule ") else num,),
             ).fetchone()
         elif kind == "amendment":
             row = c.execute(
                 _DOC_SELECT + " where d.kind = 'amendment' and lower(d.ref) = lower(%s)",
-                (f"amendment {num}" if not num.lower().startswith("amendment ") else num),
+                (f"amendment {num}" if not num.lower().startswith("amendment ") else num,),
             ).fetchone()
         else:
             row = None

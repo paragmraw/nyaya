@@ -38,6 +38,7 @@ def register(mcp) -> None:
         Args:
             number: Schedule number (1–12).
         """
+        number = int(number)
         result = db.get_schedule(number)
         if result is None:
             raise NotFound(
@@ -82,6 +83,7 @@ def register(mcp) -> None:
         Args:
             number: Amendment number (1–106+).
         """
+        number = int(number)
         result = db.get_amendment(number)
         if result is None:
             raise NotFound(
