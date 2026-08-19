@@ -5,6 +5,7 @@ from __future__ import annotations
 from .. import db
 from ..exceptions import NotFound
 from ..models import ActsList, DocumentsList
+from ._error import structured_errors
 from ._util import run_sync
 
 
@@ -33,6 +34,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List chapters of an act"},
     )
+    @structured_errors
     @run_sync
     def list_chapters(act: str) -> dict:
         """List chapters of an act.
@@ -61,6 +63,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List sections of an act"},
     )
+    @structured_errors
     @run_sync
     def list_sections(
         act: str,
@@ -85,6 +88,12 @@ def register(mcp) -> None:
         sections, total, chapter_title = db.list_sections(
             act, chapter=chapter, start=start, end=end, limit=limit, offset=offset
         )
+        if not sections and db.get_act(act) is None:
+            raise NotFound(
+                f"Act {act!r} not found in the corpus. Call list_acts to see available acts.",
+                kind="act",
+                hint="Call list_acts to enumerate the corpus.",
+            )
         return DocumentsList(
             documents=sections, total=total, offset=offset, limit=limit,
             chapter_title=chapter_title, chapter_number=chapter,

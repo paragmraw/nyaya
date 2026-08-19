@@ -36,12 +36,12 @@ export const homeSchema = {
     "@id": "https://nyaya.example.com/#organization",
   },
   featureList: [
-    "Constitutional lookup (395 articles)",
+    "Constitutional lookup (464 articles)",
     "CrPC procedure tracer (484 sections)",
     "Penal code (IPC 511 / BNS 358 sections)",
     "Precedent retrieval (5 curated SC judgments)",
     "Drafting assist (planned)",
-    "Citation resolver",
+    "Citation parsing (built into get_section / get_article)",
   ],
   screenshot: "https://nyaya.example.com/og-default.svg",
 };
@@ -59,7 +59,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "Constitution of India",
-      description: "All 395 articles + 12 schedules",
+      description: "All 464 articles + 12 schedules",
       url: "https://nyaya.example.com/corpus/#constitution",
       keywords: ["Constitution", "Fundamental Rights", "DPSP", "Amendments"],
       license: "Apache-2.0",
@@ -193,7 +193,7 @@ export const architectureSchema = {
   operatingSystem: "Cloud",
   featureList: [
     "Query understanding via Supervisor LLM",
-    "Parallel tool execution (hybrid_search, get_section, get_article)",
+    "Parallel tool execution (semantic_query, get_section, get_article)",
     "Reranking of retrieved passages",
     "Synthesis LLM with citation constraints",
     "Citation resolution and verification",
@@ -202,7 +202,7 @@ export const architectureSchema = {
   provider: {
     "@id": "https://nyaya.example.com/#organization",
   },
-  softwareVersion: "0.1.0-alpha",
+  softwareVersion: "0.2.0",
   releaseNotes: "https://github.com/paragmraw/nyaya/releases",
 };
 

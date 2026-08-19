@@ -21,18 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Chat LLM default model is now `nvidia/nemotron-3.5-lightning-30b-a3b` (was `nvidia/nemotron-3-super-120b-a12b`). Supervisor and synthesis phases get distinct model instances with separate token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=4096`).
 - Chat tool loading switched to `langchain-mcp-adapters`' `MultiServerMCPClient` with a curated 6-tool allowlist (`DEFAULT_TOOLS` in `chat/nyaya_chat/config.py`).
 - `semantic_query` tool now returns a structured `SearchResponse` with `fallback_reason` instead of raising `EmbeddingUnavailable`.
-- `hybrid_search` tool now includes `fallback_reason` in the response when embedding is unavailable.
+- Consolidated 20 → 16 MCP tools for better LLM tool-selection accuracy (see Removed section).
 - `load_dotenv()` moved from module import time to `get_settings()` for test isolation.
 - Added `redis_url` to `Settings` dataclass.
 - `tools/__init__.py` now wraps each tool registration in try/except so one failure doesn't block all tools.
 
 ### Added
 - `article_amendments` junction table in schema (normalizes the `articles_affected` CSV column).
-- `argparse` CLI for `nyaya-ingest` with subcommands and `--help`.
+- Self-contained hydration notebook (`mcp/notebooks/hydrate.ipynb`) replaces the old CLI-based ingestion pipeline — fetches all sources live, embeds via NVIDIA API, writes to Postgres.
 - `EmbeddingService` class with injectable caches for testing.
-- SQL statement splitter in `IngestDB.apply_schema` (respects dollar-quoted strings).
+- Structured error contract: `NotFound` errors now return `ToolResult(is_error=True, structured_content={"error": {"code", "message", "kind", "hint"}})` via `@structured_errors` decorator (`tools/_error.py`).
+- `get_judgment` fuzzy substring matching for inputs ≥ 8 chars (exact citation/title match tried first).
+- `list_sections` now raises `NotFound` on nonexistent acts (consistent with `list_chapters`).
+- `get_amendments_for_article` regex fix (POSIX `[[:<:]]`/`[[:>:]]` word boundaries) and input validation.
 - Coverage configuration in `pyproject.toml` (`pytest --cov=nyaya`).
-- New test files: `test_db.py`, `test_embeddings.py`, `test_security.py`, `test_exceptions.py`, `test_sanitize.py`, `test_scripts.py`.
+- New test files: `test_config.py`, `test_exceptions.py`, `test_sanitize.py`, `test_security.py`, `test_server.py`, `test_structured_errors.py`.
 - Web: `lib/types.ts` and `lib/data.ts` for shared types and curated data.
 - Web: SWR `fallbackData` support for `useHealthSummary` and `useTools`.
 - Web: fetch timeout (10s) with `AbortController`.
@@ -41,12 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - SWR `useJudgments` cache key stability (uses array key instead of template literal).
-- `scripts/db.py` `upsert_embedding` uses `ValueError` instead of `assert` for table validation.
-- `fake_db._get_sections_by_range` stub now respects `start`/`end` parameters.
+- `get_amendments_for_article` PostgreSQL regex: `\b` (not POSIX ERE) replaced with `[[:<:]]`/`[[:>:]]` word boundaries.
 - `background-attachment: fixed` only on hover-capable devices (mobile perf).
 
 ### Removed
+- 4 MCP tools folded into `semantic_query`: `search_law`, `search_judgments`, `search_by_kind`, `hybrid_search`.
+- 4 MCP tools folded into other tools or dropped: `get_chapter` (use `list_chapters`), `get_definition` (use `semantic_query` with `promote_definitions`), `resolve_citation` (folded into `get_section`/`get_article`), `get_sections_by_range` (use `list_sections` with `start`/`end`).
+- `nyaya-ingest` CLI and `mcp/scripts/` directory (replaced by hydration notebook).
+- `mcp/data/manual/` directory (judgments, amendments, schedules, IPC-BNS map — now ingested live).
 - `Dockerfile.slim` references from `mcp/README.md`.
+- `--extra semantic` and `--extra ingest` from `pyproject.toml`.
 - Build artifacts from working tree: `.venv/`, `node_modules/`, `.next/`, `out/`, `__pycache__/`, `scratch/`.
 
 ## [0.1.0] - 2026-07-01

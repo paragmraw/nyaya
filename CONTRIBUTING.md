@@ -14,12 +14,12 @@ Thank you for your interest in contributing to nyaya! This document covers setup
 
 ```bash
 cd mcp
-uv sync --extra dev --extra semantic --extra ingest
-# Set DATABASE_URL in .env (copy from .env.example)
+uv sync --extra dev
+# Set DATABASE_URL and NVIDIA_API_KEY in .env (copy from .env.example)
 nyaya              # start the server on :8000
 pytest             # run offline unit tests
 pytest -m integration  # run server boot tests
-ruff check nyaya/ scripts/ tests/  # lint
+ruff check nyaya/ tests/  # lint
 mypy nyaya/        # type check (advisory)
 ```
 
@@ -75,7 +75,7 @@ Start the MCP server (`cd mcp && nyaya`) and the dev server (`cd web && npm run 
 nyaya/
 ├── mcp/          # Python MCP server (FastMCP + psycopg + pgvector)
 │   ├── nyaya/    # the Python package
-│   ├── scripts/  # schema.sql + ingest scripts
+│   ├── notebooks/ # hydration notebook (fetch + embed + write)
 │   └── tests/    # offline unit + integration tests
 ├── web/          # Next.js 16 SPA (App Router, static export)
 │   └── src/      # pages, components, lib

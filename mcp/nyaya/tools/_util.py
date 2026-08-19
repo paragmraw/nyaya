@@ -11,7 +11,7 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 # Hard cap on user-supplied query strings; prevents DoS via expensive
-# ts_headline / embedding operations on huge inputs.
+# embedding operations on huge inputs.
 MAX_QUERY_LENGTH = 4096
 
 

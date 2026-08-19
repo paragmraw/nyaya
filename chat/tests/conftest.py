@@ -57,7 +57,7 @@ def fake_tools(monkeypatch):
     is not enough — the bound name in ``agent`` also needs patching.)"""
     from nyaya_chat import agent as agent_mod
     from nyaya_chat import tools as tools_mod
-    tools = _make_fake_tools(["hybrid_search", "get_section"])
+    tools = _make_fake_tools(["semantic_query", "get_section"])
     async def _load(_=None):
         return tools
     monkeypatch.setattr(tools_mod, "load_tools", _load)

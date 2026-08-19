@@ -62,8 +62,8 @@ def test_not_found_kind_default():
 
 def test_not_found_hint_settable_via_constructor():
     """NotFound accepts a hint via the constructor (inherited from NyayaError)."""
-    err = NotFound("missing section", kind="section", hint="try search_law")
-    assert err.hint == "try search_law"
+    err = NotFound("missing section", kind="section", hint="try semantic_query")
+    assert err.hint == "try semantic_query"
     assert err.kind == "section"
 
 

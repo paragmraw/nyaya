@@ -11,7 +11,8 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 - **Semantic search** via pgvector + NVIDIA `nemotron-3-embed-1b` (2048-d, 32k context, 34 Indic languages) and `llama-nemotron-rerank-1b-v2` reranker — works on any platform including Alpine (API-based, no native wheels needed)
 - **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
 - **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
-- **Structured errors**: `NotFound` with `kind` (act/section/article/judgment/schedule/amendment) and `hint`; `EmbeddingUnavailable` distinct from "no matches"
+- **Fuzzy judgment lookup**: `get_judgment` matches by exact citation, exact title, or fuzzy title substring (≥ 8 chars to avoid false matches)
+- **Structured errors**: all `NotFound` responses return `is_error=true` with a machine-readable `structured_content={"error": {"code": "not_found", "message": "...", "kind": "section|article|act|judgment|schedule|amendment", "hint": "..."}}` so LLM clients can branch programmatically. `EmbeddingUnavailable` is distinct from "no matches".
 
 ## Corpus and sources
 
@@ -116,7 +117,7 @@ Railway polls `GET /health`. The endpoint returns:
   "status": "healthy",
   "service": "nyaya",
   "version": "0.2.0",
-  "counts": {"section": 3424, "article": 464, "judgment": 5, ...}
+  "counts": {"section": 3257, "article": 464, "judgment": 5, "amendment": 106, "schedule": 12, "acts": 14, "cross_refs": 597}
 }
 ```
 
@@ -202,7 +203,9 @@ nyaya/                          # repo root
     │   ├── embeddings.py       # NVIDIA API embed + rerank services
     │   ├── models.py           # Pydantic models (structured output)
     │   ├── exceptions.py       # NotFound etc.
-    │   ├── tools/              # 16 MCP tools across 11 modules
+    │   ├── tools/              # 16 MCP tools across 9 register modules
+    │   │   ├── _error.py       # @structured_errors decorator
+    │   │   └── _util.py        # run_sync, query validation
     │   └── resources/          # 11 MCP resources + templates
     ├── notebooks/
     │   └── hydrate.ipynb       # end-to-end hydration (fetch + embed + write)

@@ -4,7 +4,7 @@ The hierarchy is intentionally shallow but structured: every exception carries
 a short ``code`` string so MCP clients (LLMs) can branch programmatically
 instead of parsing the human-readable ``message``. ``NotFound`` additionally
 carries an optional ``hint`` to suggest the next action (e.g. "Try
-``search_law`` with a topical query").
+``semantic_query`` with a topical query").
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ class NotFound(NyayaError):
     ``kind`` distinguishes what was missing (act vs section vs article vs
     judgment vs schedule vs amendment vs chapter) so callers can choose a
     tailored fallback (e.g. suggest ``list_acts`` for a missing act, but
-    ``search_law`` for a missing section).
+    ``semantic_query`` for a missing section).
     """
 
     code = "not_found"

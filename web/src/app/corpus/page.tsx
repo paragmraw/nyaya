@@ -75,7 +75,7 @@ export default function CorpusPage() {
           <section className="section">
             <div className="section-head">
               <h2>Refresh cadence</h2>
-              <p className="sec-desc">How the corpus is kept current. Ingestion is currently manual via the <code>nyaya-ingest</code> CLI.</p>
+              <p className="sec-desc">How the corpus is kept current. Ingestion is currently manual via the hydration notebook (<code>mcp/notebooks/hydrate.ipynb</code>).</p>
             </div>
             <div className="cadence">
               <div className="cadence-row">

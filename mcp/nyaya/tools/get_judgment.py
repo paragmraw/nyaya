@@ -5,6 +5,7 @@ from __future__ import annotations
 from .. import db
 from ..exceptions import NotFound
 from ..models import Document
+from ._error import structured_errors
 from ._util import run_sync
 
 
@@ -20,6 +21,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Get a judgment"},
     )
+    @structured_errors
     @run_sync
     def get_judgment(case_slug: str) -> Document:
         """Get a judgment by citation or case slug.

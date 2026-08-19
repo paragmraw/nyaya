@@ -30,7 +30,7 @@ snippet post-processing). See the security review for details.
 
 ## Recommended Hardening (Future Work)
 
-1. **Pin SHA256 hashes** for each upstream artifact in `mcp/data/manual/SOURCES.yaml`.
+1. **Pin SHA256 hashes** for each upstream artifact in the hydration notebook.
 2. **Disable cross-domain redirects** in fetchers, or allow-list redirect targets.
 3. **Verify content hashes** before inserting into the database.
 4. **Prefer official sources** (egazette.nic.in) for the most sensitive acts (BNS/BNSS/BSA).
@@ -51,4 +51,4 @@ Future defenses (not yet implemented):
 
 - ⬜ Wrap tool responses in `<corpus_text>...</corpus_text>` delimiters
 - ⬜ Update tool descriptions to instruct the LLM that corpus text is data, not instructions
-- ⬜ Post-process `ts_headline` snippets to strip obvious injection patterns
+- ⬜ Post-process retrieved snippets to strip obvious injection patterns
