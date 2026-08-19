@@ -81,7 +81,7 @@ lives as Python constants in `chat/nyaya_chat/config.py`.
 
 ### `GET /chat/health`
 ```json
-{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":9}
+{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":6}
 ```
 
 ### `POST /chat/turn`

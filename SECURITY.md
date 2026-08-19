@@ -6,7 +6,7 @@ nyaya is in alpha. Security fixes are applied to the latest `main` branch only.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | Yes (latest `main`) |
+| 0.2.x   | Yes (latest `main`) |
 
 ## Reporting a vulnerability
 
@@ -46,7 +46,7 @@ nyaya implements defense-in-depth at the application layer:
 - Control characters stripped at ingest time (C0/C1 controls, bidi overrides)
 - 200 KB max text length per row at ingest time (sections, articles, schedules)
 - Judgment text has no length cap (some judgments exceed 700 KB)
-- Query length cap (4096 chars) prevents DoS via expensive ts_headline/embedding
+- Query length cap (4096 chars) prevents DoS via expensive embedding/semantic operations
 
 ### Database
 - Connection pooling with statement timeout (15s default)
@@ -56,5 +56,5 @@ nyaya implements defense-in-depth at the application layer:
 ### Deployment recommendations
 - Deploy behind a reverse proxy (Cloudflare, Railway edge, nginx) with TLS and authentication
 - Use a read-only Postgres role for `DATABASE_URL`
-- Run `nyaya-ingest` from a trusted machine, not the public deployment
+- Run the hydration notebook from a trusted machine, not the public deployment
 - Set the `REDIS_URL` constant in `nyaya/config.py` for multi-worker rate limiting

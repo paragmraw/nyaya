@@ -30,11 +30,11 @@ function HomePageContent() {
           </p>
           <div className="left-stats">
             <div className="ls">
-              <div className="ls-num num">395</div>
+              <div className="ls-num num">464</div>
               <div className="ls-lbl">Articles indexed</div>
             </div>
             <div className="ls">
-              <div className="ls-num num">1,884</div>
+              <div className="ls-num num">3,257</div>
               <div className="ls-lbl">Sections indexed</div>
             </div>
             <div className="ls">

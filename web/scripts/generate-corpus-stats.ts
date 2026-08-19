@@ -24,12 +24,12 @@ interface ActInfo {
 
 // Static data from the CURATED array in data.ts and fallback values
 const CORPUS_STATS: CorpusStats = {
-  articles: 395,
-  sections: 1884, // 358 (BNS) + 531 (BNSS) + 158 (BSA) + 511 (IPC) + 484 (CrPC) + 182 (IEA) + ~156 (CPC) + commercial
+  articles: 464,
+  sections: 3257,
   judgments: 5,
   lastUpdated: new Date().toISOString(),
   acts: [
-    { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 395 articles + 12 schedules", status: "live" },
+    { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 464 articles + 12 schedules", status: "live" },
     { short_name: "BNS", name: "Bharatiya Nyaya Sanhita, 2023", type: "Statute", coverage: "All 358 sections", status: "live" },
     { short_name: "BNSS", name: "Bharatiya Nagarik Suraksha Sanhita, 2023", type: "Statute", coverage: "All 531 sections", status: "live" },
     { short_name: "BSA", name: "Bharatiya Sakshya Adhiniyam, 2023", type: "Statute", coverage: "All sections (replaces Evidence Act)", status: "live" },

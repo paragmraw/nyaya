@@ -20,7 +20,7 @@ const STAGES: Stage[] = [
       <>
         <strong>Input:</strong> natural-language legal question.<br />
         <strong>Output:</strong> normalised query + embedding vector.<br />
-        <strong>Model:</strong> bge-large-en-v1.5 (1024-dim).<br />
+        <strong>Model:</strong> nvidia/nemotron-3-embed-1b (2048-dim).<br />
         <strong>Latency target:</strong> &lt; 80ms p95.
       </>
     ),

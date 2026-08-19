@@ -25,7 +25,7 @@ export const SERVICES: StackRow[] = [
 
 export const INFRA: StackRow[] = [
   { name: "Hosting", role: "Web app + API + MCP server, served from one container. Deploy region chosen at deploy time.", tool: "Railway / Docker" },
-  { name: "Refresh jobs", role: "Ingestion is manual via the nyaya-ingest CLI. Automated scheduled crawlers are planned.", tool: "nyaya-ingest CLI" },
+  { name: "Refresh jobs", role: "Ingestion is manual via the hydration notebook. Automated scheduled crawlers are planned.", tool: "hydrate.ipynb notebook" },
   { name: "Observability", role: "Latency, retrieval quality, and error tracking.", tool: "[tool: TBD]" },
   { name: "Object storage", role: "Stores raw PDFs and parsed text from sources for audit and re-indexing.", tool: "[planned]" },
   { name: "Search index", role: "Full-text fallback alongside vector search for exact-match section/article lookups.", tool: "Postgres FTS" },
@@ -50,7 +50,7 @@ export const TODAY: OpennessItem[] = [
 export const PLANNED: OpennessItem[] = [
   { on: false, text: "Open corpus data (CC-BY)", meta: "planned" },
   { on: false, text: "Citation resolver API (public)", meta: "planned" },
-  { on: false, text: "Reranker & overruled-status check", meta: "planned" },
+  { on: false, text: "Overruled-status check for judgments", meta: "planned" },
   { on: false, text: "Automated refresh jobs", meta: "planned" },
 ];
 
@@ -77,17 +77,17 @@ export const LIMITS: Limit[] = [
 
 // ─── CapTable.tsx ──────────────────────────────────────────────────
 export const CAPS: Cap[] = [
-  { code: "CON-01", name: "Constitutional lookup", desc: "Parts I–XXII, Fundamental Rights & DPSP, with amendment history.", coverage: "395 arts" },
+  { code: "CON-01", name: "Constitutional lookup", desc: "Parts I–XXII, Fundamental Rights & DPSP, with amendment history.", coverage: "464 arts" },
   { code: "CRP-02", name: "CrPC procedure tracer", desc: "Bail, FIR, charge, trial stages; maps a query to the exact section.", coverage: "484 secs" },
   { code: "PEN-03", name: "Penal code (IPC / BNS)", desc: "Legacy IPC + new BNS, 2023: offence → section → punishment range.", coverage: "511 / 358" },
   { code: "PRC-04", name: "Precedent retrieval", desc: "Supreme Court & High Court rulings, cited inline with neutral citations.", coverage: "5 curated" },
   { code: "DFT-05", name: "Drafting assist", desc: "Notices, affidavits, vakalatnama skeletons from a one-line brief.", coverage: "planned" },
-  { code: "CTR-06", name: "Citation resolver", desc: "Paste a citation; resolve it to the matching provision in the corpus.", coverage: "static" },
+  { code: "CTR-06", name: "Citation parsing", desc: "Paste a citation (e.g. 'IPC s.302', 'Art.21'); get_section / get_article parse and fetch the matching provision.", coverage: "built-in" },
 ];
 
 // ─── CorpusTable.tsx ──────────────────────────────────────────────
 export const CURATED: CuratedRow[] = [
-  { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 395 articles + 12 schedules", status: "live", fallback_date: "" },
+  { short_name: "Constitution", name: "Constitution of India", type: "Constitution", coverage: "All 464 articles + 12 schedules", status: "live", fallback_date: "" },
   { short_name: "BNS", name: "Bharatiya Nyaya Sanhita, 2023", type: "Statute", coverage: "All 358 sections", status: "live", fallback_date: "" },
   { short_name: "BNSS", name: "Bharatiya Nagarik Suraksha Sanhita, 2023", type: "Statute", coverage: "All 531 sections", status: "live", fallback_date: "" },
   { short_name: "BSA", name: "Bharatiya Sakshya Adhiniyam, 2023", type: "Statute", coverage: "All sections (replaces Evidence Act)", status: "live", fallback_date: "" },

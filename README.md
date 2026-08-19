@@ -22,7 +22,7 @@ A single Railway service serves the SPA, the REST API, the MCP endpoint, and the
 2. Set `DATABASE_URL` (Supabase/Postgres connection string) and `NVIDIA_API_KEY` (NVIDIA API Catalog key for the chat assistant) in the Railway Variables tab. `PORT` is set automatically.
 3. `railway up` — builds the root `Dockerfile` (Node 20 stage builds `web/out/`, Python 3.12-alpine stage serves it alongside the MCP server and the chat sub-app).
 4. Railway polls `GET /health` (configured in `railway.toml`).
-5. Run `nyaya-ingest all` locally once (with the same `.env`) to hydrate the corpus — the deployed server reads from the same database.
+5. Run the hydration notebook `mcp/notebooks/hydrate.ipynb` locally once (with the same `.env`) to populate the corpus — the deployed server reads from the same database.
 6. Smoke checks against the deployed domain:
    - `GET /` → SPA home renders, chat panel live (streaming).
    - `GET /corpus/` → live numbers from `/api/corpus-stats`.
@@ -58,4 +58,4 @@ The Nyaya MCP server is designed to be deployed behind a reverse proxy (Cloudfla
 **Recommendations for production deployment**:
 - Use a **read-only Postgres role** for `DATABASE_URL` (the server only reads; ingestion uses the same URL but should be run from a trusted environment).
 - Deploy behind a reverse proxy with TLS, authentication, and IP-based rate limiting.
-- Run `nyaya-ingest` from a trusted machine, not the public deployment.
+- Run the hydration notebook from a trusted machine, not the public deployment.
