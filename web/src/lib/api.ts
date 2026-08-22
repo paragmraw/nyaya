@@ -103,6 +103,7 @@ export type ChatMessage = {
   error?: string;
   reasoning?: string;
   plan?: string;
+  requestId?: string;
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────

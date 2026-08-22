@@ -56,7 +56,7 @@ RUN uv export --frozen --no-dev --no-emit-project --no-editable --format require
 # /build is discarded).
 COPY chat/pyproject.toml chat/README.md ./chat/
 COPY chat/nyaya_chat/ ./chat/nyaya_chat/
-RUN uv pip install --system --no-cache ./chat
+RUN uv pip install --system --no-cache "./chat[langfuse]"
 
 # --- Stage 3: runtime -------------------------------------------------------
 # python:3.12-alpine pinned by digest for reproducible builds (amd64).

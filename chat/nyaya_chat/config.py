@@ -1,14 +1,20 @@
 """Runtime configuration for nyaya-chat.
 
-Only one environment variable is read:
+Environment variables read:
 
 ``NVIDIA_API_KEY`` (required)
     NVIDIA API Catalog key (``nvapi-...``). Used to call Nemotron models on
     ``integrate.api.nvidia.com``.
 
+``MCP_URL`` (optional)
+    Override the MCP server URL. Defaults to a PORT-derived localhost URL.
+
+``LANGFUSE_PUBLIC_KEY``, ``LANGFUSE_SECRET_KEY``, ``LANGFUSE_HOST`` (all optional)
+    When all three are set, LLM calls are traced to Langfuse for observability.
+
 Everything else is a Python constant in this module. Edit this file to tune
-the MCP server URL, LLM models, temperatures, token caps, message limits,
-tool allowlist, or the chat log level.
+the LLM models, temperatures, token caps, message limits, tool allowlist,
+or the chat log level.
 """
 
 from __future__ import annotations
@@ -48,6 +54,20 @@ LLM_MAX_RETRIES = 4               # retries on 429/5xx with exponential backoff
 # Per-phase token caps.
 SUPERVISOR_MAX_TOKENS = 512       # supervisor plans and delegates; short output
 SYNTHESIS_MAX_TOKENS = 4096       # synthesis composes the final answer
+
+# Reflection loop: when the synthesis answer appears ungrounded (no citations
+# and tools were called), the agent can do one more retrieval round. This cap
+# limits the total number of supervisor-synthesis rounds.
+MAX_REFLECTION_ROUNDS = 2        # 1 initial round + 1 reflection round
+
+# Citation verification: after synthesis, the agent programatically parses
+# [[act: X, ref: Y]] markers and checks each against the tool results. Ungrounded
+# citations are stripped. If zero remain and tools were called, a caveat is
+# appended.
+CITATION_VERIFICATION = True
+
+# SSE keepalive: emit a ping event every N seconds to prevent proxy timeouts.
+SSE_KEEPALIVE_INTERVAL_S = 15.0
 
 # Message constraints.
 MAX_MESSAGE_CHARS = 4000          # max length of a single user message
@@ -96,6 +116,9 @@ class Settings:
     log_level: str = LOG_LEVEL
     supervisor_max_tokens: int = SUPERVISOR_MAX_TOKENS
     synthesis_max_tokens: int = SYNTHESIS_MAX_TOKENS
+    max_reflection_rounds: int = MAX_REFLECTION_ROUNDS
+    citation_verification: bool = CITATION_VERIFICATION
+    sse_keepalive_interval_s: float = SSE_KEEPALIVE_INTERVAL_S
 
     @property
     def tool_allowlist(self) -> tuple[str, ...]:
@@ -123,6 +146,9 @@ class Settings:
             "tools": list(self.tool_allowlist),
             "supervisor_max_tokens": self.supervisor_max_tokens,
             "synthesis_max_tokens": self.synthesis_max_tokens,
+            "max_reflection_rounds": self.max_reflection_rounds,
+            "citation_verification": self.citation_verification,
+            "sse_keepalive_interval_s": self.sse_keepalive_interval_s,
             "log_level": self.log_level,
         }
 

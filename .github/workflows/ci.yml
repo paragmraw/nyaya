@@ -29,14 +29,26 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Install chat sub-app
+        run: uv pip install -e ../chat
+
       - name: Lint (ruff)
         run: uv run ruff check nyaya/ tests/
 
       - name: Type check (mypy)
         run: uv run mypy nyaya/
 
-      - name: Test with coverage
+      - name: Test MCP with coverage
         run: uv run pytest --cov=nyaya --cov-report=term-missing --cov-report=xml
+
+      - name: Lint chat (ruff)
+        run: uv run ruff check ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
+        continue-on-error: true
+
+      - name: Test chat
+        run: uv run pytest ../chat/tests/ -v
+        env:
+          NVIDIA_API_KEY: nvapi-test-key-for-ci
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4

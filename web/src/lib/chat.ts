@@ -3,34 +3,23 @@
 // useChat: a React hook that streams a chat turn from the FastAPI backend over
 // Server-Sent Events and exposes a growing list of messages.
 //
-// The backend (chat/nyaya_chat/server.py) responds to POST /chat/turn with a
-// text/event-stream of typed SSE events:
-//   event: status      data: {"msg": "analyzing"|"searching"|"composing"} — phase transition
-//   event: plan        data: {"content": "..."}        — supervisor plan text (routed separately)
-//   event: token       data: {"content": "..."}        — synthesis LLM token deltas (the answer)
-//   event: reasoning   data: {"content": "..."}        — reasoning_content deltas (forward-compat)
-//   event: tool_start  data: {"id","name","args"}      — a tool was called
-//   event: tool_result data: {"id","name","summary"}   — a tool returned
-//   event: error       data: {"message","detail"}      — failure
-//   event: done        data: {}                         — stream complete
-//
-// The hook assembles token deltas into a single assistant message, collects
-// tool events, the supervisor plan, and the reasoning trace, parses inline
-// [[act: X, ref: Y]] citation markers into citation chips, and reports
-// isStreaming/error.
+// SSE events:
+//   event: meta        data: {"request_id": "..."}       — request id
+//   event: status      data: {"msg": "analyzing"|"searching"|"composing"} — phase
+//   event: plan        data: {"content": "..."}          — supervisor plan text
+//   event: token       data: {"content": "..."}          — synthesis LLM token deltas
+//   event: reasoning   data: {"content": "..."}          — reasoning_content deltas
+//   event: tool_start  data: {"id","name","args"}        — a tool was called
+//   event: tool_result data: {"id","name","summary"}     — a tool returned
+//   event: ping        data: {"ts": ...}                  — keepalive
+//   event: error       data: {"message","detail"}         — failure
+//   event: done        data: {}                           — stream complete
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolEvent } from "./api";
 
-// Matches [[act: <short_name>, ref: <ref>]] inline citation markers.
 const CITE_RE = /\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]/g;
 
-// Replace an inline [[act: X, ref: Y]] marker with a compact markdown link
-// that renders as a styled inline citation chip (see .inline-cite in globals.css
-// and the `a` component override in ChatMessage.tsx). Using a real link keeps
-// the citation visible inline — the previous approach deleted the marker
-// entirely, which left orphaned emphasis like "** ** – Culpable homicide"
-// when the model wrapped the citation in bold.
 function citeToMarkdown(act: string, ref: string): string {
   const href = `/corpus/?act=${encodeURIComponent(act)}&ref=${encodeURIComponent(ref)}`;
   return `[${act} · ${ref}](${href} "ic")`;
@@ -39,7 +28,6 @@ function citeToMarkdown(act: string, ref: string): string {
 function parseCitations(text: string): { text: string; citations: ChatCitation[] } {
   const citations: ChatCitation[] = [];
   const seen = new Set<string>();
-  // Use a fresh regex each call (stateful with /g).
   const re = new RegExp(CITE_RE);
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
@@ -51,9 +39,6 @@ function parseCitations(text: string): { text: string; citations: ChatCitation[]
       citations.push({ act, ref });
     }
   }
-  // Replace each marker with an inline citation link (instead of deleting it),
-  // then collapse any double spaces left behind. The `"ic"` title is a
-  // sentinel used by the `a` renderer override to apply the .inline-cite style.
   const cleaned = text.replace(re, (_, act: string, ref: string) => citeToMarkdown(act.trim(), ref.trim())).replace(/\s{2,}/g, " ").trim();
   return { text: cleaned, citations };
 }
@@ -62,8 +47,6 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-// Parse a single SSE event block (already accumulated between blank-line
-// separators) into { event, data }.
 function parseSseBlock(block: string): { event: string; data: string } | null {
   let event = "message";
   let data = "";
@@ -75,6 +58,8 @@ function parseSseBlock(block: string): { event: string; data: string } | null {
   return { event, data };
 }
 
+const STREAM_TIMEOUT_MS = 90_000;
+
 export type UseChat = {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -82,6 +67,7 @@ export type UseChat = {
   send: (text: string) => Promise<void>;
   cancel: () => void;
   reset: () => void;
+  retry: () => void;
 };
 
 export function useChat(): UseChat {
@@ -89,18 +75,55 @@ export function useChat(): UseChat {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryTextRef = useRef<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+
+  const clearStreamTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      globalThis.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
+  const resetStreamTimeout = useCallback(() => {
+    clearStreamTimeout();
+    timeoutRef.current = globalThis.setTimeout(() => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setIsStreaming(false);
+      setError("stream_timeout");
+    }, STREAM_TIMEOUT_MS);
+  }, [clearStreamTimeout]);
 
   const cancel = useCallback(() => {
+    clearStreamTimeout();
     abortRef.current?.abort();
     abortRef.current = null;
     setIsStreaming(false);
-  }, []);
+  }, [clearStreamTimeout]);
 
   const reset = useCallback(() => {
     cancel();
     setMessages([]);
     setError(null);
   }, [cancel]);
+
+  const retry = useCallback(() => {
+    setMessages((prev) => {
+      const lastUser = [...prev].reverse().find((m) => m.role === "user");
+      if (lastUser) {
+        const lastAssistantIdx = [...prev].reverse().findIndex((m) => m.role === "assistant");
+        const trimmed = lastAssistantIdx === -1
+          ? prev
+          : prev.slice(0, prev.length - 1 - lastAssistantIdx);
+        retryTextRef.current = lastUser.content;
+        return trimmed;
+      }
+      return prev;
+    });
+    setRetryTrigger((n) => n + 1);
+  }, []);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -115,8 +138,6 @@ export function useChat(): UseChat {
     };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
-    // Build history from the current messages (excluding the new user msg and
-    // the empty assistant placeholder) for context.
     const history: ChatHistoryTurn[] = messages
       .filter((m) => m.content && (m.role === "user" || m.role === "assistant"))
       .slice(-8)
@@ -124,6 +145,29 @@ export function useChat(): UseChat {
 
     const controller = new AbortController();
     abortRef.current = controller;
+
+    const updateAssistant = (patch: Partial<ChatMessage>) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, ...patch } : m)),
+      );
+    };
+    const appendTool = (ev: ChatToolEvent) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                tools: [
+                  ...m.tools.filter((t) => t.id !== ev.id),
+                  ev.state === "result"
+                    ? { ...m.tools.find((t) => t.id === ev.id), ...ev }
+                    : ev,
+                ],
+              }
+            : m,
+        ),
+      );
+    };
 
     try {
       const res = await fetch("/chat/turn", {
@@ -145,32 +189,8 @@ export function useChat(): UseChat {
       let accReasoning = "";
       let accPlan = "";
 
-      const updateAssistant = (patch: Partial<ChatMessage>) => {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, ...patch } : m)),
-        );
-      };
-      const appendTool = (ev: ChatToolEvent) => {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantId
-              ? {
-                  ...m,
-                  tools: [
-                    ...m.tools.filter((t) => t.id !== ev.id),
-                    // Preserve args from tool_start when tool_result arrives
-                    // (tool_result doesn't include args in the payload).
-                    ev.state === "result"
-                      ? { ...m.tools.find((t) => t.id === ev.id), ...ev }
-                      : ev,
-                  ],
-                }
-              : m,
-          ),
-        );
-      };
+      resetStreamTimeout();
 
-      // Read the stream, split into SSE event blocks separated by a blank line.
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -181,9 +201,13 @@ export function useChat(): UseChat {
           buffer = buffer.slice(sep + 2);
           const evt = parseSseBlock(block);
           if (!evt) continue;
+          resetStreamTimeout();
           let payload: Record<string, unknown> = {};
           try { payload = evt.data ? JSON.parse(evt.data) : {}; } catch { /* keep empty */ }
           switch (evt.event) {
+            case "meta":
+              updateAssistant({ requestId: (payload.request_id as string) || "" } as Partial<ChatMessage> & { requestId?: string });
+              break;
             case "token": {
               const c = (payload.content as string) || "";
               accContent += c;
@@ -203,7 +227,7 @@ export function useChat(): UseChat {
               updateAssistant({ plan: accPlan });
               break;
             }
-            case "tool_start": {
+            case "tool_start":
               appendTool({
                 id: (payload.id as string) || uid(),
                 name: (payload.name as string) || "",
@@ -211,8 +235,7 @@ export function useChat(): UseChat {
                 state: "start",
               });
               break;
-            }
-            case "tool_result": {
+            case "tool_result":
               appendTool({
                 id: (payload.id as string) || uid(),
                 name: (payload.name as string) || "",
@@ -220,26 +243,24 @@ export function useChat(): UseChat {
                 state: "result",
               });
               break;
-            }
-            case "status": {
+            case "status":
               updateAssistant({ status: (payload.msg as string) || "" });
               break;
-            }
+            case "ping":
+              break;
             case "error": {
               const msg = (payload.message as string) || "agent_error";
               setError(msg);
               updateAssistant({ error: msg });
               break;
             }
-            case "done": {
+            case "done":
               break;
-            }
             default:
               break;
           }
         }
       }
-      // Final cleanup: re-parse inline citations now that the full text is in.
       const { text: cleaned, citations } = parseCitations(accContent);
       updateAssistant({ content: cleaned, citations, status: undefined });
     } catch (err) {
@@ -251,10 +272,20 @@ export function useChat(): UseChat {
         prev.map((m) => (m.id === assistantId ? { ...m, error: msg } : m)),
       );
     } finally {
+      clearStreamTimeout();
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [isStreaming, messages]);
+  }, [isStreaming, messages, resetStreamTimeout, clearStreamTimeout]);
 
-  return { messages, isStreaming, error, send, cancel, reset };
+  // Retry effect: when retryTrigger changes, re-send the last user message.
+  useEffect(() => {
+    if (retryTrigger > 0 && retryTextRef.current && !isStreaming) {
+      const text = retryTextRef.current;
+      retryTextRef.current = null;
+      void send(text);
+    }
+  }, [retryTrigger, isStreaming, send]);
+
+  return { messages, isStreaming, error, send, cancel, reset, retry };
 }

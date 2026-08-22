@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .. import db
 from ..models import CorpusStats
+from ._error import structured_errors
 from ._util import run_sync
 
 
@@ -17,6 +18,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Corpus statistics"},
     )
+    @structured_errors
     @run_sync
     def corpus_stats() -> CorpusStats:
         """Return corpus counts and the as-of date."""

@@ -19,6 +19,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List Constitution schedules"},
     )
+    @structured_errors
     @run_sync
     def list_schedules() -> list[Document]:
         """List all Constitution schedules."""
@@ -59,6 +60,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List Constitutional amendments"},
     )
+    @structured_errors
     @run_sync
     def list_amendments(year_from: int | None = None,
                         year_to: int | None = None) -> list[Document]:

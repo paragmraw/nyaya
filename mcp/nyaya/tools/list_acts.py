@@ -20,6 +20,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List available acts"},
     )
+    @structured_errors
     @run_sync
     def list_acts() -> ActsList:
         """List all acts in the corpus."""
@@ -109,6 +110,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List Constitution articles"},
     )
+    @structured_errors
     @run_sync
     def list_articles(part: str | None = None,
                       limit: int = 100, offset: int = 0) -> DocumentsList:
@@ -133,6 +135,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List landmark judgments"},
     )
+    @structured_errors
     @run_sync
     def list_judgments(limit: int = 50, offset: int = 0) -> DocumentsList:
         """List all landmark judgments.

@@ -1,28 +1,37 @@
-"""LangGraph supervisor-synthesis architecture over the nyaya MCP tools.
+"""LangGraph supervisor-synthesis architecture over the nyaya corpus tools.
 
-The graph has two phases:
+The graph has these phases:
 
 1. **Supervisor** (short output): receives the user question, briefly reasons
-   about which MCP tools to call, and emits ALL tool calls in a single
+   about which tools to call, and emits ALL tool calls in a single
    ``AIMessage`` for parallel execution. The supervisor does NOT answer the
    question — it only plans and delegates.
 
 2. **Parallel tool execution**: the ``DedupToolNode`` runs all tool calls
-   concurrently (LangGraph's ``ToolNode`` uses ``asyncio.gather``). Duplicate
-   (name+args) calls are deduplicated — the second call gets the cached
-   result of the first.
+   concurrently. Duplicate (name+args) calls are deduplicated.
 
-3. **Synthesis** (full output): receives all tool results as ``ToolMessage``s
-   and composes the final grounded answer with citations.
+3. **Synthesis** (full output): receives all tool results as ``ToolMessage``s,
+   wraps them in ``<corpus_text>`` delimiters (prompt-injection defense), and
+   composes the final grounded answer with citations.
+
+4. **Reflection check** (optional): after synthesis, if the answer appears
+   ungrounded (no citations + tools were called), the graph routes back to
+   the supervisor for one more retrieval round (up to ``MAX_REFLECTION_ROUNDS``
+   total rounds).
+
+5. **Citation verification** (post-synthesis): programmatic check that all
+   ``[[act: X, ref: Y]]`` markers in the final answer are backed by tool
+   results. Ungrounded citations are stripped. A caveat is appended if
+   zero grounded citations remain.
 
 No checkpointer is used. Each request rebuilds the message list from the
-client-supplied history plus the new user message; the agent runs to
-completion and tokens stream out over SSE (see ``streaming.py``).
+client-supplied history plus the new user message.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -36,9 +45,13 @@ from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
 
+# Citation marker regex (used by reflection check)
+_CITE_RE = re.compile(r"\[\[act:\s*[^,\]]+?\s*,\s*ref:\s*[^\]]+?\s*\]\]")
+
 
 class ChatState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
+    round: int
 
 
 def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMessage]:
@@ -62,24 +75,15 @@ def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMes
 # ---------------------------------------------------------------------------
 
 def _make_model(settings: Settings, *, model_name: str, max_tokens: int) -> Any:
-    """Create a ChatNVIDIA instance for a specific phase.
-
-    Each phase (supervisor, synthesis) gets its own model instance with the
-    appropriate model name and token cap. In tests, ``get_model`` is
-    monkeypatched to return a ``FakeChatModel``; this factory respects that
-    override when the model name matches.
-    """
+    """Create a ChatNVIDIA instance for a specific phase."""
     base = get_model(settings)
     cached_name = getattr(base, "model", None) or getattr(getattr(base, "_client", None), "model", None)
 
-    # If the cached model is a fake (tests) or the name matches, reuse it
     if cached_name == model_name and max_tokens == settings.llm_max_tokens:
         return base
     if not hasattr(base, "model") and not hasattr(base, "_client"):
-        # FakeChatModel in tests — always reuse
         return base
 
-    # Create a fresh ChatNVIDIA instance for a different model/token cap
     from langchain_nvidia_ai_endpoints import ChatNVIDIA
     return ChatNVIDIA(
         model=model_name,
@@ -95,31 +99,14 @@ def _make_model(settings: Settings, *, model_name: str, max_tokens: int) -> Any:
 # ---------------------------------------------------------------------------
 
 def _tool_call_key(name: str, args: dict) -> str:
-    """A stable hashable key identifying a (tool_name, args) pair.
-
-    Normalises argument values to strings so that e.g. ``302`` and ``"302"``
-    map to the same key.
-    """
+    """A stable hashable key identifying a (tool_name, args) pair."""
     normalised = {k: str(v) for k, v in sorted(args.items())}
     return f"{name}:{normalised}"
 
 
 def _clean_tool_content(content: Any) -> str:
-    """Normalise a ToolMessage's content to a clean string.
-
-    MCP adapters return tool results as a list of content blocks like
-    ``[{'type': 'text', 'text': '{"act": "IPC", ...}', 'id': 'lc_...'}]``.
-    LangGraph's ``ToolNode`` wraps this in a ``ToolMessage`` with
-    ``content=str(result)``, producing the Python repr
-    ``"[{'type': 'text', 'text': '...', 'id': 'lc_...'}]"`` — a string that
-    is unreadable by both the synthesis model and the UI.
-
-    This function detects that pattern and extracts the ``text`` field from
-    each block, producing a clean JSON string (or plain text) that the model
-    can use and the UI can format.
-    """
+    """Normalise a ToolMessage's content to a clean string."""
     if isinstance(content, str):
-        # Check if it looks like a stringified list of content blocks
         stripped = content.strip()
         if stripped.startswith("[{") and "'type'" in stripped and "'text'" in stripped:
             try:
@@ -136,7 +123,7 @@ def _clean_tool_content(content: Any) -> str:
                             parts.append(block)
                     return (" ".join(parts))[:8000]
             except Exception:
-                pass  # not a valid Python literal — return as-is
+                pass
         return content[:8000]
     if isinstance(content, list):
         parts = []
@@ -152,15 +139,7 @@ def _clean_tool_content(content: Any) -> str:
 
 
 class DedupToolNode:
-    """A ToolNode wrapper that skips duplicate (name+args) tool calls.
-
-    If a tool call with the same ``_tool_call_key`` has already been executed
-    in this graph run, the duplicate gets a synthetic ToolMessage with the
-    cached result — the underlying MCP tool is not called again.
-
-    Also post-processes ToolMessage content to extract clean text from the
-    MCP adapter's list-of-blocks format (see ``_clean_tool_content``).
-    """
+    """A ToolNode wrapper that skips duplicate (name+args) tool calls."""
 
     def __init__(self, tools: list[Any]):
         self._tool_node = ToolNode(tools)
@@ -177,7 +156,6 @@ class DedupToolNode:
         if last_ai is None:
             return await self._tool_node.ainvoke(state)
 
-        # Partition tool_calls into unique vs duplicate
         unique_calls: list[Any] = []
         duplicate_calls: list[Any] = []
         for tc in last_ai.tool_calls:
@@ -190,7 +168,6 @@ class DedupToolNode:
 
         if not duplicate_calls:
             result = await self._tool_node.ainvoke(state)
-            # Clean and cache results for future dedup lookups
             cleaned_msgs: list[BaseMessage] = []
             for m in result.get("messages", []):
                 if isinstance(m, ToolMessage):
@@ -208,7 +185,6 @@ class DedupToolNode:
                 cleaned_msgs.append(m)
             return {"messages": cleaned_msgs}
 
-        # Run unique calls through the real ToolNode
         new_msgs: list[ToolMessage] = []
         if unique_calls:
             modified_ai = AIMessage(content=last_ai.content, tool_calls=unique_calls)
@@ -230,7 +206,6 @@ class DedupToolNode:
                             break
                     new_msgs.append(m)
 
-        # Add synthetic ToolMessages for duplicates
         dup_msgs: list[ToolMessage] = []
         for tc in duplicate_calls:
             key = _tool_call_key(tc["name"], tc.get("args", {}))
@@ -246,24 +221,90 @@ class DedupToolNode:
 
 
 # ---------------------------------------------------------------------------
+# Helpers for synthesis: wrap tool results in corpus_text delimiters
+# ---------------------------------------------------------------------------
+
+def _wrap_tool_results_in_corpus_tags(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Wrap ToolMessage content in <corpus_text>...</corpus_text> tags.
+
+    This is a prompt-injection defense: it clearly delineates corpus data
+    from instructions in the synthesis prompt. The synthesis system prompt
+    instructs the model to treat all text inside these tags as data only.
+    """
+    result: list[BaseMessage] = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            content = m.content if isinstance(m.content, str) else str(m.content)
+            wrapped = ToolMessage(
+                content=f"<corpus_text>\n{content}\n</corpus_text>",
+                tool_call_id=m.tool_call_id,
+                name=m.name,
+            )
+            result.append(wrapped)
+        else:
+            result.append(m)
+    return result
+
+
+def _has_citations(text: str) -> bool:
+    """Check if the answer text contains at least one [[act: X, ref: Y]] marker."""
+    return bool(_CITE_RE.search(text))
+
+
+def _has_refusal(text: str) -> bool:
+    """Check if the answer text indicates the model could not find a basis."""
+    lower = text.lower()
+    indicators = [
+        "could not find a basis",
+        "could not find",
+        "not in the corpus",
+        "no result",
+        "no tool result",
+        "i could not find",
+        "not available in the corpus",
+    ]
+    return any(ind in lower for ind in indicators)
+
+
+def _had_tool_calls(messages: list[BaseMessage]) -> bool:
+    """Check if any AIMessage in the conversation had tool_calls."""
+    for m in messages:
+        if isinstance(m, AIMessage) and getattr(m, "tool_calls", None):
+            return True
+    return False
+
+
+def _get_tool_content_list(messages: list[BaseMessage]) -> list[str]:
+    """Extract content strings from all ToolMessages in the conversation."""
+    result: list[str] = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            content = m.content if isinstance(m.content, str) else str(m.content)
+            # Strip the corpus_text wrapper if present
+            content = re.sub(r"^<corpus_text>\n?", "", content)
+            content = re.sub(r"\n?</corpus_text>$", "", content)
+            result.append(content)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Agent builder
 # ---------------------------------------------------------------------------
 
 async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
-    """Connect to MCP, build tools, and compile the supervisor-synthesis graph."""
+    """Connect to tools, build the supervisor-synthesis graph with reflection."""
     mcp_tools = await load_tools(settings)
     if not mcp_tools:
-        log.warning("no MCP tools loaded, building degraded agent")
+        log.warning("no tools loaded, building degraded agent")
         model = get_model(settings)
         builder: StateGraph = StateGraph(ChatState)
-        builder.add_node("agent", _make_synthesis_node(model, settings))
+        builder.add_node("agent", _make_synthesis_node(model, settings, has_tools=False))
         builder.add_edge(START, "agent")
         builder.add_edge("agent", END)
         return builder.compile(), []
 
-    log.info("loaded %d MCP tools", len(mcp_tools))
+    log.info("loaded %d tools", len(mcp_tools))
 
-    # Supervisor model: short output for planning
     supervisor_model = _make_model(
         settings,
         model_name=settings.supervisor_model,
@@ -272,7 +313,6 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
     if hasattr(supervisor_model, "bind_tools"):
         supervisor_model = supervisor_model.bind_tools(mcp_tools)
 
-    # Synthesis model: full output for answer composition
     synthesis_model = _make_model(
         settings,
         model_name=settings.synthesis_model,
@@ -280,8 +320,13 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
     )
 
     async def call_supervisor(state: ChatState) -> dict[str, Any]:
+        from .observability import get_langfuse_callbacks
+        callbacks = get_langfuse_callbacks()
+        invoke_kwargs: dict[str, Any] = {"max_retries": settings.llm_max_retries}
+        if callbacks:
+            invoke_kwargs["config"] = {"callbacks": callbacks}
         response = await ainvoke_with_retry(
-            supervisor_model, state["messages"], max_retries=settings.llm_max_retries,
+            supervisor_model, state["messages"], **invoke_kwargs,
         )
         return {"messages": [response]}
 
@@ -291,7 +336,44 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
             return "tools"
         return "synthesis"
 
-    synthesis_fn = _make_synthesis_node(synthesis_model, settings)
+    synthesis_fn = _make_synthesis_node(synthesis_model, settings, has_tools=True)
+
+    def route_synthesis(state: ChatState) -> str:
+        """After synthesis, check if a reflection round is needed.
+
+        Routes back to supervisor if:
+        - The answer has no citations AND tools were called AND we haven't
+          exceeded MAX_REFLECTION_ROUNDS.
+        - OR the answer contains a refusal phrase AND we haven't exceeded
+          the round cap.
+        Otherwise routes to END.
+        """
+        current_round = state.get("round", 1)
+        if current_round >= settings.max_reflection_rounds:
+            log.info("reflection: max rounds reached (%d), ending", current_round)
+            return END
+
+        messages = state.get("messages", [])
+        last = messages[-1] if messages else None
+        if not isinstance(last, AIMessage):
+            return END
+
+        answer = last.content if isinstance(last.content, str) else str(last.content)
+        had_tools = _had_tool_calls(messages)
+
+        if not had_tools:
+            return END
+
+        if not _has_citations(answer) or _has_refusal(answer):
+            log.info(
+                "reflection: routing back to supervisor (round %d → %d), "
+                "has_citations=%s, has_refusal=%s",
+                current_round, current_round + 1,
+                _has_citations(answer), _has_refusal(answer),
+            )
+            return "supervisor"
+
+        return END
 
     builder = StateGraph(ChatState)
     builder.add_node("supervisor", call_supervisor)
@@ -301,49 +383,92 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
     builder.add_edge(START, "supervisor")
     builder.add_conditional_edges("supervisor", route_supervisor, ["tools", "synthesis"])
     builder.add_edge("tools", "synthesis")
-    builder.add_edge("synthesis", END)
+    builder.add_conditional_edges("synthesis", route_synthesis, ["supervisor", END])
 
     graph = builder.compile()
     log.info(
-        "compiled LangGraph supervisor-synthesis agent "
-        "(supervisor=%s, synthesis=%s, mcp_tools=%d)",
+        "compiled LangGraph supervisor-synthesis agent with reflection "
+        "(supervisor=%s, synthesis=%s, tools=%d, max_rounds=%d, citation_verification=%s)",
         settings.supervisor_model, settings.synthesis_model, len(mcp_tools),
+        settings.max_reflection_rounds, settings.citation_verification,
     )
     return graph, mcp_tools
 
 
-def _make_synthesis_node(model: Any, settings: Settings):
+def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = True):
     """Build the synthesis node function.
 
     The synthesis node receives the full message history (including tool
-    results as ToolMessages) and produces the final grounded answer.
+    results as ToolMessages), wraps tool results in <corpus_text> delimiters,
+    and produces the final grounded answer. If citation verification is
+    enabled, it verifies and strips ungrounded citations after streaming.
     """
     from .llm import SYSTEM_PROMPT
 
     async def _synthesis(state: ChatState) -> dict[str, Any]:
+        from .observability import get_langfuse_callbacks
+        callbacks = get_langfuse_callbacks()
+
         messages = state["messages"]
         # Replace the supervisor system prompt with the synthesis system prompt
         out_msgs: list[BaseMessage] = [SystemMessage(content=SYSTEM_PROMPT)]
         for m in messages:
             if isinstance(m, SystemMessage):
-                continue  # drop the supervisor's system prompt
+                continue
             out_msgs.append(m)
-        # Stream the synthesis model so LangGraph's stream_mode="messages"
-        # intercepts each token via on_llm_new_token and yields it to the SSE
-        # stream. Collect chunks for the final state update.
+
+        # Wrap tool results in <corpus_text> delimiters (prompt-injection defense)
+        if has_tools:
+            out_msgs = _wrap_tool_results_in_corpus_tags(out_msgs)
+
+        # Stream the synthesis model
         chunks: list[Any] = []
+        stream_kwargs: dict[str, Any] = {"max_retries": settings.llm_max_retries}
+        if callbacks:
+            stream_kwargs["config"] = {"callbacks": callbacks}
         async for chunk in astream_with_retry(
-            model, out_msgs, max_retries=settings.llm_max_retries,
+            model, out_msgs, **stream_kwargs,
         ):
             chunks.append(chunk)
         if chunks:
             final = chunks[0]
             for chunk in chunks[1:]:
                 final = final + chunk
-            return {"messages": [final]}
-        return {"messages": []}
+            answer_text = final.content if isinstance(final.content, str) else str(final.content)
+
+            # Citation verification: strip ungrounded citations
+            if settings.citation_verification and has_tools:
+                tool_contents = _get_tool_content_list(messages)
+                had_tools = _had_tool_calls(messages)
+                verified = _verify_and_strip(
+                    answer_text, tool_contents, had_tools=had_tools,
+                )
+                if verified != answer_text:
+                    final = AIMessage(content=verified)
+
+            # Increment round counter for reflection routing
+            current_round = state.get("round", 0) + 1
+            return {"messages": [final], "round": current_round}
+        return {"messages": [], "round": state.get("round", 0) + 1}
 
     return _synthesis
+
+
+def _verify_and_strip(
+    answer_text: str,
+    tool_contents: list[str],
+    *,
+    had_tools: bool = False,
+) -> str:
+    """Run citation verification on the synthesis output."""
+    from .citations import verify_citations
+    try:
+        return verify_citations(
+            answer_text, tool_contents, had_tool_calls=had_tools,
+        )
+    except Exception as exc:
+        log.warning("citation verification failed (returning original): %s", exc)
+        return answer_text
 
 
 # ---------------------------------------------------------------------------
