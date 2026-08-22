@@ -17,13 +17,14 @@ Routes
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from .agent import _build_messages, get_agent
@@ -36,8 +37,6 @@ log = logging.getLogger("nyaya_chat")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    # Sub-app lifespan: no agent building here (lazy init on first request).
-    # Host lifespan handles agent building and injection.
     s = get_settings()
     log.info("nyaya-chat sub-app lifespan starting: model=%s mcp_url=%s", s.llm_model, s.mcp_url)
     app.state.settings = s
@@ -48,18 +47,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Build the chat FastAPI sub-app.
-
-    ``settings`` is optional; when ``None`` the process-wide ``get_settings()``
-    is used.
-    """
+    """Build the chat FastAPI sub-app."""
     s = settings or get_settings()
     app = FastAPI(
         title="nyaya-chat",
         version="0.1.0",
         description="LangGraph + NVIDIA Nemotron chat backend (sub-app of nyaya).",
         lifespan=lifespan,
-        # Serve docs at /chat/docs so they don't clash with the host's /docs.
         docs_url="/docs",
         openapi_url="/openapi.json",
     )
@@ -69,7 +63,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def health() -> ChatSubHealthResponse:
         graph = getattr(app.state, "graph", None)
         tools = getattr(app.state, "tools", None) or []
-        # If graph not yet built, check if we can build it (lazy init)
         if graph is None:
             try:
                 graph, tools = await get_agent()
@@ -79,14 +72,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 log.exception("failed to build chat agent for health check")
                 graph, tools = None, []
 
+        # Degraded if: no graph, OR graph built but zero tools loaded
+        is_degraded = graph is None or len(tools) == 0
         return ChatSubHealthResponse(
-            status="healthy" if graph is not None else "degraded",
+            status="degraded" if is_degraded else "healthy",
             model=s.llm_model,
             tools_loaded=len(tools),
         )
 
     @app.post("/turn")
-    async def turn(req: ChatRequest) -> Any:
+    async def turn(req: ChatRequest, request: Request) -> Any:
         graph = getattr(app.state, "graph", None)
         tools = getattr(app.state, "tools", None) or []
         if graph is None:
@@ -101,23 +96,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     status_code=503,
                 )
 
-        # After attempting to build, check if agent is available
         if graph is None:
             return JSONResponse(
                 {"error": "agent_unavailable", "detail": "chat agent not available"},
                 status_code=503,
             )
 
-        # Cap history server-side.
+        # Use the host's request ID if available; generate one as fallback.
+        rid = getattr(getattr(request, "state", None), "request_id", None) or uuid.uuid4().hex
         history = [t.model_dump() for t in req.history][-s.max_history:]
         messages = _build_messages(req.message, history)
-        rid = uuid.uuid4().hex
         log.info("chat turn request_id=%s msg_len=%d history=%d", rid, len(req.message), len(history))
 
+        keepalive_interval = s.sse_keepalive_interval_s
+
         async def event_source() -> AsyncIterator[bytes]:
-            # Immediate status so the client knows the stream is live.
+            # First event: meta with request_id for client-side correlation
+            yield _sse_meta(rid)
+            # Immediate status so the client knows the stream is live
             yield _sse_status(rid)
-            async for chunk in stream_turn(graph, messages):
+            async for chunk in stream_turn(graph, messages, keepalive_interval=keepalive_interval):
                 yield chunk
 
         return StreamingResponse(
@@ -125,8 +123,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",  # nginx: don't buffer SSE
+                "X-Accel-Buffering": "no",
                 "Connection": "keep-alive",
+                "X-Request-ID": rid,
             },
         )
 
@@ -137,6 +136,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+def _sse_meta(rid: str) -> bytes:
+    return f'event: meta\ndata: {json.dumps({"request_id": rid})}\n\n'.encode()
+
+
 def _sse_status(rid: str) -> bytes:
-    import json
     return f'event: status\ndata: {json.dumps({"msg": "analyzing", "rid": rid})}\n\n'.encode()

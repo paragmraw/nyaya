@@ -12,6 +12,7 @@ import re
 
 from .. import db
 from ..models import SearchResponse
+from ._error import structured_errors
 from ._util import run_sync, validate_query_length
 
 _DEFINITION_RE = re.compile(r"defin|interpret", re.IGNORECASE)
@@ -34,6 +35,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Semantic search"},
     )
+    @structured_errors
     @run_sync
     def semantic_query(
         query: str,

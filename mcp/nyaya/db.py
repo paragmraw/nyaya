@@ -15,6 +15,7 @@ Design notes
 from __future__ import annotations
 
 import contextlib
+import logging
 import re
 import threading
 import time
@@ -30,6 +31,8 @@ from psycopg_pool import ConnectionPool
 from .config import get_settings
 from .exceptions import DatabaseUnavailable
 from .models import Act, CrossRef, Document, SearchResult
+
+log = logging.getLogger("nyaya.db")
 
 # Fallback provenance date used when an act row lacks a current ``as_of``.
 CORPUS_AS_OF = date(2026, 7, 1)
@@ -345,7 +348,9 @@ def list_sections(
     where = " where " + " and ".join(clauses)
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + where + " order by d.ref limit %s offset %s",
+            _DOC_SELECT + where
+            + " order by coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0), d.ref"
+            + " limit %s offset %s",
             params + [limit, offset],
         ).fetchall()
         total_row = c.execute(
@@ -623,7 +628,8 @@ def rerank_search(
     except EmbeddingUnavailable:
         reranked = candidates
         fallback_reason = "reranker_unavailable"
-    except Exception:
+    except Exception as exc:
+        log.warning("reranker failed, falling back to raw ANN: %s", exc)
         reranked = candidates
         fallback_reason = "reranker_unavailable"
 

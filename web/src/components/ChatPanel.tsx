@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import BalanceIcon from "@mui/icons-material/Balance";
 import ChatComposer from "./ChatComposer";
 import ChatMessageView from "./ChatMessage";
@@ -12,29 +12,44 @@ import { useChat } from "@/lib";
 const GREETING =
   "Namaste. I'm Nyaya. I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
 
-// LLM powering the assistant. Must match the model id configured in
-// chat/nyaya_chat/config.py (SYNTHESIS_MODEL).
-const MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";
-const MODEL_NAME = "Nemotron-3.5 Lightning 30B";
-const MODEL_URL = `https://build.nvidia.com/${MODEL_ID}`;
+// Fallback model display info (used before /chat/health responds)
+const FALLBACK_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";
+const FALLBACK_MODEL_NAME = "Nemotron-3.5 Lightning 30B";
 
 interface ChatPanelProps {
-  /** When true, the chat panel is disabled and shown in a blurred/locked state */
   disabled?: boolean;
 }
 
 export default function ChatPanel({ disabled = false }: ChatPanelProps) {
-  const { messages, isStreaming, error, send, cancel, reset } = useChat();
+  const { messages, isStreaming, error, send, cancel, reset, retry } = useChat();
   const bodyRef = useRef<HTMLDivElement>(null);
-  // Show the greeting until the first user message is sent (pure derivation,
-  // no extra state needed).
-  const showGreeting = !messages.some((m) => m.role === "user");
-  // The new-chat action only makes sense once a conversation has started.
-  const canReset = messages.length > 0 || !!error;
+  const [modelId, setModelId] = useState(FALLBACK_MODEL_ID);
+  const [modelName, setModelName] = useState(FALLBACK_MODEL_NAME);
 
-  // Auto-scroll to the latest message as tokens stream in — but only when the
-  // user is already near the bottom, so we don't yank them away while they've
-  // scrolled up to read earlier messages.
+  // Fetch model info from /chat/health for dynamic display (fixes drift risk)
+  useEffect(() => {
+    fetch("/chat/health")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.model) {
+          setModelId(data.model);
+          // Derive a display name from the model id
+          const parts = data.model.split("/");
+          const short = parts[parts.length - 1] || data.model;
+          setModelName(short.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
+        }
+      })
+      .catch(() => {
+        // Keep fallback on error
+      });
+  }, []);
+
+  const showGreeting = !messages.some((m) => m.role === "user");
+  const canReset = messages.length > 0 || !!error;
+  const canRetry = !!error && !isStreaming;
+  const modelUrl = `https://build.nvidia.com/${modelId}`;
+
+  // Auto-scroll to the latest message as tokens stream in
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
@@ -52,17 +67,17 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
         </div>
         <div className="ch-meta">
           <a
-            href={MODEL_URL}
+            href={modelUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="powered-by"
-            title={MODEL_ID}
+            title={modelId}
           >
             <span className="pb-label">Powered by</span>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img className="ch-logo" src="/nvidia.svg" alt="NVIDIA" height="14" />
-            <span className="model-full">{MODEL_NAME}</span>
-            <span className="model-short" aria-hidden="true">Nemotron-3.5</span>
+            <span className="model-full">{modelName}</span>
+            <span className="model-short" aria-hidden="true">{modelName.split(" ").slice(-2).join(" ")}</span>
           </a>
           <button
             type="button"
@@ -80,7 +95,7 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
         </div>
       </div>
 
-      <div className="chat-body" id="chatBody" ref={bodyRef}>
+      <div className="chat-body" id="chatBody" ref={bodyRef} role="log" aria-live="polite" aria-label="Chat conversation">
         {showGreeting ? (
           <div className="msg bot">
             <div className="avatar" aria-hidden="true"><BalanceIcon fontSize="small" /></div>
@@ -107,6 +122,28 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
           <span className="status-dot" />
           Retrieval-grounded · not legal advice · verify citations before filing
           {error ? ` · ${error}` : ""}
+          {canRetry && (
+            <button
+              type="button"
+              className="retry-btn"
+              onClick={retry}
+              aria-label="Retry last message"
+              title="Retry last message"
+              style={{
+                marginLeft: 8,
+                background: "none",
+                border: "1px solid currentColor",
+                borderRadius: 4,
+                padding: "2px 8px",
+                cursor: "pointer",
+                fontSize: "inherit",
+                color: "inherit",
+                opacity: 0.8,
+              }}
+            >
+              ↻ Retry
+            </button>
+          )}
         </div>
       </div>
     </div>
