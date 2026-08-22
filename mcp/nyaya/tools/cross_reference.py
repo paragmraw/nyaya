@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .. import db
 from ..models import CrossRefList
+from ._error import structured_errors
 from ._util import run_sync
 
 
@@ -23,6 +24,7 @@ def register(mcp) -> None:
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "Cross-reference a section"},
     )
+    @structured_errors
     @run_sync
     def cross_reference(act: str, section: str,
                         direction: str = "both") -> CrossRefList:

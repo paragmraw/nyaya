@@ -1,11 +1,13 @@
-"""Load the nyaya MCP corpus tools as LangChain tools.
+"""Load the nyaya corpus tools as LangChain tools.
 
-The agent calls the existing nyaya MCP server over streamable HTTP via
-``langchain-mcp-adapters``' ``MultiServerMCPClient``. Each tool invocation
-opens a short-lived stateless session, so there's no long-held connection
-to manage. Tool execution errors (``CallToolResult.isError=True``) are
-returned to the model as ``ToolMessage``s for self-correction rather than
-crashing the turn (``handle_tool_errors=True`` is the adapter default).
+The primary path is **native tools** (direct Python imports of ``nyaya.db``
+functions wrapped as LangChain ``StructuredTool`` objects). This eliminates
+the HTTP loopback overhead of the MCP transport when the chat agent runs in
+the same process as the MCP server.
+
+If native tools fail to load (e.g. the ``nyaya`` package is not importable
+in a standalone chat deployment), we fall back to the MCP-over-HTTP client
+via ``langchain-mcp-adapters``.
 """
 
 from __future__ import annotations
@@ -19,20 +21,36 @@ log = logging.getLogger("nyaya_chat.tools")
 
 
 async def load_tools(settings: Settings | None = None) -> list[Any]:
-    """Connect to the nyaya MCP server and return the curated tool subset.
+    """Load the curated tool set for the chat agent.
 
-    The returned tools are LangChain ``BaseTool`` instances ready to pass to
-    ``langgraph.prebuilt.ToolNode`` or ``model.bind_tools``. The connection is
-    not held — each tool call makes its own stateless HTTP request, so the
-    client object is only used to fetch the tool schemas.
+    Tries native (direct-import) tools first. Falls back to MCP-over-HTTP
+    if the nyaya package is not available. Returns an empty list if neither
+    path yields tools (the caller should degrade gracefully).
     """
+    s = settings or get_settings()
+
+    # ── Primary: native tools (direct Python import) ──
+    try:
+        from .native_tools import load_native_tools
+        tools = await load_native_tools(s)
+        if tools:
+            return tools
+        log.warning("native tools returned empty; falling back to MCP client")
+    except ImportError as exc:
+        log.info("native tools unavailable (%s); falling back to MCP client", exc)
+    except Exception as exc:
+        log.warning("native tools failed to load (%s); falling back to MCP client", exc)
+
+    # ── Fallback: MCP-over-HTTP client ──
+    return await _load_mcp_tools(s)
+
+
+async def _load_mcp_tools(s: Settings) -> list[Any]:
+    """Connect to the nyaya MCP server over streamable HTTP and return tools."""
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
-    s = settings or get_settings()
     client = MultiServerMCPClient(
         {"nyaya": {"transport": "streamable_http", "url": s.mcp_url}},
-        # Errors returned to the model so it can recover; transport failures
-        # still raise.
         handle_tool_errors=True,
     )
     all_tools = await client.get_tools()
@@ -46,8 +64,8 @@ async def load_tools(settings: Settings | None = None) -> list[Any]:
     missing = sorted(allow - names)
     if missing:
         log.warning(
-            "tool allowlist references unknown tools (ignored): %s. "
-            "Available: %s", missing, sorted(names),
+            "tool allowlist references unknown tools (ignored): %s. Available: %s",
+            missing, sorted(names),
         )
     log.info(
         "loaded %d/%d MCP tools from %s: %s",

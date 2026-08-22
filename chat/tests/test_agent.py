@@ -84,13 +84,13 @@ async def test_agent_supervisor_emits_tool_calls(fake_model, fake_tools):
         AIMessage(content="", tool_calls=[{
             "id": "tc1", "name": "get_section", "args": {"query": "302"},
         }]),
-        # Synthesis: produces final answer
+        # Synthesis: produces final answer WITH citation (so reflection doesn't loop)
         AIMessage(content="Punishment for murder is death or life [[act: IPC, ref: s. 302]]."),
     ]
     from nyaya_chat.agent import _build_messages, build_agent
     graph, tools = await build_agent()
     msgs = _build_messages("What is IPC 302?", [])
-    result = await graph.ainvoke({"messages": msgs})
+    result = await graph.ainvoke({"messages": msgs}, {"recursion_limit": 50})
     out = result["messages"]
     # Final message should be the synthesis answer
     assert any(getattr(m, "content", "").startswith("Punishment for murder") for m in out)

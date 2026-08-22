@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import PersonIcon from "@mui/icons-material/Person";
@@ -268,6 +268,9 @@ export function normaliseMd(src: string): string {
 export default function ChatMessageView({ msg, isStreaming = false }: { msg: ChatMessage; isStreaming?: boolean }) {
   const isBot = msg.role === "assistant";
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
+  // Memoize normaliseMd — it's O(n) and the full content can be long.
+  // Only re-compute when the content actually changes.
+  const normalisedContent = useMemo(() => normaliseMd(msg.content), [msg.content]);
   return (
     <div className={`msg ${isBot ? "bot" : msg.role}`}>
       <div className="avatar" aria-hidden="true">
@@ -328,7 +331,7 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
                     ),
                 }}
               >
-                {normaliseMd(msg.content)}
+                {normalisedContent}
               </ReactMarkdown>
             </div>
           ) : null

@@ -46,7 +46,8 @@ EMBEDDING_DIM = 2048
 
 # Redis connection string for distributed rate limiting. When set,
 # rate-limit counters are shared across all workers. When None, falls back
-# to in-memory (single-worker only).
+# to in-memory (single-worker only). Read from the REDIS_URL env var at
+# get_settings() time; the module constant is the default.
 REDIS_URL: str | None = None
 
 # Directory containing the built Next.js static export, served at /.
@@ -139,7 +140,7 @@ def get_settings() -> Settings:
         embedding_model=EMBEDDING_MODEL,
         reranker_model=RERANKER_MODEL,
         embedding_dim=EMBEDDING_DIM,
-        redis_url=REDIS_URL,
+        redis_url=os.environ.get("REDIS_URL", REDIS_URL),
     )
 
 
