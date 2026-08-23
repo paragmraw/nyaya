@@ -29,6 +29,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .agent import _build_messages, get_agent
 from .config import Settings, get_settings
+from .guardrail import Intent, classify_intent, get_canned_response
+from .llm import get_model
 from .schemas import ChatRequest, ChatSubHealthResponse
 from .streaming import stream_turn
 
@@ -105,15 +107,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Use the host's request ID if available; generate one as fallback.
         rid = getattr(getattr(request, "state", None), "request_id", None) or uuid.uuid4().hex
         history = [t.model_dump() for t in req.history][-s.max_history:]
-        messages = _build_messages(req.message, history)
         log.info("chat turn request_id=%s msg_len=%d history=%d", rid, len(req.message), len(history))
 
+        # Guardrail: classify intent before entering the agent pipeline.
+        # Non-legal messages (greetings, capability questions, off-topic) get
+        # a canned SSE response instantly -- no supervisor/tool/synthesis calls.
+        intent = await classify_intent(req.message, get_model(s), s)
+        if intent != Intent.LEGAL:
+            log.info("guardrail: fast-path for intent=%s (skipping agent pipeline)", intent.value)
+            canned = get_canned_response(intent)
+
+            async def fast_path() -> AsyncIterator[bytes]:
+                yield _sse_meta(rid)
+                yield _sse_status(rid)
+                yield _sse_composing()
+                yield _sse_token(canned)
+                yield _sse_done()
+
+            return StreamingResponse(
+                fast_path(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                    "X-Request-ID": rid,
+                },
+            )
+
+        # Normal pipeline: legal question goes through the full agent graph.
+        messages = _build_messages(req.message, history)
         keepalive_interval = s.sse_keepalive_interval_s
 
         async def event_source() -> AsyncIterator[bytes]:
-            # First event: meta with request_id for client-side correlation
             yield _sse_meta(rid)
-            # Immediate status so the client knows the stream is live
             yield _sse_status(rid)
             async for chunk in stream_turn(graph, messages, keepalive_interval=keepalive_interval):
                 yield chunk
@@ -142,3 +169,15 @@ def _sse_meta(rid: str) -> bytes:
 
 def _sse_status(rid: str) -> bytes:
     return f'event: status\ndata: {json.dumps({"msg": "analyzing", "rid": rid})}\n\n'.encode()
+
+
+def _sse_composing() -> bytes:
+    return f'event: status\ndata: {json.dumps({"msg": "composing"})}\n\n'.encode()
+
+
+def _sse_token(content: str) -> bytes:
+    return f'event: token\ndata: {json.dumps({"content": content}, ensure_ascii=False)}\n\n'.encode()
+
+
+def _sse_done() -> bytes:
+    return b'event: done\ndata: {}\n\n'

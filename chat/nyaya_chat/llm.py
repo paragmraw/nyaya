@@ -43,10 +43,6 @@ SUPERVISOR_PROMPT = (
     "across acts use cross_reference. For corpus overview use list_acts.\n"
     "7. If you are asked a follow-up after a previous retrieval round, formulate "
     "a DIFFERENT query — do not repeat the same tool call with the same arguments.\n"
-    "8. You MUST call at least one tool for every question. Never answer directly. "
-    "If the question is about something not in the Indian legal corpus (e.g. foreign "
-    "law, fictional statutes), call semantic_query anyway to confirm no results, "
-    "then let synthesis handle the refusal.\n"
 )
 
 # System prompt for the synthesis agent: compose the final grounded answer.

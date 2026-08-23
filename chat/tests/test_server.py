@@ -14,15 +14,27 @@ from fastapi.testclient import TestClient
 
 def _make_test_app(monkeypatch, graph=None, tools=None):
     """Build the chat sub-app with the lifespan replaced so startup sets a
-    scripted graph/tools without touching NVIDIA or MCP."""
+    scripted graph/tools without touching NVIDIA or MCP. The guardrail is
+    bypassed so scripted graph output is used directly."""
     from nyaya_chat import agent as agent_mod
+    from nyaya_chat import guardrail as guard_mod
     from nyaya_chat import server as srv
 
     async def _fake_get_agent():
         return graph, tools or []
 
+    async def _fake_classify(message, model, settings):
+        from nyaya_chat.guardrail import Intent
+        return Intent.LEGAL
+
+    def _fake_get_model(_=None):
+        return None
+
     monkeypatch.setattr(agent_mod, "get_agent", _fake_get_agent)
     monkeypatch.setattr(srv, "get_agent", _fake_get_agent, raising=False)
+    monkeypatch.setattr(guard_mod, "classify_intent", _fake_classify)
+    monkeypatch.setattr(srv, "classify_intent", _fake_classify, raising=False)
+    monkeypatch.setattr(srv, "get_model", _fake_get_model, raising=False)
 
     return srv.create_app()
 
