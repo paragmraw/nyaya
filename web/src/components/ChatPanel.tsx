@@ -10,7 +10,7 @@ import { useChat } from "@/lib";
 // backend (chat/nyaya_chat) over SSE, renders citation chips for grounded
 // answers, and shows tool-call progress. Can be disabled via feature flag.
 const GREETING =
-  "Namaste. I'm Nyaya. I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
+  "Hello. I'm Nyaya. I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
 
 // Fallback model display info (used before /chat/health responds)
 const FALLBACK_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";

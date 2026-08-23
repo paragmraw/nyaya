@@ -349,6 +349,56 @@ SCENARIOS: list[Scenario] = [
         category="definition",
         description="Statutory definition lookup -- should use semantic_query with promote_definitions",
     ),
+
+    # -- Guardrail: greetings, capabilities, off-topic --
+    Scenario(
+        id="greeting-hello",
+        question="hello",
+        category="guardrail",
+        description="Simple greeting -- should get instant canned response, no tools",
+    ),
+    Scenario(
+        id="greeting-good-morning",
+        question="good morning!",
+        category="guardrail",
+        description="Time-based greeting -- instant canned response",
+    ),
+    Scenario(
+        id="capability-what-can-you-do",
+        question="what can you do?",
+        category="guardrail",
+        description="Capability question -- instant canned response listing features",
+    ),
+    Scenario(
+        id="capability-who-are-you",
+        question="who are you?",
+        category="guardrail",
+        description="Identity question -- instant canned response",
+    ),
+    Scenario(
+        id="thanks-thank-you",
+        question="thank you",
+        category="guardrail",
+        description="Thanks -- instant canned acknowledgment",
+    ),
+    Scenario(
+        id="off-topic-weather",
+        question="what's the weather in Mumbai?",
+        category="guardrail",
+        description="Off-topic weather question -- instant canned refusal",
+    ),
+    Scenario(
+        id="off-topic-joke",
+        question="tell me a joke",
+        category="guardrail",
+        description="Off-topic joke request -- instant canned refusal",
+    ),
+    Scenario(
+        id="off-topic-recipe",
+        question="how to make biryani recipe",
+        category="guardrail",
+        description="Off-topic recipe -- instant canned refusal",
+    ),
 ]
 
 
@@ -454,6 +504,30 @@ def run_checks(result: ScenarioResult, scenario: Scenario) -> None:
         # Should not crash, should have some response or error
         has_response = len(result.answer_text.strip()) > 0 or result.error is not None
         result.checks.append(("has_response_or_error", has_response, ""))
+
+    elif scenario.category == "guardrail":
+        # Should NOT call any tools (guardrail bypasses the pipeline)
+        no_tools = len(result.tool_calls) == 0
+        result.checks.append(("no_tool_calls", no_tools, f"tools={[t.name for t in result.tool_calls]}"))
+        # Should respond fast (under 3s for Tier 1, under 15s for Tier 2)
+        is_fast = result.latency_ms < 15000
+        result.checks.append(("fast_response", is_fast, f"latency={result.latency_ms:.0f}ms"))
+        # Should NOT have citations (canned responses don't cite)
+        no_citations = len(result.citations) == 0
+        result.checks.append(("no_citations", no_citations, f"citations={result.citations}"))
+        # Response should contain expected keyword based on scenario
+        answer_lower = result.answer_text.lower()
+        if "greeting" in scenario.id:
+            has_keyword = "hello" in answer_lower or "i'm nyaya" in answer_lower
+        elif "capability" in scenario.id:
+            has_keyword = "i can" in answer_lower or "nyaya" in answer_lower
+        elif "thanks" in scenario.id:
+            has_keyword = "welcome" in answer_lower
+        elif "off-topic" in scenario.id:
+            has_keyword = "indian law" in answer_lower or "can't help" in answer_lower or "cannot help" in answer_lower
+        else:
+            has_keyword = True
+        result.checks.append(("response_has_keyword", has_keyword, f"answer_start={answer_lower[:60]}"))
 
     # 6. Tool result summary should not contain raw Python repr
     for tc in result.tool_calls:

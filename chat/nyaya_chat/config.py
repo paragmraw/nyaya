@@ -69,6 +69,20 @@ CITATION_VERIFICATION = True
 # SSE keepalive: emit a ping event every N seconds to prevent proxy timeouts.
 SSE_KEEPALIVE_INTERVAL_S = 15.0
 
+# Guardrail: intent classification before the agent pipeline.
+# Tier 1 is regex-based (instant); Tier 2 is an LLM call (only if Tier 1
+# is uncertain). Set to False to bypass the guardrail entirely (all messages
+# go through the normal supervisor -> tools -> synthesis pipeline).
+GUARDRAIL_ENABLED = True
+
+# Tier 2 classifier: max tokens for the classification LLM call.
+# 32 tokens is enough for a single word ("legal", "greeting", etc).
+GUARDRAIL_CLASSIFIER_MAX_TOKENS = 32
+
+# Tier 2 classifier: timeout in seconds. If the LLM doesn't respond in
+# time, fail-open (treat as legal and run the normal pipeline).
+GUARDRAIL_CLASSIFIER_TIMEOUT_S = 10.0
+
 # Message constraints.
 MAX_MESSAGE_CHARS = 4000          # max length of a single user message
 MAX_HISTORY = 8                   # max prior (role, content) turns the client may send
@@ -119,6 +133,9 @@ class Settings:
     max_reflection_rounds: int = MAX_REFLECTION_ROUNDS
     citation_verification: bool = CITATION_VERIFICATION
     sse_keepalive_interval_s: float = SSE_KEEPALIVE_INTERVAL_S
+    guardrail_enabled: bool = GUARDRAIL_ENABLED
+    guardrail_classifier_max_tokens: int = GUARDRAIL_CLASSIFIER_MAX_TOKENS
+    guardrail_classifier_timeout_s: float = GUARDRAIL_CLASSIFIER_TIMEOUT_S
 
     @property
     def tool_allowlist(self) -> tuple[str, ...]:
@@ -149,6 +166,7 @@ class Settings:
             "max_reflection_rounds": self.max_reflection_rounds,
             "citation_verification": self.citation_verification,
             "sse_keepalive_interval_s": self.sse_keepalive_interval_s,
+            "guardrail_enabled": self.guardrail_enabled,
             "log_level": self.log_level,
         }
 
