@@ -44,7 +44,7 @@ class Intent(enum.Enum):
 
 _RESPONSES: dict[Intent, str] = {
     Intent.GREETING: (
-        "Namaste! I'm Nyaya, an assistant for Indian law. I can answer questions "
+        "Hello! I'm Nyaya, an assistant for Indian law. I can answer questions "
         "about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, "
         "commercial statutes, and landmark Supreme Court judgments. "
         "Ask me about any provision, section, or case -- I'll cite the exact source."
@@ -84,7 +84,7 @@ def get_canned_response(intent: Intent) -> str:
 # Greetings: short messages that are purely social. Anchored to avoid
 # matching "hi, I have a question about IPC 302" (which should go to Tier 2).
 _GREETING_RE = re.compile(
-    r"^\s*(hi|hello+|hey+|namaste|namaskar|namaskaram|salaam|pranaam|pranam"
+    r"^\s*(hi|hello+|hey+"
     r"|good\s+(morning|afternoon|evening|night)"
     r"|greetings|howdy|yo|sup|wassup"
     r"|hi\s+there|hello\s+there"
@@ -109,7 +109,6 @@ _THANKS_RE = re.compile(
     r"^\s*(thanks|thank\s+you|thx|ty"
     r"|great|awesome|perfect|helpful|excellent|wonderful|amazing|brilliant"
     r"|much\s+obliged|appreciate\s+it|very\s+helpful"
-    r"|dhanyavaad|dhanyawad|shukriya|shukariya"
     r"|well\s+done|good\s+job|nice\s+work"
     r")\s*[!.?]*\s*$",
     re.IGNORECASE,

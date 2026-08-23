@@ -29,12 +29,6 @@ class TestTier1Greetings:
     def test_hey(self):
         assert classify_intent_tier1("hey") == Intent.GREETING
 
-    def test_namaste(self):
-        assert classify_intent_tier1("namaste") == Intent.GREETING
-
-    def test_namaskar(self):
-        assert classify_intent_tier1("namaskar") == Intent.GREETING
-
     def test_good_morning(self):
         assert classify_intent_tier1("Good morning!") == Intent.GREETING
 
@@ -91,12 +85,6 @@ class TestTier1Thanks:
 
     def test_awesome(self):
         assert classify_intent_tier1("awesome") == Intent.THANKS
-
-    def test_dhanyavaad(self):
-        assert classify_intent_tier1("dhanyavaad") == Intent.THANKS
-
-    def test_shukriya(self):
-        assert classify_intent_tier1("shukriya") == Intent.THANKS
 
     def test_appreciate_it(self):
         assert classify_intent_tier1("appreciate it!") == Intent.THANKS
@@ -168,9 +156,9 @@ class TestTier1EdgeCases:
 # ---------------------------------------------------------------------------
 
 class TestCannedResponses:
-    def test_greeting_response_has_namaste(self):
+    def test_greeting_response_has_hello(self):
         resp = get_canned_response(Intent.GREETING)
-        assert "Namaste" in resp
+        assert "Hello" in resp
         assert "Indian law" in resp
 
     def test_capability_response_lists_features(self):

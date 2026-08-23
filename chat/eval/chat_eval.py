@@ -358,12 +358,6 @@ SCENARIOS: list[Scenario] = [
         description="Simple greeting -- should get instant canned response, no tools",
     ),
     Scenario(
-        id="greeting-namaste",
-        question="namaste",
-        category="guardrail",
-        description="Indian greeting -- instant canned response",
-    ),
-    Scenario(
         id="greeting-good-morning",
         question="good morning!",
         category="guardrail",
@@ -524,7 +518,7 @@ def run_checks(result: ScenarioResult, scenario: Scenario) -> None:
         # Response should contain expected keyword based on scenario
         answer_lower = result.answer_text.lower()
         if "greeting" in scenario.id:
-            has_keyword = "namaste" in answer_lower or "i'm nyaya" in answer_lower
+            has_keyword = "hello" in answer_lower or "i'm nyaya" in answer_lower
         elif "capability" in scenario.id:
             has_keyword = "i can" in answer_lower or "nyaya" in answer_lower
         elif "thanks" in scenario.id:
