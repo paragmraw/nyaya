@@ -19,7 +19,7 @@ dependencies = [
     "langchain-nvidia-ai-endpoints>=1.4,<2",
     "langchain>=1.0,<2",
     "pydantic>=2.7,<3",
-    "structlog>=24.1,<26",
+    "structlog>=24.1,<27",
 ]
 
 [project.optional-dependencies]
