@@ -24,7 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 langfuse = [
-    "langfuse>=2.0,<4",
+    "langfuse>=2.0,<5",
 ]
 dev = [
     "pytest>=9.0.3,<10",
