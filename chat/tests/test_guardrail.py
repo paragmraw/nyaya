@@ -190,42 +190,63 @@ class TestCannedResponses:
 class TestTier2Classifier:
     @pytest.mark.asyncio
     async def test_tier2_returns_legal(self, monkeypatch):
-        """When the LLM says 'legal', classify as LEGAL."""
+        """When the LLM returns Intent.LEGAL via structured output."""
         settings = MagicMock()
         settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=Intent.LEGAL)
         mock_model = MagicMock()
-        mock_result = MagicMock()
-        mock_result.content = "legal"
-        mock_model.ainvoke = AsyncMock(return_value=mock_result)
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent_tier2("What is IPC 302?", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent_tier2("What is IPC 302?", None, settings)
         assert result == Intent.LEGAL
 
     @pytest.mark.asyncio
     async def test_tier2_returns_greeting(self, monkeypatch):
         settings = MagicMock()
         settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=Intent.GREETING)
         mock_model = MagicMock()
-        mock_result = MagicMock()
-        mock_result.content = "greeting"
-        mock_model.ainvoke = AsyncMock(return_value=mock_result)
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent_tier2("hey there what's up", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent_tier2("hey there what's up", None, settings)
         assert result == Intent.GREETING
 
     @pytest.mark.asyncio
     async def test_tier2_returns_off_topic(self, monkeypatch):
         settings = MagicMock()
         settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=Intent.OFF_TOPIC)
         mock_model = MagicMock()
-        mock_result = MagicMock()
-        mock_result.content = "off_topic"
-        mock_model.ainvoke = AsyncMock(return_value=mock_result)
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent_tier2("write a poem about cats", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent_tier2("write a poem about cats", None, settings)
         assert result == Intent.OFF_TOPIC
 
     @pytest.mark.asyncio
@@ -233,16 +254,25 @@ class TestTier2Classifier:
         """On timeout, fail open to LEGAL."""
         settings = MagicMock()
         settings.guardrail_classifier_timeout_s = 0.01  # 10ms timeout
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
-        mock_model = MagicMock()
+        mock_structured = MagicMock()
 
         async def slow_invoke(msgs):
             await asyncio.sleep(1)
-            return MagicMock()
+            return Intent.LEGAL
 
-        mock_model.ainvoke = slow_invoke
+        mock_structured.ainvoke = slow_invoke
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent_tier2("test", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent_tier2("test", None, settings)
         assert result == Intent.LEGAL
 
     @pytest.mark.asyncio
@@ -250,25 +280,41 @@ class TestTier2Classifier:
         """On any error, fail open to LEGAL."""
         settings = MagicMock()
         settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(side_effect=RuntimeError("API down"))
         mock_model = MagicMock()
-        mock_model.ainvoke = AsyncMock(side_effect=RuntimeError("API down"))
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent_tier2("test", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent_tier2("test", None, settings)
         assert result == Intent.LEGAL
 
     @pytest.mark.asyncio
-    async def test_tier2_unparseable_response_fails_open(self, monkeypatch):
-        """If the LLM returns something unparseable, fail open to LEGAL."""
+    async def test_tier2_none_response_fails_open(self, monkeypatch):
+        """If the model returns None (incomplete response), fail open to LEGAL."""
         settings = MagicMock()
         settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=None)
         mock_model = MagicMock()
-        mock_result = MagicMock()
-        mock_result.content = "I think this is a legal question about IPC 302."
-        mock_model.ainvoke = AsyncMock(return_value=mock_result)
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent_tier2("test", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent_tier2("test", None, settings)
         assert result == Intent.LEGAL
 
 
@@ -303,19 +349,26 @@ class TestClassifyIntent:
         mock_model.ainvoke.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_tier1_unknown_falls_to_tier2(self):
+    async def test_tier1_unknown_falls_to_tier2(self, monkeypatch):
         settings = MagicMock()
         settings.guardrail_enabled = True
         settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
 
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=Intent.LEGAL)
         mock_model = MagicMock()
-        mock_result = MagicMock()
-        mock_result.content = "legal"
-        mock_model.ainvoke = AsyncMock(return_value=mock_result)
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await classify_intent("What is IPC 302?", mock_model, settings)
+        monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
+
+        result = await classify_intent("hey there what's up", None, settings)
         assert result == Intent.LEGAL
-        mock_model.ainvoke.assert_called_once()
+        mock_structured.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_guardrail_disabled_returns_legal(self):

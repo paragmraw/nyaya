@@ -30,6 +30,7 @@ client-supplied history plus the new user message.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Annotated, Any, TypedDict
@@ -41,6 +42,7 @@ from langgraph.prebuilt import ToolNode
 
 from .config import Settings, get_settings
 from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, astream_with_retry, get_model
+from .schemas_llm import ToolPlan
 from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
@@ -74,10 +76,11 @@ def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMes
 # Model factory — centralised so tests can inject fakes via get_model.
 # ---------------------------------------------------------------------------
 
-def _make_model(settings: Settings, *, model_name: str, max_tokens: int) -> Any:
+def _make_model(settings: Settings, *, model_name: str, max_tokens: int, temperature: float | None = None) -> Any:
     """Create a ChatNVIDIA instance for a specific phase."""
     base = get_model(settings)
     cached_name = getattr(base, "model", None) or getattr(getattr(base, "_client", None), "model", None)
+    temp = temperature if temperature is not None else settings.llm_temperature
 
     if cached_name == model_name and max_tokens == settings.llm_max_tokens:
         return base
@@ -87,7 +90,7 @@ def _make_model(settings: Settings, *, model_name: str, max_tokens: int) -> Any:
     from langchain_nvidia_ai_endpoints import ChatNVIDIA
     return ChatNVIDIA(
         model=model_name,
-        temperature=settings.llm_temperature,
+        temperature=temp,
         max_completion_tokens=max_tokens,
         timeout=settings.llm_timeout_s,
         api_key=settings.nvidia_api_key.get_secret_value(),
@@ -274,6 +277,214 @@ def _had_tool_calls(messages: list[BaseMessage]) -> bool:
     return False
 
 
+def _parse_text_tool_calls(content: Any) -> list[dict[str, Any]]:
+    """Parse tool calls from free-text when the model emits them as JSON
+    instead of using the tool-calling protocol.
+
+    The model sometimes emits tool calls in these text formats:
+    - ``[[tool_calls]] [ {"name": "get_section", "arguments": {...}} ] [[/tool_calls]]``
+    - ``{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}``
+    - ``get_section(act="IPC", section="302")``
+    - ``<tool_name>{...json args...}</tool_name>``
+    - ``[[<tool> tool call|tool_name: "...", tool_args: {...}]]``
+    - ``[[tool_name key="value" key2="value2"]]``
+
+    Returns a list of {"id", "name", "args"} dicts, or empty list if no
+    tool calls could be parsed.
+    """
+    if not isinstance(content, str):
+        return []
+
+    tool_calls: list[dict[str, Any]] = []
+
+    # Pattern 1: [[tool_calls]] ... JSON array ... [[/tool_calls]]
+    tc_match = re.search(r"\[\[tool_?calls\]\](.*?)\[\[/tool_?calls\]\]", content, re.DOTALL | re.IGNORECASE)
+    if tc_match:
+        try:
+            calls = json.loads(tc_match.group(1).strip())
+            for i, call in enumerate(calls):
+                name = call.get("name", "")
+                args = call.get("arguments") or call.get("args") or {}
+                if name:
+                    tool_calls.append({"id": f"tc_text_{i}", "name": name, "args": args})
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    if tool_calls:
+        return tool_calls
+
+    # Pattern 2: Bare JSON object with "name" and "arguments"
+    try:
+        parsed = json.loads(content.strip())
+        if isinstance(parsed, dict) and "name" in parsed:
+            name = parsed.get("name", "")
+            args = parsed.get("arguments") or parsed.get("args") or {}
+            if name:
+                return [{"id": "tc_text_0", "name": name, "args": args}]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Pattern 3: JSON array of tool calls (without [[tool_calls]] wrapper)
+    try:
+        parsed = json.loads(content.strip())
+        if isinstance(parsed, list):
+            for i, call in enumerate(parsed):
+                if isinstance(call, dict) and "name" in call:
+                    name = call.get("name", "")
+                    args = call.get("arguments") or call.get("args") or {}
+                    if name:
+                        tool_calls.append({"id": f"tc_text_{i}", "name": name, "args": args})
+            if tool_calls:
+                return tool_calls
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Pattern 4: Nemotron-style tool_calls block (YAML-like)
+    # reasoning: ...
+    # tool_calls:
+    # - name: get_section arguments:
+    #     act: IPC section: 302
+    ytc_match = re.search(r"tool_calls:\s*\n(.*?)(?:\n\w+:|\Z)", content, re.DOTALL | re.IGNORECASE)
+    if ytc_match:
+        tool_block = ytc_match.group(1).strip()
+        for line in tool_block.split('\n'):
+            line = line.strip()
+            if line.startswith('- name:'):
+                name = line.split(':', 1)[1].strip()
+            elif line.startswith('  name:'):
+                name = line.split(':', 1)[1].strip()
+            elif line.startswith('    name:'):
+                name = line.split(':', 1)[1].strip()
+            elif 'name:' in line and 'arguments:' not in line:
+                match = re.search(r'name:\s*(\S+).*?arguments?:\s*(\{.*?\})', line)
+                if match:
+                    name = match.group(1).strip()
+                    args_str = match.group(2).strip()
+                    try:
+                        args = json.loads(args_str)
+                    except json.JSONDecodeError:
+                        args_str = args_str.replace("'", '"')
+                        try:
+                            args = json.loads(args_str)
+                        except json.JSONDecodeError:
+                            continue
+                    if name:
+                        tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
+        if tool_calls:
+            return tool_calls
+
+    # Pattern 5: XML-tag wrapped JSON: <tool_name>{...json args...}</tool_name>
+    for m in re.finditer(r"<(\w+)>(.*?)</\1>", content, re.DOTALL):
+        name = m.group(1)
+        try:
+            args = json.loads(m.group(2).strip())
+        except json.JSONDecodeError:
+            continue
+        if name and isinstance(args, dict):
+            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
+
+    if tool_calls:
+        return tool_calls
+
+    # Pattern 6: Bracket-pipe: [[<tool> tool call|tool_name: "...", tool_args: {...}]]
+    # Uses balanced brace scan since tool_args JSON may contain nested braces.
+    bp_match = re.search(
+        r"\[\[\w+\s+tool\s*call\|tool_name:\s*\"(\w+)\"\s*,\s*tool_args:\s*",
+        content, re.IGNORECASE,
+    )
+    if bp_match:
+        name = bp_match.group(1)
+        json_start = bp_match.end()
+        depth = 0
+        json_end = json_start
+        for i in range(json_start, len(content)):
+            if content[i] == '{':
+                depth += 1
+            elif content[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    json_end = i + 1
+                    break
+        if depth == 0 and json_end > json_start:
+            json_str = content[json_start:json_end]
+            try:
+                args = json.loads(json_str)
+                tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
+            except json.JSONDecodeError:
+                pass
+
+    if tool_calls:
+        return tool_calls
+
+    # Pattern 7: Attribute-style: [[tool_name key="value" key2="value2"]]
+    # Must NOT match Pattern 5 (XML-tag) or Pattern 6 (bracket-pipe)
+    # Only matches if the content inside [[ ]] contains key="value" pairs
+    # and is NOT a JSON object/array.
+    attr_match = re.search(
+        r'\[\[(\w+)\s+(\w+="[^"]*"(?:\s+\w+="[^"]*")*)\s*\]\]',
+        content,
+    )
+    if attr_match:
+        name = attr_match.group(1)
+        attrs_str = attr_match.group(2).strip()
+        attrs = dict(re.findall(r'(\w+)="([^"]*)"', attrs_str))
+        if attrs:
+            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": attrs})
+
+    # Pattern 8: Function-call style: [[tool_name(key="val", key2="val2")]]
+    # e.g. [[get_section(act="IPC", section="24")]]
+    func_match = re.search(
+        r'\[\[(\w+)\((.*?)\)\]\]',
+        content,
+    )
+    if func_match:
+        name = func_match.group(1)
+        args_str = func_match.group(2).strip()
+        args = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', args_str))
+        if args:
+            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
+
+    # Pattern 9: Bare function-call style: tool_name(key="val", key2="val2")
+    # e.g. get_judgment(case_slug="Kesavananda Bharati")
+    if not tool_calls:
+        bare_match = re.search(
+            r'(?<![\w\[])(\w+)\((\w+=["\'][^"\']*["\'](?:\s*,\s*\w+=["\'][^"\']*["\'])*)\)',
+            content,
+        )
+        if bare_match:
+            name = bare_match.group(1)
+            args_str = bare_match.group(2).strip()
+            args = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', args_str))
+            if args and name in ("get_section", "get_article", "get_judgment", "semantic_query", "cross_reference", "list_acts"):
+                tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
+
+    # Pattern 10: [[tool: tool_name]] or [[tool_name]]
+    # e.g. [[tool: get_judgment]] with case_slug "Kesavananda Bharati"
+    if not tool_calls:
+        tool_prefix_match = re.search(r'\[\[tool:\s*(\w+)\]\]', content, re.IGNORECASE)
+        if tool_prefix_match:
+            name = tool_prefix_match.group(1)
+            if name in ("get_section", "get_article", "get_judgment", "semantic_query", "cross_reference", "list_acts"):
+                # Try to extract args from the surrounding text
+                # Look for key="val" patterns after the [[tool: ...]] marker
+                after_marker = content[tool_prefix_match.end():]
+                args = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', after_marker[:200]))
+                if args:
+                    tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
+                else:
+                    # No args found, try bare tool call
+                    tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": {}})
+
+    # Pattern 11: Bare tool name with no args (just "get_judgment" or "get_article")
+    # Only match if the content is ONLY a tool name (no other text)
+    if not tool_calls:
+        stripped_content = content.strip()
+        if stripped_content in ("get_section", "get_article", "get_judgment", "semantic_query", "cross_reference", "list_acts"):
+            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": stripped_content, "args": {}})
+
+    return tool_calls
+
+
 def _get_tool_content_list(messages: list[BaseMessage]) -> list[str]:
     """Extract content strings from all ToolMessages in the conversation."""
     result: list[str] = []
@@ -305,13 +516,41 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
 
     log.info("loaded %d tools", len(mcp_tools))
 
-    supervisor_model = _make_model(
+    # Build the supervisor model. Try with_structured_output(ToolPlan) first;
+    # if the API doesn't support it at invoke time, fall back to bind_tools.
+    # The fallback is handled in call_supervisor (catch the exception and
+    # switch to the bind_tools model on the first failure).
+    supervisor_base = _make_model(
         settings,
         model_name=settings.supervisor_model,
         max_tokens=settings.supervisor_max_tokens,
+        temperature=settings.supervisor_temperature,
     )
-    if hasattr(supervisor_model, "bind_tools"):
-        supervisor_model = supervisor_model.bind_tools(mcp_tools)
+
+    # Disable thinking mode so the model focuses on tool calling instead of reasoning
+    if hasattr(supervisor_base, "with_thinking_mode"):
+        try:
+            supervisor_base = supervisor_base.with_thinking_mode(enabled=False)
+            log.info("supervisor: thinking mode disabled")
+        except Exception:
+            log.warning("could not disable thinking mode for supervisor")
+
+    # Pre-build both models so the fallback is instant.
+    supervisor_structured = None
+    supervisor_bind_tools = None
+    if hasattr(supervisor_base, "with_structured_output"):
+        try:
+            supervisor_structured = supervisor_base.with_structured_output(ToolPlan)
+            log.info("supervisor: with_structured_output(ToolPlan) available")
+        except Exception:
+            pass
+    if hasattr(supervisor_base, "bind_tools"):
+        supervisor_bind_tools = supervisor_base.bind_tools(mcp_tools)
+        log.info("supervisor: bind_tools available as fallback")
+
+    # State: which model to use (switches to bind_tools if structured fails)
+    supervisor_model = supervisor_structured or supervisor_bind_tools or supervisor_base
+    supervisor_fallback = supervisor_bind_tools
 
     synthesis_model = _make_model(
         settings,
@@ -325,10 +564,54 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
         invoke_kwargs: dict[str, Any] = {"max_retries": settings.llm_max_retries}
         if callbacks:
             invoke_kwargs["config"] = {"callbacks": callbacks}
-        response = await ainvoke_with_retry(
-            supervisor_model, state["messages"], **invoke_kwargs,
-        )
-        return {"messages": [response]}
+
+        nonlocal supervisor_model, supervisor_fallback
+        try:
+            response = await ainvoke_with_retry(
+                supervisor_model, state["messages"], **invoke_kwargs,
+            )
+        except Exception as exc:
+            if supervisor_fallback is not None and supervisor_model is not supervisor_fallback:
+                log.warning("supervisor structured output failed (%s), falling back to bind_tools", str(exc)[:120])
+                supervisor_model = supervisor_fallback
+                supervisor_fallback = None  # only fall back once
+                response = await ainvoke_with_retry(
+                    supervisor_model, state["messages"], **invoke_kwargs,
+                )
+            else:
+                raise
+
+        # Convert structured ToolPlan to LangChain messages.
+        # If with_structured_output was used, response is a ToolPlan object.
+        # If bind_tools fallback was used, response is an AIMessage with tool_calls.
+        if isinstance(response, ToolPlan):
+            # Structured output path: convert ToolPlan to messages
+            msgs_out: list[BaseMessage] = []
+            # The reasoning becomes an AIMessage (shows as "plan" in the frontend)
+            if response.reasoning and response.reasoning.strip():
+                msgs_out.append(AIMessage(content=response.reasoning))
+            # The tool calls become an AIMessage with tool_calls attribute
+            if response.tool_calls:
+                tool_calls_list = [
+                    {
+                        "id": f"tc_{i}",
+                        "name": tc.name,
+                        "args": tc.args,
+                    }
+                    for i, tc in enumerate(response.tool_calls)
+                ]
+                msgs_out.append(AIMessage(content="", tool_calls=tool_calls_list))
+            return {"messages": msgs_out}
+        else:
+            # Fallback path (bind_tools): response is an AIMessage.
+            # The model may have emitted tool calls as text (JSON in content)
+            # instead of using the tool-calling protocol. Parse them.
+            if isinstance(response, AIMessage) and not getattr(response, "tool_calls", None):
+                parsed = _parse_text_tool_calls(response.content)
+                if parsed:
+                    log.info("supervisor: parsed %d tool calls from text response", len(parsed))
+                    return {"messages": [AIMessage(content="", tool_calls=parsed)]}
+            return {"messages": [response]}
 
     def route_supervisor(state: ChatState) -> str:
         last = state["messages"][-1]

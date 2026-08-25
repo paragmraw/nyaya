@@ -19,23 +19,18 @@ directly -- no supervisor call, no tool calls, no synthesis call.
 from __future__ import annotations
 
 import asyncio
-import enum
 import logging
 import re
 from typing import Any
 
 from .config import Settings
+from .schemas_llm import Intent
 
 log = logging.getLogger("nyaya_chat.guardrail")
 
 
-class Intent(enum.Enum):
-    """Classification of user message intent."""
-    LEGAL = "legal"
-    GREETING = "greeting"
-    CAPABILITY = "capability"
-    THANKS = "thanks"
-    OFF_TOPIC = "off_topic"
+# Re-export Intent for backward compatibility (other modules import from guardrail)
+__all__ = ["Intent", "classify_intent", "classify_intent_tier1", "classify_intent_tier2", "get_canned_response"]
 
 
 # ---------------------------------------------------------------------------
@@ -216,15 +211,13 @@ _CLASSIFIER_PROMPT = (
     "- legal: A question about Indian law (Constitution, IPC, CrPC, CPC, "
     "Evidence Act, BNS/BNSS/BSA, commercial statutes, Supreme Court judgments, "
     "or any legal concept/procedure/question)\n"
-    "- greeting: A greeting or social pleasantry (hello, hi, good morning, "
-    "how are you)\n"
+    "- greeting: A greeting or social pleasantry (hello, hi, good morning)\n"
     "- capability: Asking what you can do, who you are, or what topics you cover\n"
     "- off_topic: Anything not related to Indian law (weather, jokes, cooking, "
     "coding, foreign law, medical advice, etc.)\n\n"
     "Rules:\n"
     "1. If the message contains ANY legal question or concept, classify as 'legal'.\n"
     "2. When in doubt, classify as 'legal'.\n"
-    "3. Respond with ONLY the category name (one word), nothing else.\n"
 )
 
 
@@ -233,35 +226,71 @@ async def classify_intent_tier2(
     model: Any,
     settings: Settings,
 ) -> Intent:
-    """LLM-based intent classification. Falls back to LEGAL on error/timeout.
+    """LLM-based intent classification using structured output.
 
-    Uses the already-loaded Nemotron model with a short classification prompt
-    and max_tokens=32 (enough for a single word). The call is wrapped in a
-    timeout; if it fails, we fail open (treat as legal and run the pipeline).
+    Uses ``with_structured_output(Intent)`` to get a structured ``Intent``
+    enum value directly from the model. If the API doesn't support structured
+    output (some hosted endpoints don't expose guided_json/response_format),
+    falls back to free-text parsing (first-word match). Falls to LEGAL on
+    timeout/error (fail-open).
     """
     from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
     try:
+        # Create a dedicated classifier model with low token cap for efficiency
+        classifier_model = ChatNVIDIA(
+            model=settings.llm_model,
+            temperature=0.0,  # deterministic for classification
+            max_completion_tokens=settings.guardrail_classifier_max_tokens,
+            timeout=settings.guardrail_classifier_timeout_s,
+            api_key=settings.nvidia_api_key.get_secret_value(),
+        )
+
         msgs = [
             SystemMessage(content=_CLASSIFIER_PROMPT),
             HumanMessage(content=message),
         ]
+
+        # Try structured output first
+        try:
+            structured_model = classifier_model.with_structured_output(Intent)
+            result = await asyncio.wait_for(
+                structured_model.ainvoke(msgs),
+                timeout=settings.guardrail_classifier_timeout_s,
+            )
+
+            if result is None:
+                log.warning("guardrail tier2: model returned None (incomplete response), failing open to LEGAL")
+                return Intent.LEGAL
+
+            if isinstance(result, Intent):
+                log.info("guardrail tier2: classified as %s (structured)", result.value)
+                return result
+
+            # Fallback: try to parse as string
+            if isinstance(result, str):
+                label = result.strip().lower()
+                for intent in Intent:
+                    if intent.value == label:
+                        log.info("guardrail tier2: classified as %s (string fallback)", intent.value)
+                        return intent
+        except Exception as exc:
+            log.info("guardrail tier2: structured output failed (%s), falling back to free-text", str(exc)[:80])
+
+        # Free-text fallback: invoke the model directly and parse the response
         result = await asyncio.wait_for(
-            model.ainvoke(msgs),
+            classifier_model.ainvoke(msgs),
             timeout=settings.guardrail_classifier_timeout_s,
         )
         raw = result.content if isinstance(result.content, str) else str(result.content)
         label = raw.strip().lower()
-
-        # Parse the label -- the model might add extra text, so extract the
-        # first word and match it.
         first_word = label.split()[0] if label.split() else ""
         for intent in Intent:
             if intent.value == first_word:
-                log.info("guardrail tier2: classified as %s (raw=%r)", intent.value, raw[:50])
+                log.info("guardrail tier2: classified as %s (free-text, raw=%r)", intent.value, raw[:50])
                 return intent
 
-        # If we can't parse the label, fail open.
         log.warning("guardrail tier2: unparseable response %r, failing open to LEGAL", raw[:80])
         return Intent.LEGAL
 
@@ -288,8 +317,13 @@ async def classify_intent(
     Tier 1: instant regex/keyword matching. If it returns a non-None
     intent, that's the answer (no LLM call needed).
 
-    Tier 2: if Tier 1 returns None (unknown), make a lightweight LLM
-    classification call. Falls open to LEGAL on error/timeout.
+    Tier 2: if Tier 1 returns None (unknown), make a structured LLM
+    classification call using ``with_structured_output(Intent)``. Falls
+    open to LEGAL on error/timeout.
+
+    The ``model`` parameter is kept for API compatibility but is no longer
+    used directly -- Tier 2 creates its own dedicated classifier model
+    instance with appropriate token/temperature settings.
 
     When ``settings.guardrail_enabled`` is False, always returns LEGAL
     (the guardrail is bypassed entirely).
@@ -303,5 +337,12 @@ async def classify_intent(
         log.info("guardrail tier1: classified as %s", tier1.value)
         return tier1
 
-    # Tier 2: LLM-based (only for messages Tier 1 couldn't classify)
+    # If Tier 1 returned None but the message contains legal keywords,
+    # skip Tier 2 and return LEGAL directly. This prevents the LLM from
+    # misclassifying legal questions that contain phrases like "What changed?"
+    if _has_legal_keywords(message):
+        log.info("guardrail tier1.5: legal keywords detected, skipping Tier 2")
+        return Intent.LEGAL
+
+    # Tier 2: LLM-based with structured output (only for messages Tier 1 couldn't classify)
     return await classify_intent_tier2(message, model, settings)

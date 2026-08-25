@@ -352,7 +352,9 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
         {isBot && msg.plan && msg.plan.trim() && (
           <details className="plan-trace" aria-label="Agent plan">
             <summary>Agent plan</summary>
-            <div className="plan-body">{msg.plan.trim()}</div>
+            <div className="plan-body md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{normaliseMd(msg.plan.trim())}</ReactMarkdown>
+            </div>
           </details>
         )}
 
@@ -360,7 +362,9 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
         {isBot && msg.reasoning && msg.reasoning.trim() && (
           <details className="reasoning" aria-label="Reasoning trace">
             <summary>Reasoning trace</summary>
-            <div className="reasoning-body">{msg.reasoning.trim()}</div>
+            <div className="reasoning-body md">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{normaliseMd(msg.reasoning.trim())}</ReactMarkdown>
+            </div>
           </details>
         )}
 
