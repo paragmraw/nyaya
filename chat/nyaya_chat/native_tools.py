@@ -106,6 +106,11 @@ async def _semantic_query(query: str, kind: str | None = None, act: str | None =
             return '{"query":"","total":0,"results":[],"returned":0}'
         if len(query) > 4096:
             raise SearchError(f"Query too long ({len(query)} chars); maximum is 4096.")
+        # Coerce common sentinel values the model uses to None
+        if act and act.strip().lower() in ("none", "null", "n/a", ""):
+            act = None
+        if kind and kind.strip().lower() in ("none", "null", "n/a", ""):
+            kind = None
         results, total, fallback_reason = await asyncio.to_thread(
             db.rerank_search, query, kind=kind, act=act, limit=limit, offset=offset,
             promote_definitions=promote_definitions,
