@@ -58,7 +58,7 @@ def test_per_phase_token_caps_defaults(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
     s = config.get_settings()
     assert s.supervisor_max_tokens == 512
-    assert s.synthesis_max_tokens == 4096
+    assert s.synthesis_max_tokens == 2048
 
 
 def test_per_phase_model_defaults(monkeypatch):
@@ -112,3 +112,6 @@ def test_mcp_url_env_override(monkeypatch):
     monkeypatch.setenv("MCP_URL", "http://example.com:9000/mcp")
     s = config.get_settings()
     assert s.mcp_url == "http://example.com:9000/mcp"
+
+
+

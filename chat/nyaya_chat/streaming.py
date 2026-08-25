@@ -13,6 +13,8 @@ into typed SSE events the frontend parses:
   event: reasoning   data: {"content": "..."}       — reasoning_content deltas
   event: tool_start  data: {"name","args","id"}     — the model called a tool
   event: tool_result data: {"name","summary","id"}  — a tool finished
+  event: citations data: {"citations": [...]}       — verified citations (post-synthesis)
+  event: correction data: {"content": "..."}        — corrected answer (post-stream fixes)
   event: ping        data: {"ts": 1234567890}       — keepalive (every ~15s)
   event: error       data: {"message": "..."}       — a node threw
   event: done        data: {}                        — stream complete
@@ -107,6 +109,10 @@ async def stream_turn(
     try:
         pending_tool_calls: dict[str, dict[str, Any]] = {}
         emitted_phases: set[str] = set()
+        # Track answer text and tool results for the citations event
+        full_answer_parts: list[str] = []
+        tool_result_contents: list[str] = []
+        had_any_tool_calls = False
 
         # Set up keepalive ping task if interval is configured
         ping_queue: asyncio.Queue[bool] | None = None
@@ -169,10 +175,12 @@ async def stream_turn(
                                 yield _sse("plan", {"content": content})
                             else:
                                 yield _sse("token", {"content": content})
+                                full_answer_parts.append(content)
 
                     if isinstance(msg_chunk, AIMessage):
                         calls = getattr(msg_chunk, "tool_calls", None) or []
                         for tc in calls:
+                            had_any_tool_calls = True
                             tc_id = tc.get("id") or tc.get("name", "")
                             pending_tool_calls[tc_id] = {
                                 "id": tc_id,
@@ -184,6 +192,14 @@ async def stream_turn(
                         tc_id = getattr(msg_chunk, "tool_call_id", "")
                         name = getattr(msg_chunk, "name", "") or tc_id
                         summary = _summarise_tool_result(getattr(msg_chunk, "content", ""))
+                        # Track tool content for citation verification
+                        raw_content = getattr(msg_chunk, "content", "")
+                        if isinstance(raw_content, str):
+                            # Strip corpus_text wrapper if present
+                            import re as _re
+                            stripped_content = _re.sub(r"^<corpus_text>\n?", "", raw_content)
+                            stripped_content = _re.sub(r"\n?</corpus_text>$", "", stripped_content)
+                            tool_result_contents.append(stripped_content)
                         yield _sse("tool_result", {"id": tc_id, "name": name, "summary": summary})
 
                 elif ptype == "updates" and isinstance(data, dict):
@@ -216,6 +232,47 @@ async def stream_turn(
                     await ping_task
                 except asyncio.CancelledError:
                     pass
+
+        # After the stream completes, emit a structured citations event with
+        # the verified citation list parsed from the answer text. This gives
+        # the frontend authoritative citation data alongside the inline markers.
+        full_answer = "".join(full_answer_parts)
+        if full_answer and had_any_tool_calls:
+            try:
+                from .citations import parse_citations
+                cites = parse_citations(full_answer)
+                if cites:
+                    citations_data = [
+                        {"act": c.act, "ref": c.ref} for c in cites
+                    ]
+                    yield _sse("citations", {"citations": citations_data})
+            except Exception as exc:
+                log.warning("citations event emission failed: %s", exc)
+
+            # Post-stream correction: re-verify citations on the streamed
+            # text (the agent's verify_citations runs on the final AIMessage
+            # but the streamed tokens may differ) and check for missing
+            # disclaimer. Emit a correction event if anything changed.
+            corrected = full_answer
+            try:
+                from .citations import verify_citations
+                verified = verify_citations(
+                    corrected, tool_result_contents, had_tool_calls=True,
+                )
+                if verified != corrected:
+                    corrected = verified
+            except Exception as exc:
+                log.warning("post-stream citation re-verification failed: %s", exc)
+
+            # Check for missing disclaimer
+            if "not legal advice" not in corrected.lower():
+                corrected = corrected.rstrip() + (
+                    "\n\n*This is not legal advice; verify citations before filing.*"
+                )
+
+            # Emit correction if anything changed
+            if corrected != full_answer:
+                yield _sse("correction", {"content": corrected})
 
     except asyncio.CancelledError:
         log.info("stream cancelled by client")

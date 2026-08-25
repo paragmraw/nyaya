@@ -87,9 +87,13 @@ def _make_fake_tools(names):
 class FakeChatModel:
     """A minimal stand-in for ChatNVIDIA with scripted responses.
 
-    ``bind_tools`` returns ``self`` (the agent calls ``.invoke`` on it). The
-    ``responses`` list is consumed in order; each entry is an AIMessage or a
-    dict turned into one.
+    Supports both ``bind_tools`` (returns self) and ``with_structured_output``
+    (returns a _FakeStructuredRunnable that returns the scripted result).
+    The ``responses`` list is consumed in order; each entry is an AIMessage
+    or a dict turned into one.
+
+    For structured output tests, set ``fm._structured_result`` to the
+    expected structured object (e.g. a ToolPlan or Intent).
     """
 
     def __init__(self, responses: list | None = None):
@@ -122,12 +126,7 @@ class FakeChatModel:
         return self.invoke(messages, **kw)
 
     async def astream(self, messages, **kw):
-        """Stream the next scripted response as a single chunk.
-
-        The synthesis node uses ``astream_with_retry`` which calls
-        ``model.astream()``. We yield the full scripted AIMessage as one
-        chunk so the synthesis node can collect and combine it.
-        """
+        """Stream the next scripted response as a single chunk."""
         self.calls.append(messages)
         if self._i < len(self.responses):
             r = self.responses[self._i]

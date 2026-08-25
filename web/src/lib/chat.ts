@@ -248,6 +248,21 @@ export function useChat(): UseChat {
               break;
             case "ping":
               break;
+            case "citations": {
+              const cites = (payload.citations as ChatCitation[]) || [];
+              if (cites.length > 0) {
+                updateAssistant({ citations: cites });
+              }
+              break;
+            }
+            case "correction": {
+              const correctedText = (payload.content as string) || "";
+              if (correctedText) {
+                const { text: cleaned, citations } = parseCitations(correctedText);
+                updateAssistant({ content: cleaned, citations, status: undefined });
+              }
+              break;
+            }
             case "error": {
               const msg = (payload.message as string) || "agent_error";
               setError(msg);

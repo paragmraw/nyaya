@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
+from nyaya_chat.schemas_llm import ToolCallSpec, ToolPlan
+
 
 def test_build_messages_assembles_system_history_user():
     from nyaya_chat.agent import _build_messages
@@ -39,17 +41,23 @@ def test_system_prompt_instructs_structuring_and_glossing():
     assert "Never use a single #" in SYSTEM_PROMPT
 
 
-def test_supervisor_prompt_instructs_parallel_delegation():
+def test_supervisor_prompt_instructs_structured_plan():
     from nyaya_chat.llm import SUPERVISOR_PROMPT
-    assert "parallel" in SUPERVISOR_PROMPT.lower() or "single" in SUPERVISOR_PROMPT.lower()
-    assert "synthesis" in SUPERVISOR_PROMPT.lower() or "delegate" in SUPERVISOR_PROMPT.lower()
+    # Check for key structured output concepts
+    assert "tool" in SUPERVISOR_PROMPT.lower()
+    assert "parallel" in SUPERVISOR_PROMPT.lower()
 
 
 @pytest.mark.asyncio
 async def test_build_agent_with_tools(fake_model, fake_tools, monkeypatch):
+    # Set up structured output for the supervisor: returns a ToolPlan
+    fake_model._structured_result = ToolPlan(
+        reasoning="I need to look up IPC section 302.",
+        tool_calls=[ToolCallSpec(name="get_section", args={"act": "IPC", "section": "302"})],
+    )
+    # Synthesis: produces final answer
     fake_model.responses = [
-        AIMessage(content="", tool_calls=[{"id": "tc1", "name": "get_section", "args": {"query": "IPC 302"}}]),
-        AIMessage(content="Done."),
+        AIMessage(content="Punishment for murder [[act: IPC, ref: s. 302]]."),
     ]
     from nyaya_chat import agent as agent_mod
     graph, tools = await agent_mod.build_agent()
@@ -78,13 +86,14 @@ async def test_build_agent_without_tools_degrades(fake_model, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_agent_supervisor_emits_tool_calls(fake_model, fake_tools):
-    """Supervisor emits a tool call, tools node runs, synthesis produces answer."""
+    """Supervisor returns a ToolPlan, tools node runs, synthesis produces answer."""
+    # Supervisor: structured ToolPlan with a tool call
+    fake_model._structured_result = ToolPlan(
+        reasoning="I need to look up IPC 302.",
+        tool_calls=[ToolCallSpec(name="get_section", args={"act": "IPC", "section": "302"})],
+    )
+    # Synthesis: produces final answer WITH citation (so reflection doesn't loop)
     fake_model.responses = [
-        # Supervisor: emits a tool call to get_section
-        AIMessage(content="", tool_calls=[{
-            "id": "tc1", "name": "get_section", "args": {"query": "302"},
-        }]),
-        # Synthesis: produces final answer WITH citation (so reflection doesn't loop)
         AIMessage(content="Punishment for murder is death or life [[act: IPC, ref: s. 302]]."),
     ]
     from nyaya_chat.agent import _build_messages, build_agent
@@ -95,6 +104,114 @@ async def test_agent_supervisor_emits_tool_calls(fake_model, fake_tools):
     # Final message should be the synthesis answer
     assert any(getattr(m, "content", "").startswith("Punishment for murder") for m in out)
     assert fake_model.calls  # the model was invoked
+
+
+def test_parse_text_tool_calls_bracket_format():
+    """Parse [[tool_calls]] JSON array [[/tool_calls]] format."""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '[[tool_calls]]\n[\n {\n  "name": "get_section",\n  "arguments": {"act": "IPC", "section": "302"}\n }\n]\n[[/tool_calls]]'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "get_section"
+    assert calls[0]["args"]["act"] == "IPC"
+    assert calls[0]["args"]["section"] == "302"
+
+
+def test_parse_text_tool_calls_bare_json():
+    """Parse bare JSON object format."""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "get_section"
+
+
+def test_parse_text_tool_calls_json_array():
+    """Parse bare JSON array format."""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '[{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}]'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "get_section"
+
+
+def test_parse_text_tool_calls_no_tool_calls():
+    """Return empty list when no tool calls are found."""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    assert _parse_text_tool_calls("This is a plain text answer.") == []
+    assert _parse_text_tool_calls("") == []
+    assert _parse_text_tool_calls(None) == []
+
+
+def test_parse_text_tool_calls_multiple():
+    """Parse multiple tool calls from [[tool_calls]] format."""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '[[tool_calls]]\n[\n {"name": "get_section", "arguments": {"act": "IPC", "section": "302"}},\n {"name": "get_section", "arguments": {"act": "BNS", "section": "103"}}\n]\n[[/tool_calls]]'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 2
+    assert calls[0]["name"] == "get_section"
+    assert calls[1]["args"]["act"] == "BNS"
+
+
+def test_parse_text_xml_tag_wrapped_json():
+    """XML-tag wrapped JSON: <toolname>{...json...}</toolname>"""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '<semantic_query>{"query": "dowry prohibition India laws", "limit": 10}</semantic_query>'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "semantic_query"
+    assert calls[0]["args"]["query"] == "dowry prohibition India laws"
+    assert calls[0]["args"]["limit"] == 10
+
+
+def test_parse_text_xml_tag_multiple():
+    """Multiple XML tags in one response"""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '<semantic_query>{"query": "IPC 302"}</semantic_query>\n<get_section>{"act": "IPC", "section": "302"}</get_section>'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 2
+    assert calls[0]["name"] == "semantic_query"
+    assert calls[1]["name"] == "get_section"
+
+
+def test_parse_text_bracket_pipe_format():
+    """Bracket-pipe: [[tool tool call|tool_name: "...", tool_args: {...}]]"""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '[[semantic_query tool call|tool_name: "semantic_query", tool_args: {"query": "dowry prohibition India laws", "limit": 10}]]'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "semantic_query"
+    assert calls[0]["args"]["query"] == "dowry prohibition India laws"
+
+
+def test_parse_text_bracket_pipe_nested_json():
+    """Bracket-pipe with nested JSON objects in tool_args"""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '[[semantic_query tool call|tool_name: "semantic_query", tool_args: {"query": "test", "filter": {"act": "IPC", "kind": "section"}}}]]'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["args"]["filter"]["act"] == "IPC"
+
+
+def test_parse_text_attribute_style():
+    """Attribute-style: [[tool_name key="value" key2="value2"]]"""
+    from nyaya_chat.agent import _parse_text_tool_calls
+    content = '[[get_section act="IPC" section="24"]]'
+    calls = _parse_text_tool_calls(content)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "get_section"
+    assert calls[0]["args"]["act"] == "IPC"
+    assert calls[0]["args"]["section"] == "24"
+
+
+def test_supervisor_prompt_has_sequential_rules():
+    """SUPERVISOR_PROMPT should have rules numbered 1-7 with no duplicates"""
+    import re
+
+    from nyaya_chat.llm import SUPERVISOR_PROMPT
+    numbers = [int(m) for m in re.findall(r"(\d+)\.\s", SUPERVISOR_PROMPT)]
+    assert numbers == sorted(numbers), f"Rules not in order: {numbers}"
+    assert len(numbers) == len(set(numbers)), f"Duplicate rule numbers: {numbers}"
 
 
 def test_tool_call_key_normalises_args():

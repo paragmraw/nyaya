@@ -53,7 +53,7 @@ LLM_MAX_RETRIES = 4               # retries on 429/5xx with exponential backoff
 
 # Per-phase token caps.
 SUPERVISOR_MAX_TOKENS = 512       # supervisor plans and delegates; short output
-SYNTHESIS_MAX_TOKENS = 4096       # synthesis composes the final answer
+SYNTHESIS_MAX_TOKENS = 2048       # synthesis composes the final answer (capped to prevent runaway verbosity)
 
 # Reflection loop: when the synthesis answer appears ungrounded (no citations
 # and tools were called), the agent can do one more retrieval round. This cap
@@ -75,13 +75,15 @@ SSE_KEEPALIVE_INTERVAL_S = 15.0
 # go through the normal supervisor -> tools -> synthesis pipeline).
 GUARDRAIL_ENABLED = True
 
-# Tier 2 classifier: max tokens for the classification LLM call.
-# 32 tokens is enough for a single word ("legal", "greeting", etc).
+# Tier 2 classifier: uses with_structured_output(Intent enum) for reliable
+# classification. These settings control the dedicated classifier model.
 GUARDRAIL_CLASSIFIER_MAX_TOKENS = 32
-
-# Tier 2 classifier: timeout in seconds. If the LLM doesn't respond in
-# time, fail-open (treat as legal and run the normal pipeline).
 GUARDRAIL_CLASSIFIER_TIMEOUT_S = 10.0
+
+# Supervisor: uses with_structured_output(ToolPlan) for structured tool
+# planning. The supervisor model temperature should be low for deterministic
+# tool selection.
+SUPERVISOR_TEMPERATURE = 0.1
 
 # Message constraints.
 MAX_MESSAGE_CHARS = 4000          # max length of a single user message
@@ -130,6 +132,7 @@ class Settings:
     log_level: str = LOG_LEVEL
     supervisor_max_tokens: int = SUPERVISOR_MAX_TOKENS
     synthesis_max_tokens: int = SYNTHESIS_MAX_TOKENS
+    supervisor_temperature: float = SUPERVISOR_TEMPERATURE
     max_reflection_rounds: int = MAX_REFLECTION_ROUNDS
     citation_verification: bool = CITATION_VERIFICATION
     sse_keepalive_interval_s: float = SSE_KEEPALIVE_INTERVAL_S
