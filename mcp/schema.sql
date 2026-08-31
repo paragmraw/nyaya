@@ -1,10 +1,14 @@
 -- nyaya v0.2 unified schema (single source of truth — applied by the
 -- "## 3. Apply schema" cell of notebooks/hydrate.ipynb, which reads this file).
 --
--- Destructive part (the drops below) only runs during a full re-hydration;
--- everything after the base tables is idempotent and safe to re-run
--- standalone against an already-populated database (psql -f schema.sql):
--- the additive migration at the bottom uses only IF NOT EXISTS forms.
+-- WARNING: this file contains `drop table ... cascade` statements. Running the
+-- WHOLE file against a populated database (e.g. `psql -f mcp/schema.sql`)
+-- DESTROYS the corpus. Two safe ways to apply:
+--   * full re-hydration via the notebook (the schema cell rebuilds the
+--     corpus from scratch), or
+--   * the additive migration block at the bottom ONLY (idempotent
+--     `if not exists` forms; touches no existing data) — paste just that
+--     block's two statements into a psql session against the deployed DB.
 
 -- Extensions
 create extension if not exists vector;
@@ -99,8 +103,9 @@ create index if not exists cross_refs_to_idx on cross_refs (to_doc);
 -- nullif/coalesce wrapper keeps rows whose ref has no leading digits
 -- (e.g. 'AIR 1973 SC 1461') and would otherwise fail the int cast; they get
 -- ref_num = 0, matching the historic ordering.
--- Requires one re-run against any deployed database (or a manual psql apply):
---     psql "$DATABASE_URL" -f mcp/schema.sql
+-- This block (the two statements below) is the ONLY part of this file that is
+-- safe to apply to a populated database — see the WARNING at the top: a full
+-- `psql -f mcp/schema.sql` run's drop-table section would destroy the corpus.
 -- ---------------------------------------------------------------------------
 alter table documents add column if not exists ref_num int
     generated always as (coalesce(nullif(regexp_replace(ref, '[^0-9].*$', ''), '')::int, 0)) stored;
