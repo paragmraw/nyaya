@@ -44,6 +44,16 @@ EMBEDDING_MODEL = "nvidia/nemotron-3-embed-1b"
 RERANKER_MODEL = "nvidia/llama-nemotron-rerank-1b-v2"
 EMBEDDING_DIM = 2048
 
+# Total wall-clock budget for one rerank call (attempts + backoff + HTTP).
+# Without a deadline, 3 attempts x 120s httpx timeout + exponential backoff
+# can hang ~6 minutes worst case; beyond this deadline the reranker is
+# abandoned and search falls back to raw ANN scores (reranker_unavailable).
+RERANK_DEADLINE_S = 15.0
+
+# Default text-snippet length for list-style responses (matches the
+# historical ``left(d.text, 300)`` used by semantic search).
+SNIPPET_CHARS = 300
+
 # Redis connection string for distributed rate limiting. When set,
 # rate-limit counters are shared across all workers. When None, falls back
 # to in-memory (single-worker only). Read from the REDIS_URL env var at

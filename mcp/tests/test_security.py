@@ -539,3 +539,50 @@ def test_get_remote_address_strips_whitespace():
     }
     req = Request(scope)
     assert _get_remote_address(req) == "203.0.113.5"
+
+
+# ---------------------------------------------------------------------------
+# Middleware ordering (Task 5 item 6): CORS outermost, security headers just
+# inside it, rate limiter inside both — so 429 short-circuits carry CORS and
+# security headers instead of failing opaquely in browsers.
+# ---------------------------------------------------------------------------
+
+def test_429_carries_security_and_cors_headers():
+    """A rate-limited 429 gets CSP/X-Frame-Options and CORS headers.
+
+    Runtime order must be CORS -> SecurityHeaders -> RateLimit -> app, so the
+    429 Response the limiter short-circuits is still wrapped by the security
+    header and CORS send-wrappers.
+    """
+    from starlette.middleware.cors import CORSMiddleware
+
+    from nyaya.security_headers import SecurityHeadersMiddleware
+
+    backend = InMemoryBackend()
+    # Build the app without middleware (routes only), then add layers with
+    # last-added = outermost: CORS > SecurityHeaders > RateLimit.
+    app = Starlette()
+
+    async def echo(request):
+        return JSONResponse({"ok": True})
+
+    app.router.add_route("/echo", echo, methods=["POST"])
+    app.add_middleware(RateLimitMiddleware, read_per_min=1, backend=backend)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["https://nyaya.parag.tech"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept"],
+        allow_credentials=False,
+    )
+    with TestClient(app) as client:
+        client.post("/echo", json={})  # exhaust the read limit
+        r = client.post(
+            "/echo", json={},
+            headers={"Origin": "https://nyaya.parag.tech"},
+        )
+        assert r.status_code == 429
+        assert r.headers.get("retry-after") == "60"
+        assert r.headers.get("content-security-policy", "").startswith("default-src")
+        assert r.headers.get("access-control-allow-origin") == "https://nyaya.parag.tech"

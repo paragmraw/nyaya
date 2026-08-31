@@ -28,11 +28,9 @@ import psycopg_pool
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from .config import get_settings
+from .config import SNIPPET_CHARS, get_settings
 from .exceptions import DatabaseUnavailable
 from .models import Act, CrossRef, Document, SearchResult
-
-log = logging.getLogger("nyaya.db")
 
 # Fallback provenance date used when an act row lacks a current ``as_of``.
 CORPUS_AS_OF = date(2026, 7, 1)
@@ -103,6 +101,71 @@ _AS_OF_TTL = 300.0
 # Guards _as_of_cache, which is read/written from asyncio.to_thread workers
 # alongside the sync DB code (see _pool_lock for the established pattern).
 _as_of_lock = threading.Lock()
+
+
+class _LockedTTLCache:
+    """A minimal thread-safe TTL cache keyed on hashable tuples.
+
+    Reads and writes both run under the lock (the ``_as_of_lock`` pattern from
+    Task 2); the DB round-trip itself stays outside the lock, so a slow
+    refresh never blocks concurrent cache hits.
+
+    ``get`` returns ``_MISS`` for absent/expired keys. Eviction is insertion
+    order (oldest entry dropped) once ``maxsize`` is reached; values are
+    treated as immutable by callers.
+    """
+
+    def __init__(self, ttl: float, maxsize: int = 128) -> None:
+        self._lock = threading.Lock()
+        self._ttl = ttl
+        self._maxsize = maxsize
+        self._store: dict[Any, tuple[float, Any]] = {}
+
+    def get(self, key: Any) -> Any:
+        now = time.monotonic()
+        with self._lock:
+            entry = self._store.get(key)
+            if entry is None:
+                return _MISS
+            ts, value = entry
+            if now - ts >= self._ttl:
+                del self._store[key]
+                return _MISS
+            return value
+
+    def set(self, key: Any, value: Any) -> None:
+        now = time.monotonic()
+        with self._lock:
+            if len(self._store) >= self._maxsize:
+                # Drop the oldest entry (dicts preserve insertion order).
+                oldest = next(iter(self._store))
+                del self._store[oldest]
+            self._store[key] = (now, value)
+
+
+_MISS = object()
+
+# Cache keys for the argument-free list functions (single slot each).
+_LIST_ACTS_KEY = "list_acts"
+_LIST_SCHEDULES_KEY = "list_schedules"
+
+# Effectively-static data (frozen corpus snapshot) cached with TTL-only
+# invalidation — no manual invalidation API, matching the brief.
+_LIST_TTL_S = 300.0
+_LIST_ACTS_CACHE: _LockedTTLCache = _LockedTTLCache(ttl=_LIST_TTL_S, maxsize=1)
+_LIST_SCHEDULES_CACHE: _LockedTTLCache = _LockedTTLCache(ttl=_LIST_TTL_S, maxsize=1)
+# Keyed by (year_from, year_to): the filter space is small and enumerable
+# (integer years), so caching full returns per key is safe and bounded.
+_LIST_AMENDMENTS_CACHE: _LockedTTLCache = _LockedTTLCache(ttl=_LIST_TTL_S, maxsize=64)
+
+# corpus_stats is hit by the Railway healthcheck every 30s; a 60s TTL keeps
+# it to one DB round-trip per minute.
+_CORPUS_STATS_TTL_S = 60.0
+_CORPUS_STATS_CACHE: _LockedTTLCache = _LockedTTLCache(ttl=_CORPUS_STATS_TTL_S, maxsize=1)
+_CORPUS_STATS_KEY = "corpus_stats"
+
+
+log = logging.getLogger("nyaya.db")
 
 
 # ---------------------------------------------------------------------------
@@ -217,11 +280,31 @@ def _row_to_document(r: dict[str, Any]) -> Document:
     )
 
 
-_DOC_SELECT = """
-    select d.id, d.kind, d.ref, d.title, d.text, d.metadata,
+_DOC_SELECT_TEMPLATE = """
+    select d.id, d.kind, d.ref, d.title, {text_expr}, d.metadata,
            a.short_name as act_short_name, a.as_of
     from documents d left join acts a on a.id = d.act_id
 """
+
+
+def _doc_select(text_expr: str = "d.text") -> str:
+    """Build the document SELECT with an explicit text-column projection.
+
+    ``text_expr`` is either ``d.text`` (full text) or ``left(d.text, N)`` for
+    snippet mode. The snippet length is interpolated as an internally
+    validated integer (never user input), so the f-string is injection-safe.
+    """
+    return _DOC_SELECT_TEMPLATE.format(text_expr=text_expr)
+
+
+def _snippet_expr(snippet_chars: int) -> str:
+    """SQL expression bounding the text column to ``snippet_chars`` chars.
+
+    The value is clamped to [1, 2000] — it is a server-side default/param,
+    interpolated into SQL as an integer only.
+    """
+    n = min(max(int(snippet_chars), 1), 2000)
+    return f"left(d.text, {n})"
 
 
 # ---------------------------------------------------------------------------
@@ -229,12 +312,23 @@ _DOC_SELECT = """
 # ---------------------------------------------------------------------------
 
 def list_acts() -> list[Act]:
+    """List all acts (5-minute TTL cache).
+
+    The corpus is a frozen snapshot, so TTL-only invalidation (no manual
+    invalidation API) is correct here. ``list_acts`` takes no arguments, so a
+    single cache slot holds the full return value.
+    """
+    hit = _LIST_ACTS_CACHE.get(_LIST_ACTS_KEY)
+    if hit is not _MISS:
+        return list(hit)
     with _conn() as c:
         rows = c.execute(
             "select short_name, full_name, year, citation, kind, source, source_license, as_of "
             "from acts order by kind, year nulls last, short_name"
         ).fetchall()
-    return [Act(**r) for r in rows]
+    acts = [Act(**r) for r in rows]
+    _LIST_ACTS_CACHE.set(_LIST_ACTS_KEY, acts)
+    return list(acts)
 
 
 def get_act(short_name: str) -> Act | None:
@@ -263,32 +357,32 @@ def get_document(kind: str, act: str | None, ref: str) -> Document | None:
     with _conn() as c:
         if sn and kind == "section":
             row = c.execute(
-                _DOC_SELECT + " where d.kind = 'section' and lower(a.short_name) = lower(%s) and d.ref = %s",
+                _doc_select() + " where d.kind = 'section' and lower(a.short_name) = lower(%s) and d.ref = %s",
                 (sn, num),
             ).fetchone()
         elif kind == "article":
             row = c.execute(
-                _DOC_SELECT + " where d.kind = 'article' and d.ref = %s",
+                _doc_select() + " where d.kind = 'article' and d.ref = %s",
                 (num,),
             ).fetchone()
         elif kind == "judgment":
             row = c.execute(
-                _DOC_SELECT + " where d.kind = 'judgment' and (d.ref = %s or lower(d.title) = lower(%s))",
+                _doc_select() + " where d.kind = 'judgment' and (d.ref = %s or lower(d.title) = lower(%s))",
                 (num, num),
             ).fetchone()
             if row is None and len(num) >= 8:
                 row = c.execute(
-                    _DOC_SELECT + " where d.kind = 'judgment' and lower(d.title) like '%%' || lower(%s) || '%%'",
+                    _doc_select() + " where d.kind = 'judgment' and lower(d.title) like '%%' || lower(%s) || '%%'",
                     (num,),
                 ).fetchone()
         elif kind == "schedule":
             row = c.execute(
-                _DOC_SELECT + " where d.kind = 'schedule' and lower(d.ref) = lower(%s)",
+                _doc_select() + " where d.kind = 'schedule' and lower(d.ref) = lower(%s)",
                 (f"schedule {num}" if not num.lower().startswith("schedule ") else num,),
             ).fetchone()
         elif kind == "amendment":
             row = c.execute(
-                _DOC_SELECT + " where d.kind = 'amendment' and lower(d.ref) = lower(%s)",
+                _doc_select() + " where d.kind = 'amendment' and lower(d.ref) = lower(%s)",
                 (f"amendment {num}" if not num.lower().startswith("amendment ") else num,),
             ).fetchone()
         else:
@@ -323,11 +417,16 @@ def list_sections(
     end: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    include_text: bool = False,
+    snippet_chars: int = SNIPPET_CHARS,
 ) -> tuple[list[Document], int, str | None]:
     """List sections of an act, optionally filtered by chapter or numeric range.
 
     Returns (sections, total, chapter_title). ``chapter_title`` is the title of
     the chapter when ``chapter`` is set, otherwise None.
+
+    By default only a text snippet (first ``snippet_chars`` chars) is
+    returned; pass ``include_text=True`` for full document text.
     """
     sn = normalize_act(act_short_name)
     if sn is None:
@@ -349,9 +448,10 @@ def list_sections(
             clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) <= %s")
             params.append(int(e))
     where = " where " + " and ".join(clauses)
+    text_expr = "d.text" if include_text else _snippet_expr(snippet_chars)
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + where
+            _doc_select(text_expr) + where
             + " order by coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0), d.ref"
             + " limit %s offset %s",
             params + [limit, offset],
@@ -376,11 +476,19 @@ def list_sections(
     return [_row_to_document(r) for r in rows], total, chapter_title
 
 
-def list_articles(part: str | None = None, limit: int = 100, offset: int = 0) -> tuple[list[Document], int]:
+def list_articles(
+    part: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    include_text: bool = False,
+    snippet_chars: int = SNIPPET_CHARS,
+) -> tuple[list[Document], int]:
+    """List Constitution articles (full text only with ``include_text=True``)."""
+    text_expr = "d.text" if include_text else _snippet_expr(snippet_chars)
     with _conn() as c:
         if part:
             rows = c.execute(
-                _DOC_SELECT + " where d.kind = 'article' and d.metadata->>'part' ilike %s order by d.ref limit %s offset %s",
+                _doc_select(text_expr) + " where d.kind = 'article' and d.metadata->>'part' ilike %s order by d.ref limit %s offset %s",
                 (f"%{part}%", limit, offset),
             ).fetchall()
             total_row = c.execute(
@@ -389,7 +497,7 @@ def list_articles(part: str | None = None, limit: int = 100, offset: int = 0) ->
             ).fetchone()
         else:
             rows = c.execute(
-                _DOC_SELECT + " where d.kind = 'article' order by d.ref limit %s offset %s",
+                _doc_select(text_expr) + " where d.kind = 'article' order by d.ref limit %s offset %s",
                 (limit, offset),
             ).fetchall()
             total_row = c.execute(
@@ -399,10 +507,17 @@ def list_articles(part: str | None = None, limit: int = 100, offset: int = 0) ->
     return [_row_to_document(r) for r in rows], total
 
 
-def list_judgments(limit: int = 50, offset: int = 0) -> tuple[list[Document], int]:
+def list_judgments(
+    limit: int = 50,
+    offset: int = 0,
+    include_text: bool = False,
+    snippet_chars: int = SNIPPET_CHARS,
+) -> tuple[list[Document], int]:
+    """List landmark judgments (full text only with ``include_text=True``)."""
+    text_expr = "d.text" if include_text else _snippet_expr(snippet_chars)
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + " where d.kind = 'judgment' order by d.metadata->>'date' desc nulls last limit %s offset %s",
+            _doc_select(text_expr) + " where d.kind = 'judgment' order by d.metadata->>'date' desc nulls last limit %s offset %s",
             (limit, offset),
         ).fetchall()
         total_row = c.execute("select count(*) as n from documents where kind = 'judgment'").fetchone()
@@ -411,14 +526,34 @@ def list_judgments(limit: int = 50, offset: int = 0) -> tuple[list[Document], in
 
 
 def list_schedules() -> list[Document]:
+    """List all schedules (5-minute TTL cache).
+
+    Takes no arguments, so one cache slot holds the full return value; the
+    corpus is a frozen snapshot, so TTL-only invalidation is correct.
+    """
+    hit = _LIST_SCHEDULES_CACHE.get(_LIST_SCHEDULES_KEY)
+    if hit is not _MISS:
+        return list(hit)
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + " where d.kind = 'schedule' order by d.metadata->>'number'"
+            _doc_select() + " where d.kind = 'schedule' order by d.metadata->>'number'"
         ).fetchall()
-    return [_row_to_document(r) for r in rows]
+    docs = [_row_to_document(r) for r in rows]
+    _LIST_SCHEDULES_CACHE.set(_LIST_SCHEDULES_KEY, docs)
+    return list(docs)
 
 
 def list_amendments(year_from: int | None = None, year_to: int | None = None) -> list[Document]:
+    """List amendments, optionally filtered by year range (5-minute TTL cache).
+
+    Cache key = (year_from, year_to): the filter space is small and enumerable
+    (integer years), so caching the full return per key is simple and bounded.
+    The corpus is a frozen snapshot, so TTL-only invalidation is correct.
+    """
+    key = (year_from, year_to)
+    hit = _LIST_AMENDMENTS_CACHE.get(key)
+    if hit is not _MISS:
+        return list(hit)
     clauses = ["d.kind = 'amendment'"]
     params: list[Any] = []
     if year_from is not None:
@@ -430,9 +565,11 @@ def list_amendments(year_from: int | None = None, year_to: int | None = None) ->
     where = " where " + " and ".join(clauses)
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + where + " order by d.metadata->>'number'", params
+            _doc_select() + where + " order by d.metadata->>'number'", params
         ).fetchall()
-    return [_row_to_document(r) for r in rows]
+    docs = [_row_to_document(r) for r in rows]
+    _LIST_AMENDMENTS_CACHE.set(key, docs)
+    return list(docs)
 
 
 def list_chapters(act_short_name: str) -> list[dict[str, Any]]:
@@ -461,7 +598,7 @@ def get_amendments_for_article(article_number: str) -> list[Document]:
         return []
     with _conn() as c:
         rows = c.execute(
-            _DOC_SELECT + " where d.kind = 'amendment'"
+            _doc_select() + " where d.kind = 'amendment'"
             " and (d.metadata->>'articles_affected') ~ %s order by d.metadata->>'number'",
             (rf"[[:<:]]{re.escape(num)}[[:>:]]",),
         ).fetchall()
@@ -561,7 +698,7 @@ def semantic_search(
             select coalesce(a.short_name, 'judgment') as act,
                    d.ref, d.title, d.kind,
                    1 - (d.embedding <=> %s::vector) as rank,
-                   left(d.text, 300) as snippet,
+                   left(d.text, {int(SNIPPET_CHARS)}) as snippet,
                    d.metadata->>'citation' as citation
             from documents d left join acts a on a.id = d.act_id
             {where}
@@ -594,7 +731,7 @@ def rerank_search(
     offset: int = 0,
     promote_definitions: bool = False,
 ) -> tuple[list[SearchResult], int, str | None]:
-    """Retrieve + rerank: embed query → ANN top-50 → rerank → top-N.
+    """Retrieve + rerank: embed query → ANN top-N → rerank → top-``limit``.
 
     Returns (results, total, fallback_reason). If the reranker fails, falls
     back to raw ANN scores with fallback_reason='reranker_unavailable'.
@@ -611,8 +748,11 @@ def rerank_search(
     except EmbeddingUnavailable:
         return [], 0, "embedding_unavailable"
 
-    # Stage 1: ANN retrieval (top 50 candidates)
-    candidates, total = semantic_search(query_emb, kind=kind, act=act, limit=50, offset=0)
+    # Stage 1: ANN candidate pool. Sized relative to the requested limit
+    # (3x, clamped to [10, 50]) so small pages don't pay for 50 ANN rows
+    # and a 50-row rerank call they will never return.
+    pool = min(max(3 * limit, 10), 50)
+    candidates, total = semantic_search(query_emb, kind=kind, act=act, limit=pool, offset=0)
     if not candidates:
         return [], 0, None
 
@@ -651,6 +791,23 @@ def rerank_search(
 # ---------------------------------------------------------------------------
 
 def corpus_stats() -> dict[str, int]:
+    """Corpus counts (60s TTL cache).
+
+    Hit by the Railway healthcheck every 30s; the 60s TTL collapses
+    3 queries per call into one round-trip per minute. Failures are never
+    cached (the exception propagates and the stale entry, if any, is left
+    in place only by absence of mutation — the next call retries the DB).
+    This function takes no arguments, so a single cache slot is used.
+    """
+    hit = _CORPUS_STATS_CACHE.get(_CORPUS_STATS_KEY)
+    if hit is not _MISS:
+        return dict(hit)
+    stats = _corpus_stats_uncached()
+    _CORPUS_STATS_CACHE.set(_CORPUS_STATS_KEY, stats)
+    return dict(stats)
+
+
+def _corpus_stats_uncached() -> dict[str, int]:
     with _conn() as c:
         rows = c.execute(
             """
