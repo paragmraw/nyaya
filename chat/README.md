@@ -82,8 +82,12 @@ lives as Python constants in `chat/nyaya_chat/config.py`.
 
 ### `GET /chat/health`
 ```json
-{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":6}
+{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":6,"reason":null}
 ```
+Fast by design: the health probe **never** builds the agent — it reports
+`"degraded"` with a `reason` (agent still initializing / no tools loaded)
+immediately if the graph isn't built yet; only `/chat/turn` triggers a build.
+The `model` field is always present (the frontend model badge reads it).
 
 ### `POST /chat/turn`
 **Body**: `{"message": "...", "history": [{"role":"user","content":"..."}, ...]}`

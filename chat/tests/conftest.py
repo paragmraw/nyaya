@@ -15,14 +15,16 @@ os.environ.setdefault("NVIDIA_API_KEY", "nvapi-test-key-1234567890")
 @pytest.fixture(autouse=True)
 def _clear_caches():
     """Reset the lru_caches on get_settings/get_model before each test."""
-    from nyaya_chat import agent, config, llm
+    from nyaya_chat import agent, config, guardrail, llm
     config.reset_settings_cache()
     llm.reset_model_cache()
     agent.reset_agent()
+    guardrail.reset_classifier_cache()
     yield
     config.reset_settings_cache()
     llm.reset_model_cache()
     agent.reset_agent()
+    guardrail.reset_classifier_cache()
 
 
 @pytest.fixture

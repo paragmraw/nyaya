@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -471,3 +473,93 @@ async def test_synthesis_node_verifies_and_disclaims_in_one_pass(fake_model, set
     assert "[[act: IPC, ref: s. 302]]" in content
     assert "GhostAct" not in content
     assert content.endswith(f"\n\n*{DISCLAIMER}*")
+
+
+# ---------------------------------------------------------------------------
+# Synthesis input pruning: LIST-type results bounded, full text preserved
+# ---------------------------------------------------------------------------
+
+
+def _semantic_query_result(n_hits: int, snippet_len: int = 2000) -> str:
+    import json
+    return json.dumps({
+        "query": "punishment for murder",
+        "total": n_hits * 5, "returned": n_hits, "offset": 0, "limit": n_hits,
+        "source": "nyaya", "as_of": "2024-01-01", "fallback_reason": None,
+        "results": [
+            {"act": f"Act{i}", "ref": f"s. {100 + i}", "title": f"T{i}",
+             "snippet": f"HIT{i}-" + "z" * snippet_len,
+             "rank": 1.0 - i * 0.01, "citation": None, "kind": "section"}
+            for i in range(n_hits)
+        ],
+    })
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_prunes_list_type_tool_results(fake_model, settings):
+    """A multi-hit semantic_query result is bounded in what reaches the model:
+    the top hit's snippet survives in full, later hits are condensed to
+    identification fields + a 300-char snippet, and envelope metadata is gone."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+
+    fake_model.responses = [AIMessage(content="Answer [[act: Act0, ref: s. 100]].")]
+    node = _make_synthesis_node(fake_model, settings, has_tools=True)
+    payload = _semantic_query_result(8)
+    state = {
+        "messages": [
+            HumanMessage(content="What is the punishment for murder?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "semantic_query", "args": {"query": "punishment for murder"}},
+            ]),
+            ToolMessage(
+                content=payload, tool_call_id="tc1", name="semantic_query",
+            ),
+        ],
+    }
+    await node(state)
+
+    sent = fake_model.calls[-1]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "semantic_query"]
+    assert len(tool_msgs) == 1
+    sent_content = tool_msgs[0].content
+    # The ~12K-token worst case is cut down to a third of the original payload.
+    assert len(sent_content) < len(payload) / 3
+    # Top hit verbatim; tail hits condensed (snippet capped) but identifiable.
+    assert "HIT0-" + "z" * 2000 in sent_content
+    assert "HIT3-" + "z" * 2000 not in sent_content
+    assert '"ref": "s. 103"' in sent_content  # tail hit still citable/fetchable
+    assert '"as_of"' not in sent_content  # envelope metadata pruned
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_prunes_only_list_type_results(fake_model, settings):
+    """Full text of a single-document tool (get_section) passes to the model
+    UNPRUNED — pruning never touches single-document results."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+
+    full_text = "SECTION-TEXT:" + "F" * 3000
+    fake_model.responses = [AIMessage(content="Answer [[act: IPC, ref: s. 302]].")]
+    node = _make_synthesis_node(fake_model, settings, has_tools=True)
+    payload = json.dumps({"act": "IPC", "ref": "s. 302", "text": full_text})
+    state = {
+        "messages": [
+            HumanMessage(content="What is IPC 302?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            ]),
+            ToolMessage(
+                content=payload,
+                tool_call_id="tc1", name="get_section",
+            ),
+        ],
+    }
+    await node(state)
+
+    sent = fake_model.calls[-1]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_section"]
+    assert len(tool_msgs) == 1
+    assert full_text in tool_msgs[0].content  # verbatim, unpruned

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 
 import pytest
 from langchain_core.messages import AIMessage
 
-from nyaya_chat.streaming import _sse, _summarise_tool_result, stream_turn
+from nyaya_chat.streaming import (
+    _sse,
+    _stream_with_keepalive,
+    _summarise_tool_result,
+    stream_turn,
+)
 
 
 def _parse_events(out: bytes) -> list[tuple[str, dict]]:
@@ -507,3 +514,140 @@ async def test_stream_turn_degraded_agent_node_verified_answer_used():
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
     corrections = [p for e, p in _parse_events(out) if e == "correction"]
     assert corrections == [{"content": "verified"}]
+
+
+# ── Keepalive: asyncio.timeout-based ping emit + exact ordering ────────
+
+
+class _StallGraph:
+    """Yields scripted parts, sleeping ``delay`` seconds before each one."""
+
+    def __init__(self, spec: list[tuple[dict, float]]):
+        self._spec = spec
+
+    async def astream(self, _input, stream_mode=None, version=None):
+        for part, delay in self._spec:
+            await asyncio.sleep(delay)
+            yield part
+
+
+class _HangGraph:
+    """Yields one part, then stalls (simulates a slow synthesis round)."""
+
+    async def astream(self, _input, stream_mode=None, version=None):
+        yield {"type": "messages", "data": (_FakeChunk("first"), {})}
+        await asyncio.sleep(30)  # stalled; the client disconnects meanwhile
+        yield {"type": "messages", "data": (_FakeChunk("never"), {})}
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_keepalive_pings_between_items_in_order():
+    """A stream that stalls longer than the keepalive emits ping events between
+    items and still yields ALL items, in order."""
+    spec = [
+        ({"type": "messages", "data": (_FakeChunk("one"), {})}, 0.15),
+        ({"type": "messages", "data": (_FakeChunk("two"), {})}, 0.35),
+    ]
+    out = b"".join([
+        c async for c in stream_turn(_StallGraph(spec), [], keepalive_interval=0.05, rid="ka")
+    ])
+    events = _parse_events(out)
+    tokens = [p["content"] for e, p in events if e == "token"]
+    assert tokens == ["one", "two"]  # all items, in order
+    pings = [p for e, p in events if e == "ping"]
+    assert len(pings) >= 4  # pings were emitted during both stalls
+    assert all(isinstance(p["ts"], int) for p in pings)
+    # done is still the last event; no error event crept in.
+    assert events[-1][0] == "done"
+    assert not any(e == "error" for e, _ in events)
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_keepalive_no_ping_when_chunks_flow():
+    """Chunks arriving faster than the keepalive interval produce no pings."""
+    spec = [
+        ({"type": "messages", "data": (_FakeChunk("a"), {})}, 0.0),
+        ({"type": "messages", "data": (_FakeChunk("b"), {})}, 0.01),
+    ]
+    out = b"".join([
+        c async for c in stream_turn(_StallGraph(spec), [], keepalive_interval=1.0)
+    ])
+    assert b"event: ping" not in out
+    assert b'event: token\ndata: {"content": "a"}' in out
+
+
+@pytest.mark.asyncio
+async def test_stream_with_keepalive_no_interval_streams_directly():
+    """Without a keepalive interval the graph stream is iterated as before."""
+    parts = [{"type": "messages", "data": (_FakeChunk("x"), {})}]
+    got = [p async for p in _stream_with_keepalive(_FakeGraph(parts), [], 0)]
+    assert got == parts
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_cancellation_midstream_is_clean():
+    """Cancelling a mid-stream client closes cleanly: the background producer
+    task is reaped, no tasks linger, and the stream output stays pristine."""
+    agen = stream_turn(_HangGraph(), [], keepalive_interval=0.02, rid="cc")
+    first = await agen.__anext__()
+    assert first == b'event: token\ndata: {"content": "first"}\n\n'
+    second = await agen.__anext__()
+    assert second.startswith(b"event: ping\n")  # pings while idle
+
+    await agen.aclose()
+    await asyncio.sleep(0.05)  # let the cancelled producer settle
+
+    pending = [t for t in asyncio.all_tasks()
+               if t is not asyncio.current_task() and not t.done()]
+    assert not pending, f"lingering stream tasks: {pending}"
+
+    await agen.aclose()
+    await asyncio.sleep(0.05)  # let the cancelled producer settle
+
+    pending = [t for t in asyncio.all_tasks()
+               if t is not asyncio.current_task() and not t.done()]
+    assert not pending, f"lingering stream tasks: {pending}"
+
+
+# ── Per-turn token accounting (usage_metadata in the turn log) ──────────
+
+
+class _UsageChunk:
+    """A message chunk that also carries the model's usage_metadata block."""
+
+    def __init__(self, content: str, usage_metadata: dict):
+        self.content = content
+        self.additional_kwargs: dict = {}
+        self.usage_metadata = usage_metadata
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_logs_token_count_from_usage_metadata(caplog):
+    """usage_metadata on the streamed chunks lands in the per-turn log line."""
+    parts = [{
+        "type": "messages",
+        "data": (_UsageChunk(
+            "Answer.",
+            {"input_tokens": 900, "output_tokens": 84, "total_tokens": 984},
+        ), {"langgraph_node": "synthesis"}),
+    }]
+    with caplog.at_level(logging.INFO, logger="nyaya_chat.streaming"):
+        b"".join([c async for c in stream_turn(_FakeGraph(parts), [], rid="tok")])
+    records = [r for r in caplog.records if "token_count" in r.getMessage()]
+    assert records, "expected a per-turn token_count log record"
+    line = records[-1].getMessage()
+    assert "rid=tok" in line
+    assert "duration_ms=" in line
+    assert "token_count=984" in line
+    assert "input_tokens=900" in line
+    assert "output_tokens=84" in line
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_logs_token_count_zero_when_usage_absent(caplog):
+    """No usage_metadata on the chunks -> token_count=0, no exception."""
+    parts = [{"type": "messages", "data": (_FakeChunk("Answer."), {})}]
+    with caplog.at_level(logging.INFO, logger="nyaya_chat.streaming"):
+        b"".join([c async for c in stream_turn(_FakeGraph(parts), [], rid="nou")])
+    lines = [r.getMessage() for r in caplog.records if "token_count" in r.getMessage()]
+    assert any("rid=nou" in ln and "token_count=0" in ln for ln in lines)

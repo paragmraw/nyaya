@@ -105,28 +105,18 @@ async def stream_turn(
         # the synthesis node's VERIFIED answer (the authoritative final text).
         full_answer_parts: list[str] = []
         verified_answer: str | None = None
-
-        # Set up keepalive ping task if interval is configured
-        ping_queue: asyncio.Queue[bool] | None = None
-        ping_task: asyncio.Task[None] | None = None
-
-        if keepalive_interval > 0:
-            ping_queue = asyncio.Queue()
-
-            async def _ping_loop():
-                while True:
-                    await asyncio.sleep(keepalive_interval)
-                    if ping_queue is not None:
-                        await ping_queue.put(True)
-
-            ping_task = asyncio.create_task(_ping_loop())
+        # Per-turn token usage accounting. LangChain message chunks carry
+        # ``usage_metadata`` (cumulative per model call) — the last block seen
+        # therefore holds the totals for the final synthesis round.
+        turn_started = time.monotonic()
+        usage: dict[str, int] | None = None
 
         try:
             async for part in _stream_with_keepalive(
-                graph, messages, ping_queue,
+                graph, messages, keepalive_interval,
             ):
                 if isinstance(part, bool) and part:
-                    # Ping signal from keepalive task
+                    # Keepalive signal from _stream_with_keepalive (wait expired)
                     yield _sse("ping", {"ts": int(time.time())})
                     continue
 
@@ -185,6 +175,15 @@ async def stream_turn(
                         summary = _summarise_tool_result(getattr(msg_chunk, "content", ""))
                         yield _sse("tool_result", {"id": tc_id, "name": name, "summary": summary})
 
+                    usage_metadata = getattr(msg_chunk, "usage_metadata", None)
+                    if isinstance(usage_metadata, dict):
+                        ints = {
+                            k: v for k, v in usage_metadata.items()
+                            if isinstance(v, int)
+                        }
+                        if ints:
+                            usage = ints
+
                 elif ptype == "updates" and isinstance(data, dict):
                     if "supervisor" in data and "searching" not in emitted_phases:
                         sup_out = data["supervisor"]
@@ -223,12 +222,26 @@ async def stream_turn(
                                 verified_answer = content
 
         finally:
-            if ping_task is not None:
-                ping_task.cancel()
-                try:
-                    await ping_task
-                except asyncio.CancelledError:
-                    pass
+            # The per-turn usage log observability.py promises: rid, duration,
+            # and token usage on one line, emitted whenever the stream loop
+            # ends — clean finish, mid-stream failure, or client cancellation
+            # — with tokens 0/absent when usage_metadata was not available.
+            duration_ms = (time.monotonic() - turn_started) * 1000.0
+            if usage:
+                input_tokens = usage.get("input_tokens", 0)
+                output_tokens = usage.get("output_tokens", 0)
+                log.info(
+                    "chat turn complete: rid=%s duration_ms=%.0f token_count=%d "
+                    "(input_tokens=%d output_tokens=%d)",
+                    rid, duration_ms, input_tokens + output_tokens,
+                    input_tokens, output_tokens,
+                )
+            else:
+                log.info(
+                    "chat turn complete: rid=%s duration_ms=%.0f token_count=0 "
+                    "(usage_metadata absent)",
+                    rid, duration_ms,
+                )
 
         # Post-stream events. The synthesis node's verified AIMessage is the
         # authoritative answer: derive the citations event from it (parsed,
@@ -267,15 +280,25 @@ async def stream_turn(
 async def _stream_with_keepalive(
     graph: Any,
     messages: list[Any],
-    ping_queue: asyncio.Queue[bool] | None,
+    keepalive_interval: float,
 ) -> AsyncIterator[Any]:
-    """Yield graph stream parts, interleaving ping signals from the queue.
+    """Yield graph stream parts, interleaving ``True`` ping signals when idle.
 
-    Uses a producer-consumer pattern: the graph stream runs as a background
-    task that puts chunks into a queue. The consumer races between the chunk
-    queue and the ping queue, so chunks are never lost.
+    ``asyncio.timeout(keepalive_interval)`` wraps each ``__anext__`` of the
+    chunk source: when a wait expires, a ping signal is yielded and the wait
+    resumes — no chunk is ever dropped or reordered, and the timeout is
+    armed/disarmed around every single chunk instead of racing two tasks per
+    chunk (the old ``asyncio.wait`` pattern).
+
+    The graph stream itself is drained by ONE background producer task per
+    stream (not per chunk) into an ``asyncio.Queue``; the timeout then fires
+    on the consumer's ``queue.get()`` wait only, so an expiring timeout can
+    never cancel the underlying graph stream (cancelling an async
+    generator's ``__anext__`` would terminate the whole graph iteration).
+    On cancellation of the outer stream, the producer is cancelled and
+    awaited in ``finally`` so no tasks linger.
     """
-    if ping_queue is None:
+    if keepalive_interval is None or keepalive_interval <= 0:
         async for part in graph.astream(
             {"messages": messages},
             stream_mode=["messages", "updates"],
@@ -304,35 +327,21 @@ async def _stream_with_keepalive(
 
     try:
         while True:
-            chunk_task = asyncio.ensure_future(chunk_queue.get())
-            ping_task = asyncio.ensure_future(ping_queue.get())
-
-            done, pending = await asyncio.wait(
-                {chunk_task, ping_task},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            for t in pending:
-                t.cancel()
-                try:
-                    await t
-                except asyncio.CancelledError:
-                    pass
-
-            if ping_task in done and not ping_task.cancelled():
-                yield True  # ping signal
-
-            if chunk_task in done and not chunk_task.cancelled():
-                item = chunk_task.result()
-                if item is _SENTINEL:
-                    break
-                if isinstance(item, Exception):
-                    raise item
-                yield item
+            try:
+                async with asyncio.timeout(keepalive_interval):
+                    part = await chunk_queue.get()
+            except TimeoutError:
+                yield True  # keepalive ping signal
+                continue
+            if part is _SENTINEL:
+                break
+            if isinstance(part, Exception):
+                raise part
+            yield part
     finally:
         if not producer_task.done():
             producer_task.cancel()
-            try:
-                await producer_task
-            except asyncio.CancelledError:
-                pass
+        try:
+            await producer_task
+        except asyncio.CancelledError:
+            pass

@@ -26,7 +26,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .agent import _build_messages, get_agent
+from .agent import _build_messages, get_agent, get_agent_if_ready
 from .config import Settings, get_settings
 from .guardrail import Intent, classify_intent, get_canned_response
 from .observability import configure_structlog
@@ -76,20 +76,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         graph = getattr(app.state, "graph", None)
         tools = getattr(app.state, "tools", None) or []
         if graph is None:
-            try:
-                graph, tools = await get_agent()
+            # Fast path: NEVER build the agent on a health probe. The old
+            # behaviour paid the full tool-loading + graph-compilation cost on
+            # a cold health check (which is also what load balancers hit).
+            # Report the prewarmed graph if the host lifespan (or an earlier
+            # request) built one; otherwise return the degraded payload
+            # immediately — the build happens on the first /turn instead.
+            # ``get_agent_if_ready`` only reads already-built module state, so
+            # this is O(1).
+            graph, tools = get_agent_if_ready()
+            if graph is not None:
                 app.state.graph = graph
                 app.state.tools = tools
-            except Exception:
-                log.exception("failed to build chat agent for health check")
-                graph, tools = None, []
 
-        # Degraded if: no graph, OR graph built but zero tools loaded
-        is_degraded = graph is None or len(tools) == 0
+        # Degraded if: agent not built yet, OR graph built but zero tools
+        # loaded. The model field is always set (ChatPanel.tsx reads it for
+        # the model badge).
+        if graph is None:
+            return ChatSubHealthResponse(
+                status="degraded",
+                model=s.llm_model,
+                tools_loaded=0,
+                reason="chat agent is still initializing (built at startup or on first /turn)",
+            )
+        if len(tools) == 0:
+            return ChatSubHealthResponse(
+                status="degraded",
+                model=s.llm_model,
+                tools_loaded=0,
+                reason="graph built but no corpus tools loaded",
+            )
         return ChatSubHealthResponse(
-            status="degraded" if is_degraded else "healthy",
-            model=s.llm_model,
-            tools_loaded=len(tools),
+            status="healthy", model=s.llm_model, tools_loaded=len(tools),
         )
 
     @app.post("/turn")

@@ -318,6 +318,91 @@ class TestTier2Classifier:
         assert result == Intent.LEGAL
 
 
+class TestClassifierClientReuse:
+    """The Tier-2 classifier client is built ONCE and reused across requests."""
+
+    @staticmethod
+    def _settings():
+        settings = MagicMock()
+        settings.guardrail_classifier_timeout_s = 10.0
+        settings.guardrail_classifier_max_tokens = 32
+        settings.llm_model = "nvidia/test"
+        settings.llm_timeout_s = 60.0
+        settings.nvidia_api_key = MagicMock()
+        settings.nvidia_api_key.get_secret_value = MagicMock(return_value="test-key")
+        return settings
+
+    @staticmethod
+    def _fake_classifier(intent_result):
+        """A stand-in classifier client whose structured output returns intent_result."""
+        mock_structured = MagicMock()
+        mock_structured.ainvoke = AsyncMock(return_value=intent_result)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+        return mock_model
+
+    @pytest.mark.asyncio
+    async def test_two_classifications_build_one_client(self, monkeypatch):
+        """N Tier-2 classifications through the public path construct ONE client."""
+        from nyaya_chat import guardrail as guard_mod
+
+        built = []
+
+        def _counting_builder(_settings):
+            client = self._fake_classifier(Intent.LEGAL)
+            built.append(client)
+            return client
+
+        monkeypatch.setattr(guard_mod, "_build_classifier_model", _counting_builder)
+        settings = self._settings()
+
+        first = await classify_intent_tier2("hey there what's up", settings)
+        second = await guard_mod.classify_intent_tier2(
+            "so what do you make of that", settings
+        )
+        assert first == Intent.LEGAL
+        assert second == Intent.LEGAL
+        assert len(built) == 1  # one construction for N (2) calls
+        assert guard_mod.get_classifier_model(settings) is built[0]
+
+    def test_distinct_settings_build_distinct_clients(self, monkeypatch):
+        """A changed/reloaded configuration is honoured, not served a stale client."""
+        from nyaya_chat import guardrail as guard_mod
+
+        count = {"n": 0}
+
+        def _builder(_s):
+            count["n"] += 1
+            return self._fake_classifier(Intent.OFF_TOPIC)
+
+        monkeypatch.setattr(guard_mod, "_build_classifier_model", _builder)
+        s1, s2 = self._settings(), self._settings()
+        m1 = guard_mod.get_classifier_model(s1)
+        m2 = guard_mod.get_classifier_model(s2)
+        assert m1 is not m2
+        assert guard_mod.get_classifier_model(s1) is m1  # stable within one Settings
+        assert count["n"] == 2
+
+    def test_reset_classifier_cache_forces_rebuild(self, monkeypatch):
+        """reset_classifier_cache drops the cached client; the next call rebuilds."""
+        from nyaya_chat import guardrail as guard_mod
+
+        count = {"n": 0}
+
+        def _builder(_s):
+            count["n"] += 1
+            return self._fake_classifier(Intent.LEGAL)
+
+        monkeypatch.setattr(guard_mod, "_build_classifier_model", _builder)
+        settings = self._settings()
+        guard_mod.get_classifier_model(settings)
+        guard_mod.get_classifier_model(settings)
+        assert count["n"] == 1
+        guard_mod.reset_classifier_cache()
+        guard_mod.get_classifier_model(settings)
+        assert count["n"] == 2
+
+
 # ---------------------------------------------------------------------------
 # Public API: classify_intent (two-tier) tests
 # ---------------------------------------------------------------------------

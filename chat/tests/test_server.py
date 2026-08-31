@@ -35,7 +35,10 @@ def _make_test_app(monkeypatch, graph=None, tools=None, intent=None):
     """Build the chat sub-app with the lifespan replaced so startup sets a
     scripted graph/tools without touching NVIDIA or MCP. The guardrail returns
     ``intent`` (LEGAL by default) so tests can script either the agent
-    pipeline or the canned fast path."""
+    pipeline or the canned fast path.
+
+    Health no longer builds the agent, so a scripted graph is seeded directly
+    on ``app.state`` (as a prior request or the host pre-warm would)."""
     from nyaya_chat import agent as agent_mod
     from nyaya_chat import guardrail as guard_mod
     from nyaya_chat import server as srv
@@ -52,7 +55,11 @@ def _make_test_app(monkeypatch, graph=None, tools=None, intent=None):
     monkeypatch.setattr(guard_mod, "classify_intent", _fake_classify)
     monkeypatch.setattr(srv, "classify_intent", _fake_classify, raising=False)
 
-    return srv.create_app()
+    app = srv.create_app()
+    if graph is not None:
+        app.state.graph = graph
+        app.state.tools = tools or []
+    return app
 
 
 class _Chunk:
@@ -84,6 +91,31 @@ def test_health_degraded_when_no_graph(monkeypatch):
         assert r.status_code == 200
         assert r.json()["status"] == "degraded"
         assert r.json()["tools_loaded"] == 0
+
+
+def test_health_degraded_without_building_agent(monkeypatch):
+    """With no agent built, /health returns the degraded payload IMMEDIATELY —
+    the builder is never called (a cold health probe must not pay the
+    seconds-long agent build). The model field is still present for the
+    frontend badge."""
+    from nyaya_chat import agent as agent_mod
+    from nyaya_chat import server as srv
+
+    async def _must_not_build():
+        raise AssertionError("health must not trigger agent construction")
+
+    monkeypatch.setattr(agent_mod, "get_agent", _must_not_build)
+    monkeypatch.setattr(srv, "get_agent", _must_not_build, raising=False)
+
+    app = srv.create_app()
+    with TestClient(app) as c:
+        r = c.get("/health")
+    body = r.json()
+    assert r.status_code == 200
+    assert body["status"] == "degraded"
+    assert body["tools_loaded"] == 0
+    assert body["model"]  # degraded still reports the known model
+    assert "initializ" in (body.get("reason") or "")
 
 
 def test_root_info(monkeypatch):

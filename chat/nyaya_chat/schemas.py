@@ -37,7 +37,14 @@ class ChatRequest(BaseModel):
 
 
 class ChatSubHealthResponse(BaseModel):
-    """Health payload for the chat sub-app (served at GET /chat/health)."""
+    """Health payload for the chat sub-app (served at GET /chat/health).
+
+    ``reason`` explains a ``degraded`` status (agent still initializing, or
+    no corpus tools loaded); ``None`` when healthy. Optional — the field the
+    frontend actually consumes is ``model`` (the model badge in
+    ``ChatPanel.tsx``), which is present in every response.
+    """
     status: Literal["healthy", "degraded"]
     model: str
     tools_loaded: int
+    reason: str | None = None

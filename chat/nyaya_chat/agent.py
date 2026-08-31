@@ -43,7 +43,7 @@ from .config import Settings, get_settings
 from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, astream_with_retry, get_model
 from .schemas_llm import ToolPlan
 from .tool_call_parser import parse_text_tool_calls
-from .tool_content import clean_tool_content, strip_corpus_tags
+from .tool_content import clean_tool_content, prune_list_result, strip_corpus_tags
 from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
@@ -236,6 +236,44 @@ class DedupToolNode:
 # ---------------------------------------------------------------------------
 # Helpers for synthesis: wrap tool results in corpus_text delimiters
 # ---------------------------------------------------------------------------
+
+def _prune_tool_results_for_synthesis(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Prune bulk, non-essential fields from LIST-type tool results.
+
+    **Pruning rule (conservative):** before the message list goes to the
+    synthesis model, only LIST-type tool results (the multi-hit array of
+    ``semantic_query`` — up to 50 hits of snippet text, the ~12K-token worst
+    case per round) are pruned, and only beyond the top hit:
+
+    * Hit 0 survives verbatim (full snippet). Hits 1..N keep their
+      identification fields (act, ref, title, kind, rank, citation) and a
+      300-char snippet — enough to cite the provision or fetch its full text
+      via ``get_section``/``get_article`` in a follow-up round.
+    * Redundant envelope metadata (query echo, source, as_of, offset, limit,
+      fallback_reason) is dropped.
+    * Single-document results — ``get_section``/``get_article``/
+      ``get_judgment``, whose full text the answer must quote and the
+      citation verifier must match — and anything that does not parse as the
+      expected JSON shape pass through UNCHANGED. When in doubt, don't prune.
+
+    The details live in :func:`nyaya_chat.tool_content.prune_list_result`; this
+    only applies it to ToolMessages and rebuilds those whose content changed.
+    Pruning is read-time: it affects the model input, not the dedup cache or
+    the unpruned ``messages`` used for citation verification.
+    """
+    pruned_messages: list[BaseMessage] = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            pruned_content = prune_list_result(m.content, m.name)
+            if pruned_content is not m.content:
+                m = ToolMessage(
+                    content=pruned_content,
+                    tool_call_id=m.tool_call_id,
+                    name=m.name,
+                )
+        pruned_messages.append(m)
+    return pruned_messages
+
 
 def _wrap_tool_results_in_corpus_tags(messages: list[BaseMessage]) -> list[BaseMessage]:
     """Wrap ToolMessage content in <corpus_text>...</corpus_text> tags.
@@ -505,6 +543,7 @@ def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = Tr
 
         # Wrap tool results in <corpus_text> delimiters (prompt-injection defense)
         if has_tools:
+            out_msgs = _prune_tool_results_for_synthesis(out_msgs)
             out_msgs = _wrap_tool_results_in_corpus_tags(out_msgs)
 
         # Stream the synthesis model
@@ -600,6 +639,20 @@ async def get_agent() -> tuple[Any, list[Any]]:
         settings = get_settings()
         _agent_graph, _agent_tools = await _build_agent(settings)
         return _agent_graph, _agent_tools
+
+
+def get_agent_if_ready() -> tuple[Any, list[Any]] | tuple[None, None]:
+    """Return the ALREADY-BUILT agent, or ``(None, None)`` — never builds.
+
+    The fast path for ``/chat/health``: it reports the prewarmed graph when
+    the host lifespan (or an earlier request) built one, and reports the
+    agent as still-initialising otherwise, WITHOUT triggering the seconds-long
+    build on a health probe. Building happens only in ``get_agent`` and
+    ``build_agent``.
+    """
+    if _agent_graph is not None and _agent_tools is not None:
+        return _agent_graph, _agent_tools
+    return None, None
 
 
 def reset_agent() -> None:
