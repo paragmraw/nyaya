@@ -116,3 +116,87 @@ def test_lifespan_close_db_called(monkeypatch):
     with TestClient(app) as client:
         client.get("/health")
     assert closed["called"], "db.close_db was not called on shutdown"
+
+
+# ---------------------------------------------------------------------------
+# Static asset Cache-Control (Task 5 item 4) — the _CachedStaticFiles subclass
+# is exercised directly against a tmp directory, in the same style as the
+# middleware tests in test_security.py.
+# ---------------------------------------------------------------------------
+
+def _make_static_client(tmp_path):
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+    from starlette.testclient import TestClient
+
+    from nyaya.server import _CachedStaticFiles
+
+    web = tmp_path / "out"
+    (web / "_next" / "static").mkdir(parents=True)
+    (web / "_next" / "static" / "x.js").write_text("console.log(1)")
+    (web / "index.html").write_text("<html>home</html>")
+    (web / "robots.txt").write_text("User-agent: *\nAllow: /")
+    return TestClient(Starlette(routes=[Mount("/", app=_CachedStaticFiles(directory=str(web), html=True))]))
+
+
+def test_static_next_static_assets_are_immutable(tmp_path):
+    """_next/static/* (content-hashed) gets the immutable 1-year Cache-Control."""
+    client = _make_static_client(tmp_path)
+    r = client.get("/_next/static/x.js")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
+
+
+def test_static_html_and_robots_get_no_cache(tmp_path):
+    """HTML (and other revalidatable files) get no-cache."""
+    client = _make_static_client(tmp_path)
+    html = client.get("/")
+    assert html.status_code == 200
+    assert html.headers["cache-control"] == "no-cache"
+
+    robots = client.get("/robots.txt")
+    assert robots.headers["cache-control"] == "no-cache"
+
+
+# ---------------------------------------------------------------------------
+# REST truncation (Task 5 item 5): /api/judgments ships snippets by default,
+# with a ?full=1 escape hatch. The db function is faked (mirroring its
+# projection behaviour) so no live DB is needed.
+# ---------------------------------------------------------------------------
+
+def _make_judgment_snapshot(include_text: bool, snippet_chars: int = 300):
+    from nyaya.models import Document
+
+    body = "y" * 2000
+    doc = Document(
+        kind="judgment", ref="AIR 1973 SC 1461", title="Kesavananda",
+        text=body if include_text else body[:snippet_chars], metadata={},
+        source="PRS (CC BY 4.0)",
+    )
+    return [doc], 1
+
+
+def test_judgments_endpoint_defaults_to_snippets(monkeypatch):
+    """/api/judgments ships bounded snippets by default (multi-MB pages otherwise)."""
+    from starlette.testclient import TestClient
+
+    from nyaya import db
+
+    captured: dict[str, object] = {}
+
+    def fake_list_judgments(limit=50, offset=0, include_text=False, snippet_chars=300):
+        captured["include_text"] = include_text
+        return _make_judgment_snapshot(include_text, snippet_chars)
+
+    monkeypatch.setattr(db, "list_judgments", fake_list_judgments)
+
+    with TestClient(app) as client:
+        r = client.get("/api/judgments")
+        assert r.status_code == 200
+        body = r.json()
+        assert captured["include_text"] is False
+        assert len(body["items"][0]["text"]) == 300
+
+        r_full = client.get("/api/judgments?full=1")
+        assert r_full.status_code == 200
+        assert r_full.json()["items"][0]["text"] == "y" * 2000

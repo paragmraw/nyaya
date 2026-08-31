@@ -60,7 +60,9 @@ def register(mcp) -> None:
             "with pagination. Use 'chapter' to filter to one chapter, or 'start' and 'end' "
             "to filter by section-number range (e.g. start='299', end='377'). When filtered "
             "by chapter, the response includes the chapter title. Act names are normalized. "
-            "The ``total`` field gives the true section count for pagination."
+            "The ``total`` field gives the true section count for pagination. "
+            "Text is returned as a short snippet by default; set include_text=true for full "
+            "text (large), or call get_section for a single section's full text."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List sections of an act"},
     )
@@ -73,6 +75,8 @@ def register(mcp) -> None:
         end: str | None = None,
         limit: int = 100,
         offset: int = 0,
+        include_text: bool = False,
+        snippet_chars: int = 300,
     ) -> DocumentsList:
         """List sections of an act, optionally filtered by chapter or range.
 
@@ -83,11 +87,14 @@ def register(mcp) -> None:
             end: Optional ending section number (inclusive), e.g. '377'. Must have a numeric prefix.
             limit: Max sections to return (default 100, max 500).
             offset: Pagination offset (default 0, clamped to >= 0).
+            include_text: Return full text (large). Default false returns snippets.
+            snippet_chars: Snippet length when include_text is false (default 300).
         """
         limit = max(1, min(int(limit), 500))
         offset = max(0, int(offset))
         sections, total, chapter_title = db.list_sections(
-            act, chapter=chapter, start=start, end=end, limit=limit, offset=offset
+            act, chapter=chapter, start=start, end=end, limit=limit, offset=offset,
+            include_text=include_text, snippet_chars=snippet_chars,
         )
         if not sections and db.get_act(act) is None:
             raise NotFound(
@@ -106,45 +113,58 @@ def register(mcp) -> None:
             "List Constitution articles, optionally filtered by Part (e.g. 'Part III' for "
             "Fundamental Rights). Useful for enumerating all articles in a Part before "
             "fetching individual ones with get_article. The ``total`` field gives the true "
-            "article count for pagination."
+            "article count for pagination. Returns short text snippets by default; call "
+            "get_article for an article's full text."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List Constitution articles"},
     )
     @structured_errors
     @run_sync
     def list_articles(part: str | None = None,
-                      limit: int = 100, offset: int = 0) -> DocumentsList:
+                      limit: int = 100, offset: int = 0,
+                      include_text: bool = False,
+                      snippet_chars: int = 300) -> DocumentsList:
         """List Constitution articles.
 
         Args:
             part: Optional Part name substring, e.g. 'Part III', 'Fundamental Rights'.
             limit: Max articles to return (default 100, max 500).
             offset: Pagination offset (default 0, clamped to >= 0).
+            include_text: Return full text (large). Default false returns snippets.
+            snippet_chars: Snippet length when include_text is false (default 300).
         """
         limit = max(1, min(int(limit), 500))
         offset = max(0, int(offset))
-        articles, total = db.list_articles(part=part, limit=limit, offset=offset)
+        articles, total = db.list_articles(
+            part=part, limit=limit, offset=offset,
+            include_text=include_text, snippet_chars=snippet_chars,
+        )
         return DocumentsList(documents=articles, total=total, offset=offset, limit=limit)
 
     @mcp.tool(
         name="list_judgments",
         description=(
             "List landmark judgments in the corpus, with pagination. Use this to browse "
-            "available cases before fetching full text with get_judgment or searching with "
-            "semantic_query."
+            "available cases before searching with semantic_query. Returns text snippets "
+            "by default; call get_judgment for a case's full text."
         ),
         annotations={"readOnlyHint": True, "openWorldHint": False, "title": "List landmark judgments"},
     )
     @structured_errors
     @run_sync
-    def list_judgments(limit: int = 50, offset: int = 0) -> DocumentsList:
+    def list_judgments(limit: int = 50, offset: int = 0,
+                       include_text: bool = False,
+                       snippet_chars: int = 300) -> DocumentsList:
         """List all landmark judgments.
 
         Args:
             limit: Max judgments to return (default 50, max 1000).
             offset: Pagination offset (default 0, clamped to >= 0).
+            include_text: Return full text (large). Default false returns snippets.
+            snippet_chars: Snippet length when include_text is false (default 300).
         """
         limit = max(1, min(int(limit), 1000))
         offset = max(0, int(offset))
-        judgments, total = db.list_judgments(limit=limit, offset=offset)
+        judgments, total = db.list_judgments(limit=limit, offset=offset, include_text=include_text,
+                                             snippet_chars=snippet_chars)
         return DocumentsList(documents=judgments, total=total, offset=offset, limit=limit)
