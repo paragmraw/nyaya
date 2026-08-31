@@ -128,6 +128,29 @@ def test_rerank_search_results_unaffected_by_pool_change(monkeypatch):
     assert fallback is None
 
 
+@pytest.mark.parametrize("raised", [
+    embeddings.EmbeddingUnavailable("nvidia reranker timeout"),
+    RuntimeError("rerank API exploded"),
+])
+def test_rerank_search_falls_back_to_raw_ann_when_reranker_fails(monkeypatch, raised):
+    """If rerank_query raises, the raw ANN results are returned with
+    fallback_reason='reranker_unavailable' instead of raising."""
+    conn = _FakeConn([_doc_row(0), _doc_row(1)])
+    monkeypatch.setattr(db, "_conn", lambda: contextlib.nullcontext(conn))
+    monkeypatch.setattr(embeddings, "embed_query", lambda q: [0.1] * 2048)
+
+    def _boom(q, cands):
+        raise raised
+
+    monkeypatch.setattr(embeddings, "rerank_query", _boom)
+    results, total, fallback = db.rerank_search("murder", limit=5)
+    assert fallback == "reranker_unavailable"
+    assert total == 2
+    assert [r.ref for r in results] == ["302", "302"]
+    # Raw ANN scores survive untouched (no reranker scores substituted).
+    assert all(r.rank == 0.9 for r in results)
+
+
 # ---------------------------------------------------------------------------
 # Item 3 — TTL caches for effectively-static data
 # ---------------------------------------------------------------------------
