@@ -5,19 +5,25 @@ yields ``StreamPart`` dicts with ``type``/``ns``/``data``. We project them
 into typed SSE events the frontend parses:
 
   event: meta        data: {"request_id": "..."}   — request id (server.py)
-  event: status      data: {"msg": "analyzing"}    — stream opened (server.py)
-  event: status      data: {"msg": "searching"}    — supervisor → tool calls
-  event: status      data: {"msg": "composing"}    — tools done → synthesis
+  event: status      data: {"msg": "...", "rid": "..."} — phase transition (all emitters)
   event: plan        data: {"content": "..."}       — supervisor plan text
   event: token       data: {"content": "..."}       — synthesis LLM token deltas
   event: reasoning   data: {"content": "..."}       — reasoning_content deltas
   event: tool_start  data: {"name","args","id"}     — the model called a tool
   event: tool_result data: {"name","summary","id"}  — a tool finished
-  event: citations data: {"citations": [...]}       — verified citations (post-synthesis)
-  event: correction data: {"content": "..."}        — corrected answer (post-stream fixes)
+  event: citations data: {"citations": [...]}       — citations parsed from the VERIFIED answer
+  event: correction data: {"content": "..."}        — the verified answer, ONLY when it
+                                                      differs from the raw streamed tokens
   event: ping        data: {"ts": 1234567890}       — keepalive (every ~15s)
-  event: error       data: {"message": "..."}       — a node threw
+  event: error       data: {"message","detail","rid"} — a node threw (unified error shape)
   event: done        data: {}                        — stream complete
+
+Citation verification runs ONCE, in the synthesis node (agent.py); the
+verified AIMessage it returns is the authoritative answer. This module never
+re-verifies: it derives the ``citations`` event from the verified message and
+emits ``correction`` only when the raw accumulated token text differs from it
+(a plain string comparison). What the client ends with therefore equals what
+the reflection check routes on.
 
 We use **dual stream mode** (``["messages", "updates"]``):
 
@@ -39,10 +45,13 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
+
+from .citations import parse_citations
 
 log = logging.getLogger("nyaya_chat.streaming")
 
@@ -94,6 +103,7 @@ async def stream_turn(
     messages: list[Any],
     *,
     keepalive_interval: float = 0,
+    rid: str = "",
 ) -> AsyncIterator[bytes]:
     """Yield SSE-encoded bytes for a single agent turn.
 
@@ -102,17 +112,23 @@ async def stream_turn(
     per-node exceptions and emits an ``error`` event followed by ``done`` so
     the client always sees a clean stream end.
 
+    ``rid`` is the request id echoed on every ``status`` and ``error`` event;
+    a fresh one is generated when the caller (server.py) doesn't supply it so
+    the error contract's ``rid`` is always non-blank.
+
     If ``keepalive_interval`` > 0, emits a ``ping`` event every N seconds
     to prevent proxy timeouts. The ping is emitted between graph chunks
     using asyncio timeout on the stream iteration.
     """
+    if not rid:
+        rid = uuid.uuid4().hex
     try:
         pending_tool_calls: dict[str, dict[str, Any]] = {}
         emitted_phases: set[str] = set()
-        # Track answer text and tool results for the citations event
+        # Raw synthesis token text (what the client has already rendered) and
+        # the synthesis node's VERIFIED answer (the authoritative final text).
         full_answer_parts: list[str] = []
-        tool_result_contents: list[str] = []
-        had_any_tool_calls = False
+        verified_answer: str | None = None
 
         # Set up keepalive ping task if interval is configured
         ping_queue: asyncio.Queue[bool] | None = None
@@ -180,7 +196,6 @@ async def stream_turn(
                     if isinstance(msg_chunk, AIMessage):
                         calls = getattr(msg_chunk, "tool_calls", None) or []
                         for tc in calls:
-                            had_any_tool_calls = True
                             tc_id = tc.get("id") or tc.get("name", "")
                             pending_tool_calls[tc_id] = {
                                 "id": tc_id,
@@ -192,14 +207,6 @@ async def stream_turn(
                         tc_id = getattr(msg_chunk, "tool_call_id", "")
                         name = getattr(msg_chunk, "name", "") or tc_id
                         summary = _summarise_tool_result(getattr(msg_chunk, "content", ""))
-                        # Track tool content for citation verification
-                        raw_content = getattr(msg_chunk, "content", "")
-                        if isinstance(raw_content, str):
-                            # Strip corpus_text wrapper if present
-                            import re as _re
-                            stripped_content = _re.sub(r"^<corpus_text>\n?", "", raw_content)
-                            stripped_content = _re.sub(r"\n?</corpus_text>$", "", stripped_content)
-                            tool_result_contents.append(stripped_content)
                         yield _sse("tool_result", {"id": tc_id, "name": name, "summary": summary})
 
                 elif ptype == "updates" and isinstance(data, dict):
@@ -215,15 +222,28 @@ async def stream_turn(
                             and getattr(sup_msgs[-1], "tool_calls", None)
                         )
                         if has_tools:
-                            yield _sse("status", {"msg": "searching"})
+                            yield _sse("status", {"msg": "searching", "rid": rid})
                             emitted_phases.add("searching")
                         elif "composing" not in emitted_phases:
-                            yield _sse("status", {"msg": "composing"})
+                            yield _sse("status", {"msg": "composing", "rid": rid})
                             emitted_phases.add("composing")
 
                     elif "tools" in data and "composing" not in emitted_phases:
-                        yield _sse("status", {"msg": "composing"})
+                        yield _sse("status", {"msg": "composing", "rid": rid})
                         emitted_phases.add("composing")
+
+                    # The synthesis node's update carries its VERIFIED
+                    # AIMessage (verification already ran inside the node).
+                    # That message is the authoritative answer: the last
+                    # synthesis round wins ("agent" is the degraded no-tools
+                    # graph's synthesis node name).
+                    syn_out = data.get("synthesis") or data.get("agent")
+                    if isinstance(syn_out, dict):
+                        syn_msgs = syn_out.get("messages", [])
+                        if syn_msgs:
+                            content = getattr(syn_msgs[-1], "content", None)
+                            if isinstance(content, str) and content.strip():
+                                verified_answer = content
 
         finally:
             if ping_task is not None:
@@ -233,53 +253,36 @@ async def stream_turn(
                 except asyncio.CancelledError:
                     pass
 
-        # After the stream completes, emit a structured citations event with
-        # the verified citation list parsed from the answer text. This gives
-        # the frontend authoritative citation data alongside the inline markers.
+        # Post-stream events. The synthesis node's verified AIMessage is the
+        # authoritative answer: derive the citations event from it (parsed,
+        # never re-verified) and emit a correction ONLY when the raw
+        # accumulated token text differs from it (plain string comparison).
+        # When they match the client already holds the final text, so no
+        # correction event is emitted at all.
         full_answer = "".join(full_answer_parts)
-        if full_answer and had_any_tool_calls:
+        if verified_answer is not None:
             try:
-                from .citations import parse_citations
-                cites = parse_citations(full_answer)
+                cites = parse_citations(verified_answer)
                 if cites:
-                    citations_data = [
-                        {"act": c.act, "ref": c.ref} for c in cites
-                    ]
-                    yield _sse("citations", {"citations": citations_data})
+                    yield _sse("citations", {
+                        "citations": [{"act": c.act, "ref": c.ref} for c in cites],
+                    })
             except Exception as exc:
                 log.warning("citations event emission failed: %s", exc)
 
-            # Post-stream correction: re-verify citations on the streamed
-            # text (the agent's verify_citations runs on the final AIMessage
-            # but the streamed tokens may differ) and check for missing
-            # disclaimer. Emit a correction event if anything changed.
-            corrected = full_answer
-            try:
-                from .citations import verify_citations
-                verified = verify_citations(
-                    corrected, tool_result_contents, had_tool_calls=True,
-                )
-                if verified != corrected:
-                    corrected = verified
-            except Exception as exc:
-                log.warning("post-stream citation re-verification failed: %s", exc)
-
-            # Check for missing disclaimer
-            if "not legal advice" not in corrected.lower():
-                corrected = corrected.rstrip() + (
-                    "\n\n*This is not legal advice; verify citations before filing.*"
-                )
-
-            # Emit correction if anything changed
-            if corrected != full_answer:
-                yield _sse("correction", {"content": corrected})
+            if full_answer != verified_answer:
+                yield _sse("correction", {"content": verified_answer})
 
     except asyncio.CancelledError:
         log.info("stream cancelled by client")
         raise
     except Exception as exc:
         log.error("agent stream failed: %s", exc, exc_info=True)
-        yield _sse("error", {"message": "agent_error", "detail": "internal server error"})
+        yield _sse("error", {
+            "message": "agent_error",
+            "detail": "internal server error",
+            "rid": rid,
+        })
 
     yield _sse("done", {})
 

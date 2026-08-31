@@ -25,6 +25,12 @@ log = logging.getLogger("nyaya_chat.llm")
 _model_instance: Any = None
 _model_initialised = False
 
+# The one-line disclaimer every answer must end with (SYSTEM_PROMPT rule 5).
+# Defined ONCE here: the synthesis prompt quotes it and the synthesis node
+# (agent.py) appends it to the verified answer when the model omitted it, so
+# the streamed text and the verified message agree by construction.
+DISCLAIMER = "This is not legal advice; verify citations before filing."
+
 # System prompt for the supervisor: plans which tools to call, then delegates.
 # It must emit all tool calls in a single AIMessage for parallel execution.
 # It does not answer the question itself.
@@ -92,8 +98,7 @@ SYSTEM_PROMPT = (
     "*italics* sparingly for emphasis only.\n"
     "   f. Use a > blockquote for one short, important takeaway per answer.\n"
     "   g. Keep paragraphs to 2-4 sentences. Avoid walls of text.\n"
-    "5. Add a one-line disclaimer at the end: \"This is not legal advice; verify "
-    'citations before filing."'
+    "5. Add a one-line disclaimer at the end: \"" + DISCLAIMER + "\""
 )
 
 

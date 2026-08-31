@@ -40,10 +40,11 @@ request-id, rate limiting, body-size cap) is provided by the host.
 - **LLM**: `ChatNVIDIA`, reads `NVIDIA_API_KEY` from the environment. The
   default model is `nvidia/nemotron-3.5-lightning-30b-a3b` (see `config.py`).
   The supervisor and synthesis phases each get their own model instance with
-  distinct token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=4096`).
+  distinct token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=2048`).
 - **Streaming**: LangGraph v2 dual stream mode (`["messages", "updates"]`)
   -> typed SSE events (`status`, `plan`, `token`, `reasoning`, `tool_start`,
-  `tool_result`, `error`, `done`). Supervisor node content is routed to
+  `tool_result`, `citations`, `correction`, `ping`, `error`, `done`).
+  Supervisor node content is routed to
   `plan` events so it doesn't mix with the synthesis answer (`token` events).
   Phase transitions emit `status` events (`analyzing` -> `searching` ->
   `composing`).
@@ -86,17 +87,24 @@ lives as Python constants in `chat/nyaya_chat/config.py`.
 
 ### `POST /chat/turn`
 **Body**: `{"message": "...", "history": [{"role":"user","content":"..."}, ...]}`
-**Response**: `text/event-stream` of typed SSE events:
+**Response**: `text/event-stream` of typed SSE events. On failure before the
+stream opens, the endpoint returns a JSON error body in the SAME unified
+shape as the SSE `error` event: `{"message": "...", "detail": "...", "rid": "..."}`
+(e.g. HTTP 503 `{"message": "agent_unavailable", "detail": "...", "rid": "..."}`).
 
 | event | data | meaning |
 |---|---|---|
-| `status` | `{"msg": "analyzing"\|"searching"\|"composing"}` | phase transition (supervisor -> tools -> synthesis) |
+| `meta` | `{"request_id": "..."}` | request id (first event) |
+| `status` | `{"msg": "analyzing"\|"searching"\|"composing", "rid": "..."}` | phase transition (supervisor -> tools -> synthesis); every status event echoes the request id |
 | `plan` | `{"content": "..."}` | supervisor plan text (routed separately from the answer) |
 | `token` | `{"content": "..."}` | synthesis LLM token delta (the final answer) |
 | `reasoning` | `{"content": "..."}` | reasoning_content delta (forward-compat for reasoning-capable models) |
 | `tool_start` | `{"id","name","args"}` | the model called a tool |
 | `tool_result` | `{"id","name","summary"}` | a tool returned |
-| `error` | `{"message", "detail"}` | a node failed |
+| `citations` | `{"citations": [{"act": "...", "ref": "..."}]}` | citations parsed from the synthesis node's VERIFIED answer (no re-verification stream-side) |
+| `correction` | `{"content": "..."}` | the verified answer, emitted ONLY when it differs from the raw streamed tokens; absent when they match |
+| `ping` | `{"ts": 123}` | keepalive (every ~15s) |
+| `error` | `{"message", "detail", "rid"}` | a node failed (unified error shape) |
 | `done` | `{}` | stream complete |
 
 ## Tests

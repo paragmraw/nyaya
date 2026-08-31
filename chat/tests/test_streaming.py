@@ -5,8 +5,26 @@ from __future__ import annotations
 import json
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from nyaya_chat.streaming import _sse, _summarise_tool_result, stream_turn
+
+
+def _parse_events(out: bytes) -> list[tuple[str, dict]]:
+    """Parse SSE bytes into a list of (event, payload) tuples."""
+    events: list[tuple[str, dict]] = []
+    for block in out.decode("utf-8").split("\n\n"):
+        if not block.strip():
+            continue
+        event = "message"
+        data = ""
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                event = line[len("event:"):].strip()
+            elif line.startswith("data:"):
+                data = line[len("data:"):]
+        events.append((event, json.loads(data)))
+    return events
 
 
 def test_sse_format():
@@ -95,13 +113,28 @@ async def test_stream_turn_emits_error_on_exception():
             raise RuntimeError("boom")
             yield  # makes the function an async generator
 
-    out = b"".join([c async for c in stream_turn(_Boom(), [])])
+    out = b"".join([c async for c in stream_turn(_Boom(), [], rid="rid-err")])
     assert b"event: error" in out
     payload_line = [ln for ln in out.split(b"\n") if ln.startswith(b"data:")][0]
     data = json.loads(payload_line[len(b"data: "):])
     assert data["message"] == "agent_error"
     assert data["detail"] == "internal server error"
+    assert data["rid"] == "rid-err"
     assert out.endswith(b"event: done\ndata: {}\n\n")
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_error_rid_generated_when_not_supplied():
+    """The error contract's rid is always non-blank, even without an explicit rid."""
+    class _Boom:
+        async def astream(self, *a, **kw):
+            raise RuntimeError("boom")
+            yield  # makes the function an async generator
+
+    out = b"".join([c async for c in stream_turn(_Boom(), [])])
+    errors = [p for e, p in _parse_events(out) if e == "error"]
+    assert len(errors) == 1
+    assert errors[0]["rid"]  # non-blank
 
 
 @pytest.mark.asyncio
@@ -376,3 +409,101 @@ async def test_stream_turn_does_not_emit_duplicate_status():
     out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
     # Should only have one 'searching' status event
     assert out.count(b'event: status') == 1
+
+
+# ── Unified SSE contract: rid on every status event, {message, detail, rid}
+#    errors, citations derived from the verified message, correction only on
+#    diff ──
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_status_events_carry_rid():
+    """Every status event (all emitters in stream_turn) echoes the request id."""
+    parts = [
+        {"type": "updates", "data": {"supervisor": {"messages": [_ai_supervisor_with_tools()]}}},
+        {"type": "updates", "data": {"tools": {"messages": [_tool_msg()]}}},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [], rid="rid-1")])
+    statuses = [p for e, p in _parse_events(out) if e == "status"]
+    assert [p["msg"] for p in statuses] == ["searching", "composing"]
+    assert all(p["rid"] == "rid-1" for p in statuses)
+
+
+def _synthesis_round(raw: str, verified: str) -> list[dict]:
+    """Scripted parts: synthesis tokens streamed, then the node's verified update."""
+    return [
+        {"type": "messages", "data": (_FakeChunk(raw), {"langgraph_node": "synthesis"})},
+        {"type": "updates", "data": {"synthesis": {"messages": [AIMessage(content=verified)]}}},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_citations_derived_from_verified_message():
+    """The citations event parses the VERIFIED answer, not the raw streamed text."""
+    raw = "Murder is punishable [[act: IPC, ref: s. 302]] and [[act: GhostAct, ref: 9]]."
+    verified = "Murder is punishable [[act: IPC, ref: s. 302]]."
+    out = b"".join([c async for c in stream_turn(_FakeGraph(_synthesis_round(raw, verified)), [])])
+    citations = [p for e, p in _parse_events(out) if e == "citations"]
+    assert citations == [{"citations": [{"act": "IPC", "ref": "s. 302"}]}]
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_no_citations_event_when_verified_has_none():
+    verified = "No citations here."
+    out = b"".join([c async for c in stream_turn(_FakeGraph(_synthesis_round(verified, verified)), [])])
+    assert b"event: citations" not in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_correction_emitted_only_when_raw_differs():
+    """correction carries the verified answer, ONLY when raw != verified."""
+    raw = "Answer."
+    verified = "Answer.\n\n*This is not legal advice; verify citations before filing.*"
+    out = b"".join([c async for c in stream_turn(_FakeGraph(_synthesis_round(raw, verified)), [])])
+    corrections = [p for e, p in _parse_events(out) if e == "correction"]
+    assert corrections == [{"content": verified}]
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_no_correction_when_raw_equals_verified():
+    """When the streamed tokens already match the verified answer, no correction."""
+    answer = "Answer with citation [[act: IPC, ref: s. 302]]."
+    out = b"".join([c async for c in stream_turn(_FakeGraph(_synthesis_round(answer, answer)), [])])
+    assert b"event: correction" not in out
+    # Citations are still derived from the verified message.
+    citations = [p for e, p in _parse_events(out) if e == "citations"]
+    assert citations == [{"citations": [{"act": "IPC", "ref": "s. 302"}]}]
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_no_post_stream_disclaimer_append():
+    """The disclaimer lives in the verified message; the streamer never appends it."""
+    raw = "Answer without a disclaimer."
+    out = b"".join([c async for c in stream_turn(_FakeGraph(_synthesis_round(raw, raw)), [])])
+    assert b"not legal advice" not in out
+    assert b"event: correction" not in out
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_last_synthesis_round_wins():
+    """With reflection, the LAST verified synthesis round is authoritative."""
+    parts = [
+        *_synthesis_round("Round 1 answer.", "Round 1 verified."),
+        *_synthesis_round("Round 2 answer.", "Round 2 verified."),
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    corrections = [p for e, p in _parse_events(out) if e == "correction"]
+    assert corrections == [{"content": "Round 2 verified."}]
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_degraded_agent_node_verified_answer_used():
+    """The degraded no-tools graph names its synthesis node 'agent'; its update
+    is still treated as the verified answer."""
+    parts = [
+        {"type": "messages", "data": (_FakeChunk("raw"), {"langgraph_node": "agent"})},
+        {"type": "updates", "data": {"agent": {"messages": [AIMessage(content="verified")]}}},
+    ]
+    out = b"".join([c async for c in stream_turn(_FakeGraph(parts), [])])
+    corrections = [p for e, p in _parse_events(out) if e == "correction"]
+    assert corrections == [{"content": "verified"}]

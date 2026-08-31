@@ -5,14 +5,17 @@
 //
 // SSE events:
 //   event: meta        data: {"request_id": "..."}       — request id
-//   event: status      data: {"msg": "analyzing"|"searching"|"composing"} — phase
+//   event: status      data: {"msg": "analyzing"|"searching"|"composing", "rid": "..."} — phase
 //   event: plan        data: {"content": "..."}          — supervisor plan text
 //   event: token       data: {"content": "..."}          — synthesis LLM token deltas
 //   event: reasoning   data: {"content": "..."}          — reasoning_content deltas
 //   event: tool_start  data: {"id","name","args"}        — a tool was called
 //   event: tool_result data: {"id","name","summary"}     — a tool returned
+//   event: citations   data: {"citations": [{act, ref}]} — citations from the verified answer
+//   event: correction  data: {"content": "..."}          — the verified answer, only when
+//                                                           it differs from the streamed tokens
 //   event: ping        data: {"ts": ...}                  — keepalive
-//   event: error       data: {"message","detail"}         — failure
+//   event: error       data: {"message","detail","rid"}   — failure
 //   event: done        data: {}                           — stream complete
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -47,15 +50,24 @@ function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-function parseSseBlock(block: string): { event: string; data: string } | null {
+// Parse one SSE block (lines separated by \n, blocks by \n\n) into its event
+// name and data payload. Per the SSE spec: multiple `data:` lines are joined
+// with a literal newline, and only the single leading space after `data:` is
+// stripped (`data: x` → `x`, but `data:  x` keeps the second space). The
+// backend's encoder emits single-line JSON `data:` payloads, so this is a
+// hardening for well-formed multi-line events, not a behavior change.
+export function parseSseBlock(block: string): { event: string; data: string } | null {
   let event = "message";
-  let data = "";
+  const dataLines: string[] = [];
   for (const line of block.split("\n")) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
-    else if (line.startsWith("data:")) data += line.slice(5).trim();
+    else if (line.startsWith("data:")) {
+      const d = line.slice(5);
+      dataLines.push(d.startsWith(" ") ? d.slice(1) : d);
+    }
   }
-  if (!data) return null;
-  return { event, data };
+  if (dataLines.length === 0) return null;
+  return { event, data: dataLines.join("\n") };
 }
 
 const STREAM_TIMEOUT_MS = 90_000;
@@ -177,8 +189,20 @@ export function useChat(): UseChat {
         signal: controller.signal,
       });
       if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(`${res.status} ${res.statusText} ${body.slice(0, 120)}`);
+        // Non-2xx responses carry the unified error shape {message, detail, rid}
+        // (e.g. the 503 agent-unavailable body). Read `message`; never the old
+        // `error` key. Fall back to the status line for non-JSON bodies.
+        let msg = `${res.status} ${res.statusText}`;
+        try {
+          const body: unknown = await res.json();
+          if (body && typeof body === "object" && "message" in body) {
+            const m = (body as { message?: unknown }).message;
+            if (typeof m === "string" && m) msg = m;
+          }
+        } catch {
+          /* non-JSON body: keep the status-line message */
+        }
+        throw new Error(msg);
       }
       if (!res.body) throw new Error("no response body");
 
@@ -264,8 +288,10 @@ export function useChat(): UseChat {
               break;
             }
             case "error": {
+              // Unified error shape: {message, detail, rid}.
               const msg = (payload.message as string) || "agent_error";
-              setError(msg);
+              const detail = (payload.detail as string) || "";
+              setError(detail ? `${msg}: ${detail}` : msg);
               updateAssistant({ error: msg });
               break;
             }

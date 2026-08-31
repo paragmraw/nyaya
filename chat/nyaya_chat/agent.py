@@ -707,10 +707,12 @@ def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = Tr
 
     The synthesis node receives the full message history (including tool
     results as ToolMessages), wraps tool results in <corpus_text> delimiters,
-    and produces the final grounded answer. If citation verification is
-    enabled, it verifies and strips ungrounded citations after streaming.
+    and produces the final grounded answer. The returned AIMessage is THE
+    authoritative answer: citation verification (if enabled) runs here, once,
+    and the disclaimer is appended here when the model omitted it, so the
+    streamed-and-verified text is final.
     """
-    from .llm import SYSTEM_PROMPT
+    from .llm import DISCLAIMER, SYSTEM_PROMPT
 
     async def _synthesis(state: ChatState) -> dict[str, Any]:
         from .observability import get_langfuse_callbacks
@@ -741,17 +743,28 @@ def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = Tr
             final = chunks[0]
             for chunk in chunks[1:]:
                 final = final + chunk
-            answer_text = final.content if isinstance(final.content, str) else str(final.content)
+            raw_text = final.content if isinstance(final.content, str) else str(final.content)
+            answer_text = raw_text
 
-            # Citation verification: strip ungrounded citations
+            # Citation verification: the ONE authoritative pass. The verified
+            # AIMessage returned here is the final answer — the SSE streamer
+            # derives the citations event from it and only compares (never
+            # re-verifies) when deciding whether to emit a correction.
             if settings.citation_verification and has_tools:
                 tool_contents = _get_tool_content_list(messages)
                 had_tools = _had_tool_calls(messages)
-                verified = _verify_and_strip(
+                answer_text = _verify_and_strip(
                     answer_text, tool_contents, had_tools=had_tools,
                 )
-                if verified != answer_text:
-                    final = AIMessage(content=verified)
+
+            # The disclaimer is part of the verified message (not appended
+            # post-stream), so the streamed text, the client's final state,
+            # and the reflection routing all see the same answer.
+            if "not legal advice" not in answer_text.lower():
+                answer_text = answer_text.rstrip() + f"\n\n*{DISCLAIMER}*"
+
+            if answer_text != raw_text:
+                final = AIMessage(content=answer_text)
 
             # Increment round counter for reflection routing
             current_round = state.get("round", 0) + 1

@@ -41,6 +41,11 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 def parse_sse_stream(raw_bytes: bytes) -> list[dict[str, Any]]:
+    """Parse raw SSE bytes into a list of {event, data} dicts.
+
+    Per the SSE spec: multiple ``data:`` lines are joined with a newline and
+    only the single leading space after ``data:`` is stripped.
+    """
     events: list[dict[str, Any]] = []
     text = raw_bytes.decode("utf-8")
     blocks = text.split("\n\n")
@@ -49,13 +54,15 @@ def parse_sse_stream(raw_bytes: bytes) -> list[dict[str, Any]]:
         if not block:
             continue
         event = "message"
-        data = ""
+        data_lines: list[str] = []
         for line in block.split("\n"):
             if line.startswith("event:"):
                 event = line[6:].strip()
             elif line.startswith("data:"):
-                data += line[5:].strip()
-        if data:
+                seg = line[5:]
+                data_lines.append(seg[1:] if seg.startswith(" ") else seg)
+        if data_lines:
+            data = "\n".join(data_lines)
             try:
                 payload = json.loads(data)
             except json.JSONDecodeError:
@@ -88,8 +95,13 @@ class TestResult:
     citations: list[dict[str, str]] = field(default_factory=list)
     request_id: str = ""
     statuses: list[str] = field(default_factory=list)
+    # Contract violations: status events missing a non-blank rid
+    status_missing_rid: int = 0
     latency_ms: float = 0
+    # Error (unified shape: {message, detail, rid})
     error: str | None = None
+    error_detail: str = ""
+    error_rid: str = ""
     checks: list[tuple[str, bool, str]] = field(default_factory=list)
 
 
@@ -158,6 +170,8 @@ def extract_result(raw: bytes, events: list[dict[str, Any]]) -> TestResult:
             result.request_id = data.get("request_id", "")
         elif event_type == "status":
             result.statuses.append(data.get("msg", ""))
+            if not data.get("rid"):
+                result.status_missing_rid += 1
         elif event_type == "plan":
             plan_parts.append(data.get("content", ""))
         elif event_type == "token":
@@ -166,8 +180,14 @@ def extract_result(raw: bytes, events: list[dict[str, Any]]) -> TestResult:
             cites = data.get("citations", [])
             if cites:
                 result.citations = cites
+        elif event_type == "correction":
+            # The verified answer replaces the raw streamed tokens (matches
+            # the frontend, which swaps the message content on correction).
+            answer_parts = [data.get("content", "")]
         elif event_type == "error":
             result.error = data.get("message", "unknown_error")
+            result.error_detail = data.get("detail", "")
+            result.error_rid = data.get("rid", "")
         elif event_type == "tool_start":
             tc_id = data.get("id", "")
             tc_name = data.get("name", "")
@@ -285,6 +305,24 @@ def run_checks(result: TestResult, test: TestCase) -> None:
 
     has_status = len(result.statuses) > 0
     result.checks.append(("has_status", has_status, f"statuses={result.statuses}"))
+
+    # Unified SSE contract: every status event carries a non-blank rid
+    result.checks.append((
+        "status_events_have_rid",
+        result.status_missing_rid == 0,
+        f"missing_rid={result.status_missing_rid}",
+    ))
+
+    # Unified error shape: {message, detail, rid}
+    error_events = [ev for ev in result.events if ev["event"] == "error"]
+    if error_events:
+        d = error_events[0]["data"]
+        error_shape_ok = (
+            isinstance(d.get("message"), str)
+            and isinstance(d.get("detail"), str)
+            and bool(d.get("rid"))
+        )
+        result.checks.append(("error_shape", error_shape_ok, json.dumps(d)[:120]))
 
     # Latency check
     latency_ok = result.latency_ms <= test.max_latency_ms

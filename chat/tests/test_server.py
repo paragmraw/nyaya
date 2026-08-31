@@ -9,13 +9,33 @@ not tested here.
 
 from __future__ import annotations
 
+import json
+
 from fastapi.testclient import TestClient
 
 
-def _make_test_app(monkeypatch, graph=None, tools=None):
+def _parse_sse(raw: bytes) -> list[tuple[str, dict]]:
+    """Parse SSE bytes into a list of (event, payload) tuples."""
+    events: list[tuple[str, dict]] = []
+    for block in raw.decode("utf-8").split("\n\n"):
+        if not block.strip():
+            continue
+        event = "message"
+        data = ""
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                event = line[len("event:"):].strip()
+            elif line.startswith("data:"):
+                data = line[len("data:"):]
+        events.append((event, json.loads(data)))
+    return events
+
+
+def _make_test_app(monkeypatch, graph=None, tools=None, intent=None):
     """Build the chat sub-app with the lifespan replaced so startup sets a
-    scripted graph/tools without touching NVIDIA or MCP. The guardrail is
-    bypassed so scripted graph output is used directly."""
+    scripted graph/tools without touching NVIDIA or MCP. The guardrail returns
+    ``intent`` (LEGAL by default) so tests can script either the agent
+    pipeline or the canned fast path."""
     from nyaya_chat import agent as agent_mod
     from nyaya_chat import guardrail as guard_mod
     from nyaya_chat import server as srv
@@ -25,7 +45,7 @@ def _make_test_app(monkeypatch, graph=None, tools=None):
 
     async def _fake_classify(message, model, settings):
         from nyaya_chat.guardrail import Intent
-        return Intent.LEGAL
+        return intent or Intent.LEGAL
 
     def _fake_get_model(_=None):
         return None
@@ -101,11 +121,42 @@ def test_turn_missing_message_422(monkeypatch):
 
 
 def test_turn_no_graph_503(monkeypatch):
+    """The 503 JSON body uses the unified error shape {message, detail, rid}."""
     app = _make_test_app(monkeypatch, graph=None, tools=[])
     with TestClient(app) as c:
         r = c.post("/turn", json={"message": "hi"})
         assert r.status_code == 503
-        assert r.json()["error"] == "agent_unavailable"
+        body = r.json()
+        assert body["message"] == "agent_unavailable"
+        assert body["detail"] == "chat agent not available"
+        assert body["rid"]  # non-blank request id
+        assert "error" not in body  # the old `error` key is gone
+
+
+def test_turn_guardrail_fast_path_unified_shapes(monkeypatch):
+    """The canned fast path emits the unified shapes: meta, status with rid,
+    token, done — and no citations/correction/error events."""
+    from nyaya_chat.guardrail import Intent, get_canned_response
+
+    app = _make_test_app(monkeypatch, graph=_Graph(), tools=["t"], intent=Intent.GREETING)
+    with TestClient(app) as c:
+        with c.stream("POST", "/turn", json={"message": "hello"}) as r:
+            assert r.status_code == 200
+            body = b"".join(r.iter_bytes())
+
+    events = _parse_sse(body)
+    assert [e for e, _ in events] == ["meta", "status", "status", "token", "done"]
+    rid = events[0][1]["request_id"]
+    assert rid
+    assert r.headers.get("X-Request-ID") == rid
+    statuses = [p for e, p in events if e == "status"]
+    assert [p["msg"] for p in statuses] == ["analyzing", "composing"]
+    assert all(p["rid"] == rid for p in statuses)
+    tokens = [p for e, p in events if e == "token"]
+    assert tokens == [{"content": get_canned_response(Intent.GREETING)}]
+    # The fast path is canned: no verification-derived events, no errors.
+    assert not any(e in ("citations", "correction", "error") for e, _ in events)
+    assert events[-1] == ("done", {})
 
 
 def test_turn_streams_sse(monkeypatch):

@@ -434,3 +434,73 @@ async def test_dedup_state_does_not_leak_across_requests():
     msgs3 = result3["messages"]
     assert len(msgs3) == 2
     assert all("result(302)" in str(m.content) for m in msgs3)
+
+
+# ---------------------------------------------------------------------------
+# Synthesis node: the single authoritative verification + disclaimer pass
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_appends_disclaimer_when_missing(fake_model, settings):
+    """The verified message carries the disclaimer — it is NOT appended
+    post-stream by the SSE layer."""
+    from langchain_core.messages import HumanMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+    from nyaya_chat.llm import DISCLAIMER
+
+    fake_model.responses = [AIMessage(content="Punishment for murder is death.")]
+    node = _make_synthesis_node(fake_model, settings, has_tools=False)
+    out = await node({"messages": [HumanMessage(content="What is IPC 302?")]})
+    content = out["messages"][0].content
+    assert content.startswith("Punishment for murder is death.")
+    assert content.endswith(f"\n\n*{DISCLAIMER}*")
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_does_not_duplicate_disclaimer(fake_model, settings):
+    """When the model already emitted the disclaimer, it is left as-is."""
+    from langchain_core.messages import HumanMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+    from nyaya_chat.llm import DISCLAIMER
+
+    answer = "Answer.\n\nThis is not legal advice; verify citations before filing."
+    fake_model.responses = [AIMessage(content=answer)]
+    node = _make_synthesis_node(fake_model, settings, has_tools=False)
+    out = await node({"messages": [HumanMessage(content="q")]})
+    assert out["messages"][0].content == answer
+    assert out["messages"][0].content.count(DISCLAIMER) == 1
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_verifies_and_disclaims_in_one_pass(fake_model, settings):
+    """Verification (strip ungrounded citations) and the disclaimer append both
+    happen in the synthesis node, so the returned message is final."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+    from nyaya_chat.llm import DISCLAIMER
+
+    fake_model.responses = [AIMessage(
+        content="Grounded [[act: IPC, ref: s. 302]] and ungrounded [[act: GhostAct, ref: 1]]."
+    )]
+    node = _make_synthesis_node(fake_model, settings, has_tools=True)
+    state = {
+        "messages": [
+            HumanMessage(content="What is IPC 302?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            ]),
+            ToolMessage(
+                content='{"act": "IPC", "ref": "s. 302", "kind": "section", "text": "..."}',
+                tool_call_id="tc1", name="get_section",
+            ),
+        ],
+    }
+    out = await node(state)
+    content = out["messages"][0].content
+    assert "[[act: IPC, ref: s. 302]]" in content
+    assert "GhostAct" not in content
+    assert content.endswith(f"\n\n*{DISCLAIMER}*")
