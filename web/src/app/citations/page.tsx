@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { CitationAnatomy } from "@/components/CitationsPageClient";
+import CitationAnatomy from "@/components/CitationAnatomy";
 import Breadcrumb from "@/components/Breadcrumb";
 import { FORMAT_CARDS, LIMITS, PIPE_STEPS } from "@/lib";
 import StructuredData, { citationsSchema, faqSchema } from "@/components/StructuredData";
+import { pageOpenGraph } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Citations",
   description:
     "How Nyaya structures, verifies, and links citations. Supported formats: Constitution articles, statute sections, and case law with neutral citations.",
-  openGraph: {
+  openGraph: pageOpenGraph({
     title: "Nyaya Citations - Verifiable Legal References",
     description:
       "How Nyaya structures, verifies, and links citations. Supported formats: Constitution articles, statute sections, and case law with neutral citations.",
-    type: "website",
-  },
+  }),
 };
 
 export default function CitationsPage() {

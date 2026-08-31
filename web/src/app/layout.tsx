@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
@@ -6,6 +6,9 @@ import Topnav from "@/components/Topnav";
 import Footer from "@/components/Footer";
 import RouteBodyClass from "@/components/RouteBodyClass";
 import { WebVitals } from "@/lib/analytics";
+import { siteSchema } from "@/lib/schema";
+import { SITE, OG_IMAGE } from "@/lib/site";
+import { themePrepaintScript } from "@/lib/theme";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -28,7 +31,7 @@ const jetbrainsMono = JetBrains_Mono({
   display: "fallback",
 });
 
-export const metadataBase = new URL("https://nyaya.example.com");
+export const metadataBase = new URL(SITE);
 
 export const metadata: Metadata = {
   title: {
@@ -42,13 +45,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_IN",
-    url: "https://nyaya.example.com",
+    url: SITE,
     siteName: "Nyaya",
     title: "Nyaya · Conversational AI for Indian law",
     description:
       "A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment.",
     images: [
-      { url: "/logo.svg", width: 1200, height: 630, alt: "Nyaya - Indian Law AI Assistant" },
+      { url: OG_IMAGE, width: 1200, height: 630, alt: "Nyaya - Indian Law AI Assistant" },
     ],
   },
   twitter: {
@@ -56,41 +59,18 @@ export const metadata: Metadata = {
     title: "Nyaya · Conversational AI for Indian law",
     description:
       "A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment.",
-    images: ["/logo.svg"],
+    images: [OG_IMAGE],
   },
   robots: { index: true, follow: true },
-  other: {
-    "theme-color": "#2d5aff",
-  },
 };
 
-const siteSchema = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": "https://nyaya.example.com/#organization",
-      name: "Nyaya",
-      url: "https://nyaya.example.com",
-      logo: "https://nyaya.example.com/logo.svg",
-      sameAs: ["https://github.com/paragmraw/nyaya"],
-      description:
-        "Conversational AI for Indian law - retrieval-grounded legal research assistant.",
-    },
-    {
-      "@type": "WebSite",
-      "@id": "https://nyaya.example.com/#website",
-      url: "https://nyaya.example.com",
-      name: "Nyaya",
-      description:
-        "A retrieval-grounded assistant for practicing lawyers.",
-      publisher: { "@id": "https://nyaya.example.com/#organization" },
-      potentialAction: {
-        "@type": "SearchAction",
-        target: "https://nyaya.example.com/search?q={search_term_string}",
-        "query-input": "required name=search_term_string",
-      },
-    },
+// Browser-chrome tint per scheme. (Previously emitted twice — once via
+// `metadata.other` and once as a hand-written <meta> — and never adapted to
+// dark mode.)
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#2d5aff" },
+    { media: "(prefers-color-scheme: dark)", color: "#161d33" },
   ],
 };
 
@@ -100,9 +80,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
+    // suppressHydrationWarning: the pre-paint script below sets data-theme
+    // on <html> before hydration, which React does not own.
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
+    >
       <head>
-        <meta name="theme-color" content="#2d5aff" />
+        {/* Pre-paint theme: stored choice wins, else OS preference — no FOUC. */}
+        <script dangerouslySetInnerHTML={{ __html: themePrepaintScript() }} />
       </head>
       <body>
         <a href="#content" className="skip-link">Skip to main content</a>

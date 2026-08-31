@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
-import { CapTable, ChatPanel, McpConfig } from "@/components/HomePageClient";
+import CapTable from "@/components/CapTable";
+import McpConfig from "@/components/McpConfig";
+import { ChatPanel } from "@/components/HomePageClient";
 import StructuredData, { homeSchema } from "@/components/StructuredData";
 import { formatNumber } from "@/lib/api";
+import { pageOpenGraph } from "@/lib/site";
 import corpusStats from "@/data/corpus-stats.json";
 
 // Feature flag: enable/disable chat window
@@ -16,12 +19,11 @@ export const metadata: Metadata = {
   title: "Home",
   description:
     "Ask the Constitution, CrPC & statute book. Get cited answers from a retrieval-grounded AI for Indian law.",
-  openGraph: {
+  openGraph: pageOpenGraph({
     title: "Nyaya - Indian Law AI Assistant",
     description:
       "Ask the Constitution, CrPC & statute book. Get cited answers from a retrieval-grounded AI for Indian law.",
-    type: "website",
-  },
+  }),
 };
 
 function HomePageContent() {

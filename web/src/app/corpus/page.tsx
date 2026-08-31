@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { CorpusTable } from "@/components/CorpusPageClient";
+import CorpusTable from "@/components/CorpusTable";
 import StatCard from "@/components/StatCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import StructuredData, { corpusSchema } from "@/components/StructuredData";
 import corpusStats from "@/data/corpus-stats.json";
 import type { CorpusStats } from "@/lib/api";
+import { pageOpenGraph } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Corpus",
   description:
     "Explore Nyaya's indexed legal corpus: Constitution of India, BNS/BNSS/BSA 2023, IPC, CrPC, commercial statutes, and Supreme Court landmark judgments.",
-  openGraph: {
+  openGraph: pageOpenGraph({
     title: "Nyaya Corpus - Indexed Indian Legal Sources",
     description:
       "Explore Nyaya's indexed legal corpus: Constitution of India, BNS/BNSS/BSA 2023, IPC, CrPC, commercial statutes, and Supreme Court landmark judgments.",
-    type: "website",
-  },
+  }),
 };
 
 export default function CorpusPage() {

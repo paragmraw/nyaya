@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { SITE } from "@/lib/site";
 
 type Variant = "promo" | "block";
 
@@ -64,7 +65,10 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
   // In production, fail-closed if the origin is not HTTPS (prevent the user
   // from connecting their editor to an insecure MCP endpoint).
   const json = useMemo(() => {
-    const fallback = "https://nyaya.example";
+    // SSR placeholder — now the real deployed origin so the server-rendered
+    // config block is correct as-is; the client render swaps in the actual
+    // window.location.origin on hydration.
+    const fallback = SITE;
     const effectiveOrigin = origin ?? fallback;
     if (
       process.env.NODE_ENV === "production" &&
