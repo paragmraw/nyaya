@@ -1,6 +1,7 @@
 """Unit tests for db-layer performance features: candidate-pool sizing,
-TTL caches for effectively-static data, and text-snippet truncation
-(include_text/snippet_chars).
+TTL caches for effectively-static data, text-snippet truncation
+(include_text/snippet_chars), the sargable ref_num ordering in list_sections,
+and definition promotion.
 
 Uses a fake connection (recording executed SQL) patched over
 ``nyaya.db._conn`` — no live database is needed.
@@ -9,6 +10,7 @@ Uses a fake connection (recording executed SQL) patched over
 from __future__ import annotations
 
 import contextlib
+import pathlib
 import re
 from typing import Any
 
@@ -287,3 +289,107 @@ def test_snippet_expr_clamped():
     assert db._snippet_expr(0) == "left(d.text, 1)"
     assert db._snippet_expr(5000) == "left(d.text, 2000)"
     assert db._snippet_expr(300) == "left(d.text, 300)"
+
+
+# ---------------------------------------------------------------------------
+# Task 7 item 2 — sargable ref_num ordering/filtering in list_sections
+# ---------------------------------------------------------------------------
+
+_SCHEMA_PATH = pathlib.Path(__file__).resolve().parents[1] / "schema.sql"
+
+# The expression ref_num is GENERATED ALWAYS AS — it must be the pre-ref_num
+# ordering/filter expression (modulo the unqualified column name), so the
+# generated column does not change list_sections ordering semantics.
+_HISTORIC_REF_NUM_EXPRESSION = (
+    "coalesce(nullif(regexp_replace(ref, '[^0-9].*$', ''), '')::int, 0)"
+)
+
+
+def test_list_sections_orders_on_ref_num(monkeypatch):
+    """ORDER BY uses the ref_num generated column, not a per-row
+    regexp_replace recomputation."""
+    conn = _FakeConn([_doc_row(0, kind="section")])
+    monkeypatch.setattr(db, "_conn", lambda: contextlib.nullcontext(conn))
+    db.list_sections("IPC", limit=10)
+    docs_sql, _params = conn.executed[0]
+    assert "order by d.ref_num, d.ref" in docs_sql
+    assert "regexp_replace" not in docs_sql
+
+
+def test_list_sections_numeric_range_filters_on_ref_num(monkeypatch):
+    """start/end filter clauses are sargable on d.ref_num."""
+    conn = _FakeConn([_doc_row(0, kind="section")])
+    monkeypatch.setattr(db, "_conn", lambda: contextlib.nullcontext(conn))
+    db.list_sections("IPC", start="5", end="50", limit=10, offset=2)
+    docs_sql, docs_params = conn.executed[0]
+    assert "d.ref_num >= %s" in docs_sql
+    assert "d.ref_num <= %s" in docs_sql
+    assert "regexp_replace" not in docs_sql
+    # params: [act, start, end, limit, offset]
+    assert docs_params[0] == "IPC"
+    assert docs_params[1] == 5
+    assert docs_params[2] == 50
+    assert docs_params[-2] == 10
+    assert docs_params[-1] == 2
+
+
+def test_list_sections_count_query_uses_left_join(monkeypatch):
+    """The count query joins acts the same way the row query does (the row
+    query was always a left join; the count used a plain join)."""
+    conn = _FakeConn([_doc_row(0, kind="section")], count=7)
+    monkeypatch.setattr(db, "_conn", lambda: contextlib.nullcontext(conn))
+    _docs, total, _title = db.list_sections("IPC")
+    assert total == 7
+    count_sql, _params = conn.executed[1]
+    assert "from documents d left join acts a on a.id = d.act_id" in count_sql
+    assert "regexp_replace" not in count_sql
+
+
+def test_schema_sql_ref_num_matches_historic_expression():
+    """The generated column's expression must equal the pre-ref_num ordering
+    expression byte-for-byte (modulo the table alias), so replacing
+    `coalesce(nullif(regexp_replace(d.ref, ...))::int, 0)` with d.ref_num
+    preserves ordering semantics exactly."""
+    schema = _SCHEMA_PATH.read_text(encoding="utf-8")
+    match = re.search(r"generated always as \((.*?)\) stored", schema, re.DOTALL)
+    assert match, "ref_num migration missing from schema.sql"
+    expression = " ".join(match.group(1).split())
+    assert expression == _HISTORIC_REF_NUM_EXPRESSION
+
+
+def test_schema_sql_ref_num_migration_is_idempotent():
+    """The migration uses IF NOT EXISTS so it re-runs standalone against an
+    already-populated deployed database."""
+    schema = _SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "add column if not exists ref_num" in schema
+    assert "create index if not exists documents_act_ref_num_idx" in schema
+
+
+# ---------------------------------------------------------------------------
+# Task 7 item 5 — single home for the definition-promotion regex
+# ---------------------------------------------------------------------------
+
+def test_semantic_query_has_no_duplicate_definition_regex():
+    """The regex lives only in db._DEF_RE (where promotion runs); the tool
+    module must not keep its own compiled copy."""
+    from nyaya.tools import semantic_query
+
+    assert not hasattr(semantic_query, "_DEFINITION_RE")
+
+
+def test_promote_definitions_moves_definition_titled_results_to_top(monkeypatch):
+    """promote_definitions=True re-sorts using db._DEF_RE: definition-titled
+    results go first (by rank), everything else after (by rank)."""
+    rows = [
+        {**_doc_row(0, kind="section"), "ref": "302", "title": "Punishment for murder",
+         "rank": 0.9},
+        {**_doc_row(1, kind="section"), "ref": "2", "title": "Definitions", "rank": 0.5},
+    ]
+    conn = _FakeConn(rows)
+    monkeypatch.setattr(db, "_conn", lambda: contextlib.nullcontext(conn))
+    monkeypatch.setattr(embeddings, "embed_query", lambda q: [0.1] * 2048)
+    monkeypatch.setattr(embeddings, "rerank_query", lambda q, cands: [0.9, 0.5])
+    results, total, fallback = db.rerank_search("murder", promote_definitions=True)
+    assert fallback is None
+    assert total == 2
+    assert [r.ref for r in results] == ["2", "302"]

@@ -8,14 +8,13 @@ NVIDIA API.
 
 from __future__ import annotations
 
-import re
-
 from .. import db
 from ..models import SearchResponse
 from ._error import structured_errors
 from ._util import run_sync, validate_query_length
 
-_DEFINITION_RE = re.compile(r"defin|interpret", re.IGNORECASE)
+# Note: the definition-promotion regex has a single home — ``db._DEF_RE`` —
+# where the promote_definitions re-sort actually runs (inside db.rerank_search).
 
 
 def register(mcp) -> None:

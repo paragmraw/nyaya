@@ -93,6 +93,11 @@ _REF_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Definition-promotion regex (single source of truth — do not recompile
+# elsewhere; used by ``rerank_search`` for ``promote_definitions`` and matches
+# titles like IPC s.2 'Definitions' / 'Interpretation' clauses).
+_DEF_RE = re.compile(r"defin|interpret", re.IGNORECASE)
+
 _pool: ConnectionPool | None = None
 _pool_lock = threading.Lock()
 
@@ -427,6 +432,14 @@ def list_sections(
 
     By default only a text snippet (first ``snippet_chars`` chars) is
     returned; pass ``include_text=True`` for full document text.
+
+    Ordering and numeric range filtering go through ``documents.ref_num`` — an
+    int GENERATED ALWAYS AS ... STORED column (see ``mcp/schema.sql``) defined
+    as exactly the historic ``coalesce(nullif(regexp_replace(d.ref,
+    '[^0-9].*$', ''), '')::int, 0)`` expression. Using the stored column makes
+    both the ORDER BY and the range filters sargable via the
+    ``documents_act_ref_num_idx`` index instead of recomputing the expression
+    per row on every page.
     """
     sn = normalize_act(act_short_name)
     if sn is None:
@@ -440,24 +453,24 @@ def list_sections(
     if start is not None:
         s = normalize_ref(start)
         if s and s.isdigit():
-            clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) >= %s")
+            clauses.append("d.ref_num >= %s")
             params.append(int(s))
     if end is not None:
         e = normalize_ref(end)
         if e and e.isdigit():
-            clauses.append("coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0) <= %s")
+            clauses.append("d.ref_num <= %s")
             params.append(int(e))
     where = " where " + " and ".join(clauses)
     text_expr = "d.text" if include_text else _snippet_expr(snippet_chars)
     with _conn() as c:
         rows = c.execute(
             _doc_select(text_expr) + where
-            + " order by coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0), d.ref"
+            + " order by d.ref_num, d.ref"
             + " limit %s offset %s",
             params + [limit, offset],
         ).fetchall()
         total_row = c.execute(
-            "select count(*) as n from documents d join acts a on a.id = d.act_id" + where,
+            "select count(*) as n from documents d left join acts a on a.id = d.act_id" + where,
             params,
         ).fetchone()
         # Fetch chapter title if filtered by chapter.
@@ -465,7 +478,7 @@ def list_sections(
             title_row = c.execute(
                 """
                 select distinct d.metadata->>'chapter_title' as title
-                from documents d join acts a on a.id = d.act_id
+                from documents d left join acts a on a.id = d.act_id
                 where d.kind = 'section' and lower(a.short_name) = lower(%s)
                   and (d.metadata->>'chapter_num')::int = %s limit 1
                 """,
@@ -778,7 +791,6 @@ def rerank_search(
 
     # Stage 3 (optional): promote definition-titled results to the top.
     if promote_definitions:
-        _DEF_RE = re.compile(r"defin|interpret", re.IGNORECASE)
         reranked.sort(key=lambda r: (0 if (r.title and _DEF_RE.search(r.title)) else 1, -r.rank))
 
     # Apply offset + limit after rerank (and after definition promotion)
