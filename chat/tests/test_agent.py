@@ -279,6 +279,13 @@ def _make_fake_tool(name="get_section"):
 
 @pytest.mark.asyncio
 async def test_dedup_skips_duplicate_calls():
+    """Within ONE request (state carried across rounds), a repeated call is skipped.
+
+    The node is stateless; LangGraph merges the returned ``dedup_seen`` /
+    ``dedup_results`` into state, so a later round of the same request sees
+    the first round's dedup memory. Here we simulate that by seeding the
+    second invoke with the keys the first one returned.
+    """
     from nyaya_chat.agent import DedupToolNode
 
     tool = _make_fake_tool("get_section")
@@ -286,7 +293,7 @@ async def test_dedup_skips_duplicate_calls():
     fake_node = _FakeToolNode([tool])
     dedup._tool_node = fake_node
 
-    # First call: unique
+    # First round: unique
     state = {"messages": [AIMessage(
         content="", tool_calls=[
             {"id": "tc1", "name": "get_section", "args": {"query": "302"}},
@@ -299,12 +306,17 @@ async def test_dedup_skips_duplicate_calls():
     assert "result(302)" in str(msgs[0].content)
     assert len(fake_node.calls_seen) == 1
 
-    # Second call with same args: duplicate, should be skipped
-    state2 = {"messages": [AIMessage(
-        content="", tool_calls=[
-            {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
-        ]),
-    ]}
+    # Second round of the SAME request (seeded state): same (name+args) call
+    # is a duplicate and must be skipped, reusing the first round's result.
+    state2 = {
+        "messages": [AIMessage(
+            content="", tool_calls=[
+                {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
+            ]),
+        ],
+        "dedup_seen": result["dedup_seen"],
+        "dedup_results": result["dedup_results"],
+    }
     result2 = await dedup(state2)
     msgs2 = result2["messages"]
     assert len(msgs2) == 1
@@ -337,6 +349,7 @@ async def test_dedup_passes_unique_calls_through():
 
 @pytest.mark.asyncio
 async def test_dedup_mixed_unique_and_duplicate():
+    """Within one request: a repeated call is skipped, a new one executes."""
     from nyaya_chat.agent import DedupToolNode
 
     tool = _make_fake_tool("get_section")
@@ -349,17 +362,75 @@ async def test_dedup_mixed_unique_and_duplicate():
             {"id": "tc1", "name": "get_section", "args": {"query": "302"}},
         ]),
     ]}
-    await dedup(state1)
+    result1 = await dedup(state1)
 
-    state2 = {"messages": [AIMessage(
-        content="", tool_calls=[
-            {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
-            {"id": "tc3", "name": "get_section", "args": {"query": "304"}},
-        ]),
-    ]}
+    # Second round of the SAME request (seeded state): "302" is a duplicate,
+    # "304" is new and must execute.
+    state2 = {
+        "messages": [AIMessage(
+            content="", tool_calls=[
+                {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
+                {"id": "tc3", "name": "get_section", "args": {"query": "304"}},
+            ]),
+        ],
+        "dedup_seen": result1["dedup_seen"],
+        "dedup_results": result1["dedup_results"],
+    }
     result = await dedup(state2)
     msgs = result["messages"]
     assert len(msgs) == 2
     assert any(tc["args"]["query"] == "304" for tc in fake_node.calls_seen)
     queries_302 = [tc for tc in fake_node.calls_seen if tc["args"].get("query") == "302"]
     assert len(queries_302) == 1
+
+
+@pytest.mark.asyncio
+async def test_dedup_state_does_not_leak_across_requests():
+    """Regression: dedup memory is per-request, not node instance state.
+
+    The compiled graph (and therefore this node instance) is shared across
+    all requests, so a tool call seen in a previous request must NOT be
+    treated as a duplicate in a later one — each request starts with fresh
+    state and must get fresh tool results.
+    """
+    from nyaya_chat.agent import DedupToolNode
+
+    tool = _make_fake_tool("get_section")
+    dedup = DedupToolNode([tool])
+    fake_node = _FakeToolNode([tool])
+    dedup._tool_node = fake_node
+
+    call_302 = AIMessage(content="", tool_calls=[
+        {"id": "tc1", "name": "get_section", "args": {"query": "302"}},
+    ])
+
+    # Request 1: the call executes.
+    result1 = await dedup({"messages": [call_302]})
+    assert len(fake_node.calls_seen) == 1
+    assert "result(302)" in str(result1["messages"][0].content)
+
+    # Request 2: FRESH state (as every new request gets), same (name+args).
+    # Must execute again — not skipped, no stale cached result.
+    result2 = await dedup({"messages": [AIMessage(
+        content="", tool_calls=[
+            {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
+        ]),
+    ]})
+    assert len(fake_node.calls_seen) == 2
+    msgs2 = result2["messages"]
+    assert len(msgs2) == 1
+    assert "result(302)" in str(msgs2[0].content)
+    assert "(duplicate call skipped)" not in str(msgs2[0].content)
+
+    # Within ONE invocation, a repeated (name+args) call is still deduped:
+    # only one of the two identical calls reaches the underlying ToolNode.
+    result3 = await dedup({"messages": [AIMessage(
+        content="", tool_calls=[
+            {"id": "tc3", "name": "get_section", "args": {"query": "302"}},
+            {"id": "tc4", "name": "get_section", "args": {"query": "302"}},
+        ]),
+    ]})
+    assert len(fake_node.calls_seen) == 3  # only tc3 executed
+    msgs3 = result3["messages"]
+    assert len(msgs3) == 2
+    assert all("result(302)" in str(m.content) for m in msgs3)

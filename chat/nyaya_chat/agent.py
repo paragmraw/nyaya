@@ -54,6 +54,11 @@ _CITE_RE = re.compile(r"\[\[act:\s*[^,\]]+?\s*,\s*ref:\s*[^\]]+?\s*\]\]")
 class ChatState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     round: int
+    # Per-request tool-call dedup state used by ``DedupToolNode``. The compiled
+    # graph (and thus the node instance) is shared across all requests, so the
+    # dedup memory must live in state, not on the node.
+    dedup_seen: dict[str, str]
+    dedup_results: dict[str, str]
 
 
 def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMessage]:
@@ -142,12 +147,18 @@ def _clean_tool_content(content: Any) -> str:
 
 
 class DedupToolNode:
-    """A ToolNode wrapper that skips duplicate (name+args) tool calls."""
+    """A ToolNode wrapper that skips duplicate (name+args) tool calls.
+
+    The node itself is STATELESS: dedup memory lives in ``ChatState``
+    (``dedup_seen`` maps a tool-call key to the id of the call that first
+    issued it; ``dedup_results`` maps a key to its cleaned result) so it is
+    scoped to a single request. The compiled graph is built once and shared
+    across all requests, so instance-level state here would leak tool calls
+    from one request (or one user's conversation) into the next.
+    """
 
     def __init__(self, tools: list[Any]):
         self._tool_node = ToolNode(tools)
-        self._seen: set[str] = set()
-        self._results: dict[str, str] = {}
 
     async def __call__(self, state: ChatState) -> dict[str, Any]:
         messages = state.get("messages", [])
@@ -159,15 +170,20 @@ class DedupToolNode:
         if last_ai is None:
             return await self._tool_node.ainvoke(state)
 
+        # Per-request dedup state; LangGraph merges the returned dicts back
+        # into state, so rounds within one request share this memory.
+        seen: dict[str, str] = dict(state.get("dedup_seen", {}))
+        results: dict[str, str] = dict(state.get("dedup_results", {}))
+
         unique_calls: list[Any] = []
         duplicate_calls: list[Any] = []
         for tc in last_ai.tool_calls:
             key = _tool_call_key(tc["name"], tc.get("args", {}))
-            if key in self._seen:
+            if key in seen:
                 duplicate_calls.append(tc)
             else:
                 unique_calls.append(tc)
-                self._seen.add(key)
+                seen[key] = tc.get("id", "")
 
         if not duplicate_calls:
             result = await self._tool_node.ainvoke(state)
@@ -183,10 +199,14 @@ class DedupToolNode:
                     for tc in last_ai.tool_calls:
                         if tc.get("id") == m.tool_call_id:
                             key = _tool_call_key(tc["name"], tc.get("args", {}))
-                            self._results[key] = cleaned
+                            results[key] = cleaned
                             break
                 cleaned_msgs.append(m)
-            return {"messages": cleaned_msgs}
+            return {
+                "messages": cleaned_msgs,
+                "dedup_seen": seen,
+                "dedup_results": results,
+            }
 
         new_msgs: list[ToolMessage] = []
         if unique_calls:
@@ -205,14 +225,14 @@ class DedupToolNode:
                     for tc in unique_calls:
                         if tc.get("id") == m.tool_call_id:
                             key = _tool_call_key(tc["name"], tc.get("args", {}))
-                            self._results[key] = cleaned
+                            results[key] = cleaned
                             break
                     new_msgs.append(m)
 
         dup_msgs: list[ToolMessage] = []
         for tc in duplicate_calls:
             key = _tool_call_key(tc["name"], tc.get("args", {}))
-            cached = self._results.get(key, "")
+            cached = results.get(key, "")
             dup_msgs.append(ToolMessage(
                 content=cached or "(duplicate call skipped)",
                 tool_call_id=tc.get("id", ""),
@@ -220,7 +240,11 @@ class DedupToolNode:
             ))
             log.info("dedup: skipped duplicate tool call %s args=%s", tc["name"], tc.get("args", {}))
 
-        return {"messages": new_msgs + dup_msgs}
+        return {
+            "messages": new_msgs + dup_msgs,
+            "dedup_seen": seen,
+            "dedup_results": results,
+        }
 
 
 # ---------------------------------------------------------------------------

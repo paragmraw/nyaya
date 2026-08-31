@@ -25,6 +25,15 @@ def test_summarise_tool_result_string():
     assert _summarise_tool_result("x" * 9000) == "x" * 8000
 
 
+def test_summarise_tool_result_strips_corpus_text_wrapper():
+    """Regression: <corpus_text> wrapper tags must not reach the UI summary."""
+    content = "<corpus_text>\nIPC s.302 punishment text\n</corpus_text>"
+    s = _summarise_tool_result(content)
+    assert "<corpus_text>" not in s
+    assert "</corpus_text>" not in s
+    assert "IPC s.302 punishment text" in s
+
+
 def test_summarise_tool_result_list_of_blocks():
     blocks = [{"text": "alpha"}, {"text": "beta"}, {"type": "img", "src": "x"}]
     s = _summarise_tool_result(blocks)

@@ -151,19 +151,23 @@ async def astream_with_retry(
     """Stream model tokens with exponential backoff on retryable errors.
 
     Like :func:`ainvoke_with_retry` but yields ``AIMessageChunk`` objects as
-    they arrive from the model's streaming endpoint. If a retryable error
-    occurs mid-stream, the stream restarts from the beginning (the model has
-    no memory of partial output).
+    they arrive from the model's streaming endpoint. Retries only if NO chunk
+    has been yielded yet: once a chunk has reached the caller it cannot be
+    retracted, so restarting the stream would duplicate output. A retryable
+    error mid-stream therefore propagates to the caller (surfaced as a stream
+    error) instead of silently doubling the answer.
     """
     last_exc: BaseException | None = None
+    yielded = False
     for attempt in range(max_retries + 1):
         try:
             async for chunk in model.astream(messages, **kwargs):
+                yielded = True
                 yield chunk
             return
         except Exception as exc:
             last_exc = exc
-            if attempt >= max_retries or not _is_retryable(exc):
+            if attempt >= max_retries or not _is_retryable(exc) or yielded:
                 raise
             delay = min(max_delay, base_delay * (2**attempt))
             delay = random.uniform(0, delay)

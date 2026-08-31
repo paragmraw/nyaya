@@ -75,7 +75,7 @@ def _summarise_tool_result(content: Any) -> str:
         import re
         stripped = re.sub(r"^<corpus_text>\n?", "", stripped)
         stripped = re.sub(r"\n?</corpus_text>$", "", stripped)
-        return content[:8000]
+        return stripped[:8000]
     if isinstance(content, list):
         parts = []
         for block in content:
