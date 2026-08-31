@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections import defaultdict
 from typing import Any, Protocol
@@ -55,23 +56,31 @@ class RateLimitBackend(Protocol):
 
 
 class InMemoryBackend:
-    """Per-worker in-memory fixed-window counter (default, no Redis needed)."""
+    """Per-worker in-memory fixed-window counter (default, no Redis needed).
+
+    Uses wall-clock time for the window so behaviour matches
+    :class:`RedisBackend`. Mutations of ``_counts`` run under a lock because
+    the middleware dispatches backend calls to worker threads via
+    ``asyncio.to_thread``; an unguarded read-modify-write can lose increments.
+    """
 
     def __init__(self) -> None:
+        self._lock = threading.Lock()
         self._counts: dict[str, dict[str, Any]] = defaultdict(
-            lambda: {"count": 0, "window": time.monotonic()}
+            lambda: {"count": 0, "window": time.time()}
         )
 
     def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
-        now = time.monotonic()
-        entry = self._counts[key]
-        if now - entry["window"] > window_seconds:
-            entry["count"] = 0
-            entry["window"] = now
-        if entry["count"] >= limit:
-            return True
-        entry["count"] += 1
-        return False
+        now = time.time()
+        with self._lock:
+            entry = self._counts[key]
+            if now - entry["window"] > window_seconds:
+                entry["count"] = 0
+                entry["window"] = now
+            if entry["count"] >= limit:
+                return True
+            entry["count"] += 1
+            return False
 
 
 class RedisBackend:
@@ -79,6 +88,11 @@ class RedisBackend:
 
     Uses a single INCR + EXPIRE per request. The key includes the window
     start timestamp so it rotates cleanly.
+
+    The window bucket is derived from wall-clock time (``time.time()``), not
+    monotonic time: monotonic origins differ per process, so per-worker
+    buckets would silently defeat the global limit across workers (or across
+    restarts against a persistent Redis).
     """
 
     def __init__(self, redis_url: str) -> None:
@@ -87,7 +101,7 @@ class RedisBackend:
         self._redis = redis.from_url(redis_url, decode_responses=True)
 
     def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
-        now = int(time.monotonic())
+        now = int(time.time())
         window_key = f"rl:{key}:{now // int(window_seconds)}"
         pipe = self._redis.pipeline()
         pipe.incr(window_key)

@@ -100,6 +100,9 @@ _pool_lock = threading.Lock()
 
 _as_of_cache: tuple[float, date | None] = (0.0, None)
 _AS_OF_TTL = 300.0
+# Guards _as_of_cache, which is read/written from asyncio.to_thread workers
+# alongside the sync DB code (see _pool_lock for the established pattern).
+_as_of_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -668,7 +671,10 @@ def corpus_stats() -> dict[str, int]:
 def corpus_as_of() -> date | None:
     global _as_of_cache
     now = time.monotonic()
-    cached_time, cached_val = _as_of_cache
+    # The cache tuple is shared across worker threads; take the lock only for
+    # the tuple read/write — the DB round-trip below stays outside it.
+    with _as_of_lock:
+        cached_time, cached_val = _as_of_cache
     if now - cached_time < _AS_OF_TTL:
         return cached_val
     try:
@@ -677,5 +683,6 @@ def corpus_as_of() -> date | None:
         val = row["d"] if row else None
     except DatabaseUnavailable:
         return None
-    _as_of_cache = (now, val)
+    with _as_of_lock:
+        _as_of_cache = (now, val)
     return val
