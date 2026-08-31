@@ -211,3 +211,34 @@ def test_is_retryable_rate_limit_in_message():
     from nyaya_chat.llm import _is_retryable
     assert _is_retryable(Exception("rate limit exceeded")) is True
     assert _is_retryable(Exception("server overloaded")) is True
+
+
+def test_is_retryable_timeout_exception_type():
+    """TimeoutError (asyncio.TimeoutError's alias) is transient by type."""
+    from nyaya_chat.llm import _is_retryable
+    assert _is_retryable(TimeoutError()) is True
+
+
+def test_is_retryable_response_status_code_attribute():
+    """httpx/requests-style errors carry the status on ``response``."""
+
+    class _FakeResponse:
+        status_code = 503
+
+    class _HTTPStatusError(Exception):
+        def __init__(self):
+            self.response = _FakeResponse()
+            super().__init__("server error")
+
+    from nyaya_chat.llm import _is_retryable
+    assert _is_retryable(_HTTPStatusError()) is True
+
+
+def test_is_retryable_httpx_transport_error():
+    """httpx transport failures (connect errors, read timeouts) are transient."""
+    import httpx
+
+    from nyaya_chat.llm import _is_retryable
+    request = httpx.Request("GET", "https://example.invalid")
+    assert _is_retryable(httpx.ConnectError("connection refused", request=request)) is True
+    assert _is_retryable(httpx.ReadTimeout("timed out", request=request)) is True

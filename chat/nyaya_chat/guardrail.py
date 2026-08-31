@@ -21,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any
 
 from .config import Settings
 from .schemas_llm import Intent
@@ -223,7 +222,6 @@ _CLASSIFIER_PROMPT = (
 
 async def classify_intent_tier2(
     message: str,
-    model: Any,
     settings: Settings,
 ) -> Intent:
     """LLM-based intent classification using structured output.
@@ -309,7 +307,6 @@ async def classify_intent_tier2(
 
 async def classify_intent(
     message: str,
-    model: Any,
     settings: Settings,
 ) -> Intent:
     """Two-tier intent classification.
@@ -320,10 +317,6 @@ async def classify_intent(
     Tier 2: if Tier 1 returns None (unknown), make a structured LLM
     classification call using ``with_structured_output(Intent)``. Falls
     open to LEGAL on error/timeout.
-
-    The ``model`` parameter is kept for API compatibility but is no longer
-    used directly -- Tier 2 creates its own dedicated classifier model
-    instance with appropriate token/temperature settings.
 
     When ``settings.guardrail_enabled`` is False, always returns LEGAL
     (the guardrail is bypassed entirely).
@@ -345,4 +338,4 @@ async def classify_intent(
         return Intent.LEGAL
 
     # Tier 2: LLM-based with structured output (only for messages Tier 1 couldn't classify)
-    return await classify_intent_tier2(message, model, settings)
+    return await classify_intent_tier2(message, settings)

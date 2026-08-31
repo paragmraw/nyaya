@@ -103,10 +103,36 @@ SYSTEM_PROMPT = (
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    """Return True if the exception is a rate-limit or transient server error."""
+    """Classify an exception as retryable (rate limit / transient) or not.
+
+    Classification, most to least specific:
+
+    1. A numeric ``status_code`` attribute (LangChain / openai-style API
+       errors): retry on 429 (rate limit) and 5xx (transient server).
+    2. A ``response.status_code`` pair (httpx / requests-style
+       ``HTTPStatusError``): same rule.
+    3. Exception type: timeouts and transport failures are transient by
+       definition (``TimeoutError`` — which ``asyncio.TimeoutError`` aliases
+       on Python >= 3.11 — and httpx ``TransportError`` subclasses such as
+       ``ConnectError``).
+    4. Last resort, for exception types that carry no structured status:
+       substring match on the message — some hosted endpoints stringify
+       429s into the error text.
+    """
     status = getattr(exc, "status_code", None)
-    if status is not None:
+    if isinstance(status, int):
         return status == 429 or status >= 500
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status == 429 or status >= 500
+    if isinstance(exc, TimeoutError):
+        return True
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover - httpx ships with the LLM stack
+        httpx = None  # type: ignore[assignment]
+    if httpx is not None and isinstance(exc, httpx.TransportError):
+        return True
     msg = str(exc).lower()
     return "rate limit" in msg or "429" in msg or "timeout" in msg or "overloaded" in msg
 

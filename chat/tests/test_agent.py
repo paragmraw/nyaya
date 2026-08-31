@@ -106,102 +106,69 @@ async def test_agent_supervisor_emits_tool_calls(fake_model, fake_tools):
     assert fake_model.calls  # the model was invoked
 
 
-def test_parse_text_tool_calls_bracket_format():
-    """Parse [[tool_calls]] JSON array [[/tool_calls]] format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[tool_calls]]\n[\n {\n  "name": "get_section",\n  "arguments": {"act": "IPC", "section": "302"}\n }\n]\n[[/tool_calls]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
-    assert calls[0]["args"]["act"] == "IPC"
-    assert calls[0]["args"]["section"] == "302"
+# ---------------------------------------------------------------------------
+# Model factory (_make_model) tests
+# ---------------------------------------------------------------------------
 
 
-def test_parse_text_tool_calls_bare_json():
-    """Parse bare JSON object format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
+def test_make_model_passes_phase_params_to_fake(fake_model, settings):
+    """Fakes honour the requested temperature/max_tokens (recorded via the
+    ``nyaya_fake_model`` protocol) instead of silently ignoring them."""
+    from nyaya_chat.agent import _make_model
+
+    m = _make_model(
+        settings, model_name="nvidia/fake", max_tokens=512, temperature=0.2,
+    )
+    assert m is fake_model
+    assert fake_model.temperature == 0.2
+    assert fake_model.max_completion_tokens == 512
 
 
-def test_parse_text_tool_calls_json_array():
-    """Parse bare JSON array format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
+def test_make_model_reuses_cached_base_when_config_matches(monkeypatch, settings):
+    """A phase whose configuration equals the cached base model's reuses it
+    (no duplicate API client); a phase with different settings constructs one."""
+    from nyaya_chat import agent as agent_mod
+    from nyaya_chat import llm as llm_mod
 
+    constructed: list[dict] = []
 
-def test_parse_text_tool_calls_no_tool_calls():
-    """Return empty list when no tool calls are found."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    assert _parse_text_tool_calls("This is a plain text answer.") == []
-    assert _parse_text_tool_calls("") == []
-    assert _parse_text_tool_calls(None) == []
+    class FakeChatNVIDIA:
+        def __init__(self, **kw):
+            # Records only the clients _make_model itself builds; the cached
+            # base below is a plain namespace, so it never lands here.
+            constructed.append(kw)
+            self.model = kw.get("model")
+            self.temperature = kw.get("temperature")
+            self.max_tokens = kw.get("max_completion_tokens")
 
+    monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", FakeChatNVIDIA)
+    llm_mod.reset_model_cache()
+    base = FakeChatNVIDIA(
+        model=settings.llm_model,
+        temperature=settings.llm_temperature,
+        max_completion_tokens=settings.llm_max_tokens,
+    )
+    monkeypatch.setattr(llm_mod, "get_model", lambda _=None: base)
+    monkeypatch.setattr(agent_mod, "get_model", lambda _=None: base)
 
-def test_parse_text_tool_calls_multiple():
-    """Parse multiple tool calls from [[tool_calls]] format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[tool_calls]]\n[\n {"name": "get_section", "arguments": {"act": "IPC", "section": "302"}},\n {"name": "get_section", "arguments": {"act": "BNS", "section": "103"}}\n]\n[[/tool_calls]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 2
-    assert calls[0]["name"] == "get_section"
-    assert calls[1]["args"]["act"] == "BNS"
+    # Synthesis defaults match the base configuration exactly -> reuse.
+    constructed.clear()  # forget the base's own construction
+    reused = agent_mod._make_model(
+        settings, model_name=settings.llm_model, max_tokens=settings.llm_max_tokens,
+    )
+    assert reused is base
+    assert constructed == []  # no second client built
 
-
-def test_parse_text_xml_tag_wrapped_json():
-    """XML-tag wrapped JSON: <toolname>{...json...}</toolname>"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '<semantic_query>{"query": "dowry prohibition India laws", "limit": 10}</semantic_query>'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "semantic_query"
-    assert calls[0]["args"]["query"] == "dowry prohibition India laws"
-    assert calls[0]["args"]["limit"] == 10
-
-
-def test_parse_text_xml_tag_multiple():
-    """Multiple XML tags in one response"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '<semantic_query>{"query": "IPC 302"}</semantic_query>\n<get_section>{"act": "IPC", "section": "302"}</get_section>'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 2
-    assert calls[0]["name"] == "semantic_query"
-    assert calls[1]["name"] == "get_section"
-
-
-def test_parse_text_bracket_pipe_format():
-    """Bracket-pipe: [[tool tool call|tool_name: "...", tool_args: {...}]]"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[semantic_query tool call|tool_name: "semantic_query", tool_args: {"query": "dowry prohibition India laws", "limit": 10}]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "semantic_query"
-    assert calls[0]["args"]["query"] == "dowry prohibition India laws"
-
-
-def test_parse_text_bracket_pipe_nested_json():
-    """Bracket-pipe with nested JSON objects in tool_args"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[semantic_query tool call|tool_name: "semantic_query", tool_args: {"query": "test", "filter": {"act": "IPC", "kind": "section"}}}]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["args"]["filter"]["act"] == "IPC"
-
-
-def test_parse_text_attribute_style():
-    """Attribute-style: [[tool_name key="value" key2="value2"]]"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[get_section act="IPC" section="24"]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
-    assert calls[0]["args"]["act"] == "IPC"
-    assert calls[0]["args"]["section"] == "24"
+    # Supervisor's short token cap differs -> a new instance is built.
+    supervisor = agent_mod._make_model(
+        settings, model_name=settings.llm_model,
+        max_tokens=settings.supervisor_max_tokens,
+        temperature=settings.supervisor_temperature,
+    )
+    assert supervisor is not reused
+    assert len(constructed) == 1
+    assert constructed[0]["max_completion_tokens"] == settings.supervisor_max_tokens
+    assert constructed[0]["temperature"] == settings.supervisor_temperature
 
 
 def test_supervisor_prompt_has_sequential_rules():

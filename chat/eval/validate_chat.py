@@ -28,13 +28,18 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
+
+# Make the nyaya_chat package importable whether this script is run in
+# place (``python eval/validate_chat.py``) or from the chat root (``python
+# -m eval.validate_chat``). The citation-marker regex is single-sourced there.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # ---------------------------------------------------------------------------
 # SSE parsing
@@ -109,13 +114,15 @@ class TestResult:
 # Citation parsing
 # ---------------------------------------------------------------------------
 
-_CITE_RE = re.compile(r"\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]")
-
 
 def extract_citations(text: str) -> list[dict[str, str]]:
+    """Extract [[act: X, ref: Y]] markers using the backend's shared regex
+    (``nyaya_chat.citations.CITATION_RE``)."""
+    from nyaya_chat.citations import CITATION_RE
+
     citations: list[dict[str, str]] = []
     seen: set[str] = set()
-    for m in _CITE_RE.finditer(text):
+    for m in CITATION_RE.finditer(text):
         act = m.group(1).strip()
         ref = m.group(2).strip()
         key = f"{act}|{ref}"

@@ -94,7 +94,18 @@ class FakeChatModel:
 
     For structured output tests, set ``fm._structured_result`` to the
     expected structured object (e.g. a ToolPlan or Intent).
+
+    Fake protocol for ``agent._make_model``: the class attribute
+    ``nyaya_fake_model = True`` marks an instance as a test fake, and
+    ``with_generation_params(temperature=..., max_tokens=...)`` receives the
+    phase's generation settings. Fakes are scripted, so "honouring" the
+    settings means recording them (on ``.temperature`` /
+    ``.max_completion_tokens``) for assertions — not changing the scripted
+    output.
     """
+
+    # Explicit marker checked by agent._make_model (no duck-type sniffing).
+    nyaya_fake_model = True
 
     def __init__(self, responses: list | None = None):
         from langchain_core.messages import AIMessage
@@ -105,9 +116,17 @@ class FakeChatModel:
         self.calls: list = []
         self._structured_schema = None
         self._structured_result = None
+        self.temperature = None
+        self.max_completion_tokens = None
 
     def bind_tools(self, tools, **kw):
         self._bound_tools = tools
+        return self
+
+    def with_generation_params(self, *, temperature=None, max_tokens=None):
+        """Record the generation settings requested for this phase; returns self."""
+        self.temperature = temperature
+        self.max_completion_tokens = max_tokens
         return self
 
     def with_structured_output(self, schema, **kw):

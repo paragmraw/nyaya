@@ -51,7 +51,9 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
 
+from .agent import DEGRADED_NODE_NAME, SYNTHESIS_NODE_NAME
 from .citations import parse_citations
+from .tool_content import clean_tool_content
 
 log = logging.getLogger("nyaya_chat.streaming")
 
@@ -61,41 +63,15 @@ def _sse(event: str, payload: Any) -> bytes:
 
 
 def _summarise_tool_result(content: Any) -> str:
-    """Collapse a ToolMessage content blob to a string for the UI panel."""
-    if isinstance(content, str):
-        stripped = content.strip()
-        if stripped.startswith("[{") and "'type'" in stripped and "'text'" in stripped:
-            try:
-                import ast
-                parsed = ast.literal_eval(stripped)
-                if isinstance(parsed, list):
-                    parts = []
-                    for block in parsed:
-                        if isinstance(block, dict):
-                            t = block.get("text") or block.get("content")
-                            if t:
-                                parts.append(str(t))
-                        elif isinstance(block, str):
-                            parts.append(block)
-                    return (" ".join(parts))[:8000]
-            except Exception:
-                pass
-        # Strip <corpus_text> wrapper if present (added by agent for synthesis)
-        import re
-        stripped = re.sub(r"^<corpus_text>\n?", "", stripped)
-        stripped = re.sub(r"\n?</corpus_text>$", "", stripped)
-        return stripped[:8000]
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                t = block.get("text") or block.get("content")
-                if t:
-                    parts.append(str(t))
-            elif isinstance(block, str):
-                parts.append(block)
-        return (" ".join(parts))[:8000]
-    return str(content)[:8000]
+    """Collapse a ToolMessage content blob to a string for the UI panel.
+
+    Thin wrapper over :func:`nyaya_chat.tool_content.clean_tool_content`
+    with corpus-tag stripping enabled: by the time the streamer sees a
+    ToolMessage, an earlier synthesis round may have wrapped its content in
+    ``<corpus_text>`` tags, which must not reach the UI summary. The agent's
+    dedup node cleans results before wrapping, so it uses the default.
+    """
+    return clean_tool_content(content, strip_corpus=True)
 
 
 async def stream_turn(
@@ -235,9 +211,10 @@ async def stream_turn(
                     # The synthesis node's update carries its VERIFIED
                     # AIMessage (verification already ran inside the node).
                     # That message is the authoritative answer: the last
-                    # synthesis round wins ("agent" is the degraded no-tools
-                    # graph's synthesis node name).
-                    syn_out = data.get("synthesis") or data.get("agent")
+                    # synthesis round wins (DEGRADED_NODE_NAME is the
+                    # degraded no-tools graph's synthesis node name — the
+                    # constants are agent.py's, single source).
+                    syn_out = data.get(SYNTHESIS_NODE_NAME) or data.get(DEGRADED_NODE_NAME)
                     if isinstance(syn_out, dict):
                         syn_msgs = syn_out.get("messages", [])
                         if syn_msgs:

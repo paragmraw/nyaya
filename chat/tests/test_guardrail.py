@@ -206,7 +206,7 @@ class TestTier2Classifier:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent_tier2("What is IPC 302?", None, settings)
+        result = await classify_intent_tier2("What is IPC 302?", settings)
         assert result == Intent.LEGAL
 
     @pytest.mark.asyncio
@@ -226,7 +226,7 @@ class TestTier2Classifier:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent_tier2("hey there what's up", None, settings)
+        result = await classify_intent_tier2("hey there what's up", settings)
         assert result == Intent.GREETING
 
     @pytest.mark.asyncio
@@ -246,7 +246,7 @@ class TestTier2Classifier:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent_tier2("write a poem about cats", None, settings)
+        result = await classify_intent_tier2("write a poem about cats", settings)
         assert result == Intent.OFF_TOPIC
 
     @pytest.mark.asyncio
@@ -272,7 +272,7 @@ class TestTier2Classifier:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent_tier2("test", None, settings)
+        result = await classify_intent_tier2("test", settings)
         assert result == Intent.LEGAL
 
     @pytest.mark.asyncio
@@ -293,7 +293,7 @@ class TestTier2Classifier:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent_tier2("test", None, settings)
+        result = await classify_intent_tier2("test", settings)
         assert result == Intent.LEGAL
 
     @pytest.mark.asyncio
@@ -314,7 +314,7 @@ class TestTier2Classifier:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent_tier2("test", None, settings)
+        result = await classify_intent_tier2("test", settings)
         assert result == Intent.LEGAL
 
 
@@ -324,29 +324,30 @@ class TestTier2Classifier:
 
 class TestClassifyIntent:
     @pytest.mark.asyncio
-    async def test_tier1_greeting_skips_tier2(self):
+    async def test_tier1_greeting_skips_tier2(self, monkeypatch):
         """When Tier 1 matches, Tier 2 is never called."""
+
+        async def _tier2_must_not_run(message, settings):
+            raise AssertionError("tier 2 must not be called when tier 1 matches")
+
+        monkeypatch.setattr("nyaya_chat.guardrail.classify_intent_tier2", _tier2_must_not_run)
         settings = MagicMock()
         settings.guardrail_enabled = True
 
-        mock_model = MagicMock()
-        mock_model.ainvoke = AsyncMock()
-
-        result = await classify_intent("hello", mock_model, settings)
+        result = await classify_intent("hello", settings)
         assert result == Intent.GREETING
-        mock_model.ainvoke.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_tier1_off_topic_skips_tier2(self):
+    async def test_tier1_off_topic_skips_tier2(self, monkeypatch):
+        async def _tier2_must_not_run(message, settings):
+            raise AssertionError("tier 2 must not be called when tier 1 matches")
+
+        monkeypatch.setattr("nyaya_chat.guardrail.classify_intent_tier2", _tier2_must_not_run)
         settings = MagicMock()
         settings.guardrail_enabled = True
 
-        mock_model = MagicMock()
-        mock_model.ainvoke = AsyncMock()
-
-        result = await classify_intent("tell me a joke", mock_model, settings)
+        result = await classify_intent("tell me a joke", settings)
         assert result == Intent.OFF_TOPIC
-        mock_model.ainvoke.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_tier1_unknown_falls_to_tier2(self, monkeypatch):
@@ -366,22 +367,23 @@ class TestClassifyIntent:
 
         monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", lambda **kw: mock_model)
 
-        result = await classify_intent("hey there what's up", None, settings)
+        result = await classify_intent("hey there what's up", settings)
         assert result == Intent.LEGAL
         mock_structured.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_guardrail_disabled_returns_legal(self):
+    async def test_guardrail_disabled_returns_legal(self, monkeypatch):
         """When guardrail_enabled is False, always return LEGAL."""
+
+        async def _tier2_must_not_run(message, settings):
+            raise AssertionError("tier 2 must not be called when the guardrail is disabled")
+
+        monkeypatch.setattr("nyaya_chat.guardrail.classify_intent_tier2", _tier2_must_not_run)
         settings = MagicMock()
         settings.guardrail_enabled = False
 
-        mock_model = MagicMock()
-        mock_model.ainvoke = AsyncMock()
-
-        result = await classify_intent("hello", mock_model, settings)
+        result = await classify_intent("hello", settings)
         assert result == Intent.LEGAL
-        mock_model.ainvoke.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_guardrail_disabled_for_legal_question(self):
@@ -389,6 +391,5 @@ class TestClassifyIntent:
         settings = MagicMock()
         settings.guardrail_enabled = False
 
-        mock_model = MagicMock()
-        result = await classify_intent("What is IPC 302?", mock_model, settings)
+        result = await classify_intent("What is IPC 302?", settings)
         assert result == Intent.LEGAL

@@ -29,7 +29,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from .agent import _build_messages, get_agent
 from .config import Settings, get_settings
 from .guardrail import Intent, classify_intent, get_canned_response
-from .llm import get_model
+from .observability import configure_structlog
 from .schemas import ChatRequest, ChatSubHealthResponse
 from .streaming import _sse, stream_turn
 
@@ -47,6 +47,9 @@ _SSE_HEADERS: dict[str, str] = {
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     s = get_settings()
+    # One-line wiring so structlog (structured JSON logging) is actually
+    # configured in the running sub-app instead of being a dead dependency.
+    configure_structlog(s.log_level)
     log.info("nyaya-chat sub-app lifespan starting: model=%s mcp_url=%s", s.llm_model, s.mcp_url)
     app.state.settings = s
     try:
@@ -114,7 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Guardrail: classify intent before entering the agent pipeline.
         # Non-legal messages (greetings, capability questions, off-topic) get
         # a canned SSE response instantly -- no supervisor/tool/synthesis calls.
-        intent = await classify_intent(req.message, get_model(s), s)
+        intent = await classify_intent(req.message, s)
         if intent != Intent.LEGAL:
             log.info("guardrail: fast-path for intent=%s (skipping agent pipeline)", intent.value)
             canned = get_canned_response(intent)
