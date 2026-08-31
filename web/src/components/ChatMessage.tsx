@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import PersonIcon from "@mui/icons-material/Person";
 import BalanceIcon from "@mui/icons-material/Balance";
 import CitationChip from "./CitationChip";
+import { isCitationHref } from "@/lib/chat";
 import type { ChatMessage, ChatToolEvent } from "@/lib";
 
 // Build a compact label for a tool chip, showing the most relevant arg.
@@ -21,8 +22,9 @@ function toolArgsLabel(name: string, args?: Record<string, unknown>): string {
   return name;
 }
 
-// Map backend status codes to user-friendly phase labels.
-function phaseLabel(status: string): string {
+// Map backend status codes to user-friendly phase labels. Exported because
+// ChatPanel reuses it for the streaming tail's aria-live announcements.
+export function phaseLabel(status: string): string {
   const labels: Record<string, string> = {
     thinking: "Thinking…",
     analyzing: "Analysing your question…",
@@ -265,7 +267,7 @@ export function normaliseMd(src: string): string {
 //   class on the last bot message), list tool calls as interactive chips with
 //   an expandable result panel, and render citation chips for any
 //   [[act: X, ref: Y]] markers the model emitted.
-export default function ChatMessageView({ msg, isStreaming = false }: { msg: ChatMessage; isStreaming?: boolean }) {
+export default function ChatMessageView({ msg, isStreaming = false, onRetry }: { msg: ChatMessage; isStreaming?: boolean; onRetry?: () => void }) {
   const isBot = msg.role === "assistant";
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   // Memoize normaliseMd — it's O(n) and the full content can be long.
@@ -321,10 +323,11 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
                     <div className="md-table-wrap"><table {...props} /></div>
                   ),
                   // Inline citation links emitted by parseCitations carry a
-                  // title="ic" sentinel; style them as compact chips. Other
+                  // corpus page href (see CITE_HREF_PREFIX in chat.ts) — the
+                  // wire-stable marker; style those as compact chips. Other
                   // links render with the default .md a styling.
                   a: ({ ...props }) =>
-                    props.title === "ic" ? (
+                    isCitationHref(props.href) ? (
                       <a {...props} title={undefined} className="inline-cite" />
                     ) : (
                       <a {...props}>{props.children ?? props.href}</a>
@@ -339,14 +342,38 @@ export default function ChatMessageView({ msg, isStreaming = false }: { msg: Cha
           msg.content
         )}
 
-        {/* Halted-before-content state */}
-        {isBot && !msg.content && !msg.status && msg.error && (
-          <span className="chat-status chat-halted" aria-label="response halted">
-            <span className="halt-dot" aria-hidden="true" />
-            Stopped; no response was generated.
-          </span>
+        {/* Failed run: humanised message (see humanizeError in chat.ts), an
+            optional request id for support, and a retry affordance inside the
+            failed assistant bubble itself. */}
+        {isBot && msg.error && (
+          <div className="chat-error-row" role="status">
+            {!msg.content && !msg.status && (
+              <span className="chat-status chat-halted">
+                <span className="halt-dot" aria-hidden="true" />
+                Stopped; no response was generated.
+              </span>
+            )}
+            <span className="chat-error-note">
+              {msg.error}
+              {msg.requestId ? <span className="chat-rid"> · ref {msg.requestId}</span> : null}
+            </span>
+            {onRetry !== undefined && (
+              <button
+                type="button"
+                className="chat-retry"
+                onClick={onRetry}
+                disabled={isStreaming}
+                title="Retry this message"
+              >
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M21 12a9 9 0 1 1-3-6.7" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+                Retry
+              </button>
+            )}
+          </div>
         )}
-        {msg.error && msg.content && <span className="chat-status" style={{ color: "#d44430" }}>: {msg.error}</span>}
 
         {/* Agent plan (supervisor's reasoning, collapsible) */}
         {isBot && msg.plan && msg.plan.trim() && (

@@ -30,6 +30,7 @@ next-env.d.ts
 # Un-ignore the SPA's src/lib barrel so api.ts/swr.ts/index.ts are tracked.
 !src/lib/
 
-# Generated corpus stats (build-time)
+# Generated corpus stats (build-time).
+# public/ is regenerated on every build and stays untracked; src/data/ is the
+# committed snapshot that useCorpusStats() uses as its SWR fallbackData.
 /public/corpus-stats.json
-/src/data/corpus-stats.json

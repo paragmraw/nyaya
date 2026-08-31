@@ -77,14 +77,16 @@ export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
 
   return (
     <>
-      <div className="filter-bar" role="tablist" aria-label="Filter by status">
+      {/* Toggle group, not tabs: active state is exposed via aria-pressed, and
+          buttons are natively keyboard-operable (Enter / Space). */}
+      <div className="filter-bar" role="group" aria-label="Filter by status">
         {STATUS_FILTERS.map((f) => (
           <button
             key={f}
+            type="button"
             className={`filter-chip${filter === f ? " active" : ""}`}
             onClick={() => setFilter(f)}
-            role="tab"
-            aria-selected={filter === f}
+            aria-pressed={filter === f}
           >
             {f}
           </button>
@@ -98,10 +100,20 @@ export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
                 <th
                   key={h}
                   className={sortCol === i ? `sorted-${sortDir}` : ""}
-                  onClick={() => onHeaderClick(i)}
+                  aria-sort={sortCol === i ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                 >
-                  {h}
-                  <span className="sort-arrow" aria-hidden="true">▾</span>
+                  {/* Real button inside the header cell: keyboard operable and
+                      focusable by default (Enter/Space activate it), unlike a
+                      click-only th. */}
+                  <button
+                    type="button"
+                    className="th-sort"
+                    onClick={() => onHeaderClick(i)}
+                    aria-label={`Sort by ${h}${sortCol === i ? (sortDir === "asc" ? ", currently ascending" : ", currently descending") : ""}`}
+                  >
+                    {h}
+                    <span className="sort-arrow" aria-hidden="true">▾</span>
+                  </button>
                 </th>
               ))}
             </tr>

@@ -23,12 +23,27 @@ import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolE
 
 const CITE_RE = /\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]/g;
 
-function citeToMarkdown(act: string, ref: string): string {
-  const href = `/corpus/?act=${encodeURIComponent(act)}&ref=${encodeURIComponent(ref)}`;
-  return `[${act} · ${ref}](${href} "ic")`;
+// Inline citations are rendered as normal markdown links whose href points
+// back at the corpus page. That href prefix doubles as the citation marker:
+// it is the only place ChatMessage.tsx needs to look to recognise a citation
+// chip, and (unlike the old `title="ic"` attribute it replaces) it survives
+// the markdown pipeline unambiguously and needs no special-cased title text.
+// parseCitations is the only producer of such links.
+export const CITE_HREF_PREFIX = "/corpus/?act=";
+
+export function isCitationHref(href: string | undefined): boolean {
+  return !!href && href.startsWith(CITE_HREF_PREFIX);
 }
 
-function parseCitations(text: string): { text: string; citations: ChatCitation[] } {
+function citeToMarkdown(act: string, ref: string): string {
+  const href = `/corpus/?act=${encodeURIComponent(act)}&ref=${encodeURIComponent(ref)}`;
+  return `[${act} · ${ref}](${href})`;
+}
+
+// Convert the raw [[act: X, ref: Y]] markers emitted by the backend into
+// markdown citation links (see CITE_HREF_PREFIX) plus a de-duplicated list of
+// citation pairs. Exported for unit testing.
+export function parseCitations(text: string): { text: string; citations: ChatCitation[] } {
   const citations: ChatCitation[] = [];
   const seen = new Set<string>();
   const re = new RegExp(CITE_RE);
@@ -48,6 +63,147 @@ function parseCitations(text: string): { text: string; citations: ChatCitation[]
 
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// ─── Error humanization ───────────────────────────────────────────
+// The unified error contract (chat/nyaya_chat SSE + REST) carries machine
+// codes ({message, detail, rid}); humanizeError maps them to copy a user can
+// act on, keeping server-provided detail where it adds value. Exported for
+// unit testing.
+export function humanizeError(code: string, detail = ""): string {
+  const c = code.trim();
+  const d = detail.trim();
+  const withDetail = (base: string) => (d ? `${base} (${d})` : base);
+
+  // Transport classes: a bare `TypeError: Failed to fetch`, a browser-specific
+  // variant, or an explicit abort (user stop / stream timeout).
+  if (/^(cancelled|aborted|aborterror)$/i.test(c)) return "Response cancelled.";
+  // Set by the session-restoration path for a run that was mid-stream when
+  // the page was refreshed (see deserializeMessages).
+  if (/^interrupted$/i.test(c)) {
+    return withDetail("This response was interrupted. Retry to resend your question.");
+  }
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(c)) {
+    return withDetail("Couldn't reach the Nyaya service. Check your connection and try again.");
+  }
+  if (/^no response body$|^empty response$/i.test(c)) {
+    return "Nyaya returned an empty response.";
+  }
+
+  // HTTP status lines from the non-2xx handler ("503 Service Unavailable").
+  if (/^429\b/.test(c)) {
+    return withDetail("Nyaya is handling a lot of requests right now. Try again in a moment.");
+  }
+  if (/^5\d\d\b/.test(c)) {
+    return withDetail("Nyaya's assistant is temporarily unavailable. Please retry in a moment.");
+  }
+  if (/^4\d\d\b/.test(c)) {
+    return withDetail("Nyaya couldn't process this request.");
+  }
+  if (/rate_limit/.test(c)) {
+    return withDetail("Nyaya is handling a lot of requests right now. Try again in a moment.");
+  }
+
+  // Anything else that already reads like a sentence passes through (server
+  // error messages may be human-phrased), with detail appended. This check
+  // precedes the machine-code matches below so phrased messages ("The
+  // verification layer timed out") are not re-mapped.
+  const looksHuman = c.includes(" ") && /[a-z]{3}/.test(c) && !/^[a-z0-9_]+$/.test(c);
+  if (looksHuman) return withDetail(c);
+
+  // Machine codes the backend sends in `message`.
+  if (/timed?\s?out|timeout/i.test(c)) {
+    return withDetail("Nyaya took too long to respond. Try resending your question.");
+  }
+  if (/agent_unavailable|agent_error|internal_error|degraded/i.test(c)) {
+    return withDetail("Nyaya's assistant is temporarily unavailable. Please retry in a moment.");
+  }
+
+  // Unknown opaque code: generic copy, with the raw code (or the detail) so
+  // the user can still report it.
+  return `Something went wrong while getting an answer. (${d || c})`;
+}
+
+// ─── Session persistence ──────────────────────────────────────────
+// The conversation survives a mid-conversation page refresh by living in
+// sessionStorage (per-tab, cleared when the tab closes). Only the serialized
+// allow-listed fields are persisted.
+const STORAGE_KEY = "nyaya.chat.v1";
+
+function isChatMessage(v: unknown): v is ChatMessage {
+  if (!v || typeof v !== "object") return false;
+  const m = v as Partial<ChatMessage>;
+  return (
+    (m.role === "user" || m.role === "assistant") &&
+    typeof m.content === "string" &&
+    Array.isArray(m.citations) &&
+    Array.isArray(m.tools)
+  );
+}
+
+// Serialize a message list for sessionStorage. Exported for unit testing.
+export function serializeMessages(messages: ChatMessage[]): string {
+  return JSON.stringify({ v: 1, messages });
+}
+
+// Parse (and shape-validate) a persisted message list. Restores the
+// interrupted-run marker: a trailing assistant bubble with no content, tools
+// or citations was mid-stream when the page was refreshed, so it is marked
+// failed and becomes retryable. Exported for unit testing.
+export function deserializeMessages(raw: string | null): ChatMessage[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  const messages = (parsed as { v?: unknown; messages?: unknown })?.messages;
+  if (!Array.isArray(messages)) return [];
+  const valid = messages.filter(isChatMessage).map((m) => ({ ...m }));
+  const last = valid[valid.length - 1];
+  if (last && last.role === "assistant" && !last.content && last.tools.length === 0 && last.citations.length === 0) {
+    valid[valid.length - 1] = { ...last, error: last.error || humanizeError("interrupted") };
+  }
+  return valid;
+}
+
+function readStore(): string | null {
+  try {
+    return (typeof window !== "undefined" ? window.sessionStorage.getItem(STORAGE_KEY) : null);
+  } catch {
+    return null; // private mode / disabled site data
+  }
+}
+
+function writeStore(raw: string | null): void {
+  try {
+    if (typeof window === "undefined") return;
+    if (raw === null) window.sessionStorage.removeItem(STORAGE_KEY);
+    else window.sessionStorage.setItem(STORAGE_KEY, raw);
+  } catch {
+    /* ignore quota / disabled site data */
+  }
+}
+
+// ─── Retry trimming ───────────────────────────────────────────────
+// A retry resends the last user message, so the trailing run (that user
+// message and everything after it) must be removed; `send` re-appends the
+// user message and a fresh assistant bubble. Trimming from the last *user*
+// message (rather than from "the last assistant message anywhere") keeps
+// earlier successful turns intact even when the failed run has no assistant
+// bubble (e.g. a restored mid-stream refresh). Returns null text when there
+// is no user message to resend. Exported for unit testing.
+export function trimForRetry(messages: ChatMessage[]): { trimmed: ChatMessage[]; text: string | null } {
+  let lastUserIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      lastUserIdx = i;
+      break;
+    }
+  }
+  if (lastUserIdx === -1) return { trimmed: messages, text: null };
+  return { trimmed: messages.slice(0, lastUserIdx), text: messages[lastUserIdx].content };
 }
 
 // Parse one SSE block (lines separated by \n, blocks by \n\n) into its event
@@ -72,6 +228,16 @@ export function parseSseBlock(block: string): { event: string; data: string } | 
 
 const STREAM_TIMEOUT_MS = 90_000;
 
+// Error thrown when the server replies non-2xx, carrying the unified error
+// contract's {message, detail} fields so the catch path can humanize them.
+class RequestError extends Error {
+  detail: string;
+  constructor(code: string, detail = "") {
+    super(code);
+    this.detail = detail;
+  }
+}
+
 export type UseChat = {
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -83,13 +249,31 @@ export type UseChat = {
 };
 
 export function useChat(): UseChat {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Lazy initializer restores the persisted thread (sessionStorage) at first
+  // render, so a mid-conversation refresh preserves the conversation without
+  // a first-tick flash of the greeting. useChat is used only inside
+  // ChatPanel, which is dynamically imported with ssr:false, so this runs
+  // client-side only; readStore() guards / try-catches for other contexts.
+  const [messages, setMessages] = useState<ChatMessage[]>(() => deserializeMessages(readStore()));
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTextRef = useRef<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
+  // A mirror of `messages` so retry can read the latest list and mutate refs
+  // / call setMessages with plain values OUTSIDE any state updater (React
+  // strict mode may invoke updaters more than once, so they must stay pure).
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  const isStreamingRef = useRef(false);
+
+  // Persist on every message change so a mid-conversation refresh preserves
+  // the thread (streaming messages included — the deserializer marks
+  // interrupted runs retryable). Empty list → clear the stored conversation.
+  useEffect(() => {
+    messagesRef.current = messages;
+    writeStore(messages.length > 0 ? serializeMessages(messages) : null);
+  }, [messages]);
 
   const clearStreamTimeout = useCallback(() => {
     if (timeoutRef.current) {
@@ -103,8 +287,9 @@ export function useChat(): UseChat {
     timeoutRef.current = globalThis.setTimeout(() => {
       abortRef.current?.abort();
       abortRef.current = null;
+      isStreamingRef.current = false;
       setIsStreaming(false);
-      setError("stream_timeout");
+      setError(humanizeError("stream_timeout"));
     }, STREAM_TIMEOUT_MS);
   }, [clearStreamTimeout]);
 
@@ -112,6 +297,7 @@ export function useChat(): UseChat {
     clearStreamTimeout();
     abortRef.current?.abort();
     abortRef.current = null;
+    isStreamingRef.current = false;
     setIsStreaming(false);
   }, [clearStreamTimeout]);
 
@@ -122,24 +308,21 @@ export function useChat(): UseChat {
   }, [cancel]);
 
   const retry = useCallback(() => {
-    setMessages((prev) => {
-      const lastUser = [...prev].reverse().find((m) => m.role === "user");
-      if (lastUser) {
-        const lastAssistantIdx = [...prev].reverse().findIndex((m) => m.role === "assistant");
-        const trimmed = lastAssistantIdx === -1
-          ? prev
-          : prev.slice(0, prev.length - 1 - lastAssistantIdx);
-        retryTextRef.current = lastUser.content;
-        return trimmed;
-      }
-      return prev;
-    });
+    if (retryTextRef.current !== null || isStreamingRef.current) return;
+    // Compute the trim from the messages mirror, then mutate refs and set
+    // state with plain values — never inside a state updater (strict mode).
+    const { trimmed, text } = trimForRetry(messagesRef.current);
+    if (text === null) return;
+    retryTextRef.current = text;
+    setMessages(trimmed);
+    messagesRef.current = trimmed;
     setRetryTrigger((n) => n + 1);
   }, []);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed || isStreamingRef.current) return;
+    isStreamingRef.current = true;
     setError(null);
     setIsStreaming(true);
 
@@ -192,19 +375,21 @@ export function useChat(): UseChat {
         // Non-2xx responses carry the unified error shape {message, detail, rid}
         // (e.g. the 503 agent-unavailable body). Read `message`; never the old
         // `error` key. Fall back to the status line for non-JSON bodies.
-        let msg = `${res.status} ${res.statusText}`;
+        let code = `${res.status} ${res.statusText}`;
+        let detail = "";
         try {
           const body: unknown = await res.json();
-          if (body && typeof body === "object" && "message" in body) {
-            const m = (body as { message?: unknown }).message;
-            if (typeof m === "string" && m) msg = m;
+          if (body && typeof body === "object") {
+            const b = body as { message?: unknown; detail?: unknown };
+            if (typeof b.message === "string" && b.message) code = b.message;
+            if (typeof b.detail === "string") detail = b.detail;
           }
         } catch {
           /* non-JSON body: keep the status-line message */
         }
-        throw new Error(msg);
+        throw new RequestError(code, detail);
       }
-      if (!res.body) throw new Error("no response body");
+      if (!res.body) throw new RequestError("no response body");
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -289,10 +474,17 @@ export function useChat(): UseChat {
             }
             case "error": {
               // Unified error shape: {message, detail, rid}.
-              const msg = (payload.message as string) || "agent_error";
+              const code = (payload.message as string) || "agent_error";
               const detail = (payload.detail as string) || "";
-              setError(detail ? `${msg}: ${detail}` : msg);
-              updateAssistant({ error: msg });
+              const rid = (payload.rid as string) || "";
+              const human = humanizeError(code, detail);
+              setError(human);
+              updateAssistant({
+                // The human phrasing is what gets rendered; the request id
+                // (rid) is surfaced next to it for support/debugging.
+                error: human,
+                ...(rid ? { requestId: rid } : {}),
+              } as Partial<ChatMessage> & { requestId?: string });
               break;
             }
             case "done":
@@ -305,19 +497,25 @@ export function useChat(): UseChat {
       const { text: cleaned, citations } = parseCitations(accContent);
       updateAssistant({ content: cleaned, citations, status: undefined });
     } catch (err) {
-      const msg = err instanceof Error && err.name === "AbortError"
-        ? "cancelled"
-        : err instanceof Error ? err.message : "request_failed";
-      setError(msg);
+      // Humanize the failure for both the footer note and the failed assistant
+      // bubble: aborts (user stop / stream timeout), network errors, non-2xx
+      // RequestErrors (message + detail), and anything unexpected.
+      const human = err instanceof Error && err.name === "AbortError"
+        ? humanizeError("cancelled")
+        : err instanceof RequestError
+          ? humanizeError(err.message, err.detail)
+          : humanizeError(err instanceof Error ? err.message : "request_failed");
+      setError(human);
       setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, error: msg } : m)),
+        prev.map((m) => (m.id === assistantId ? { ...m, error: human } : m)),
       );
     } finally {
       clearStreamTimeout();
+      isStreamingRef.current = false;
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [isStreaming, messages, resetStreamTimeout, clearStreamTimeout]);
+  }, [messages, resetStreamTimeout, clearStreamTimeout]);
 
   // Retry effect: when retryTrigger changes, re-send the last user message.
   useEffect(() => {

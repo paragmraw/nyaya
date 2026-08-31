@@ -8,7 +8,8 @@
     "build": "npm run generate:corpus-stats && next build && npx next-sitemap --config next-sitemap.config.cjs out/",
     "generate:corpus-stats": "tsx scripts/generate-corpus-stats.ts",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

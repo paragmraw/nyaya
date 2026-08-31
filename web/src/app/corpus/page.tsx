@@ -4,6 +4,7 @@ import StatCard from "@/components/StatCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import StructuredData, { corpusSchema } from "@/components/StructuredData";
 import corpusStats from "@/data/corpus-stats.json";
+import type { CorpusStats } from "@/lib/api";
 
 export const metadata: Metadata = {
   title: "Corpus",
@@ -18,8 +19,18 @@ export const metadata: Metadata = {
 };
 
 export default function CorpusPage() {
-  const counts = corpusStats;
-  const acts = corpusStats.acts;
+  // Single-sourced: the static snapshot that the generator
+  // (scripts/generate-corpus-stats.ts) derives from CURATED — the same file
+  // useCorpusStats() uses as its SWR fallbackData. Per-act `count` values are
+  // parsed from the CURATED coverage strings, so no number is duplicated here.
+  const snapshot = corpusStats as {
+    counts: CorpusStats["counts"];
+    as_of: string | null;
+    acts: { short_name: string; name: string; type: string; coverage: string; status: string; count?: number }[];
+  };
+  const counts = snapshot.counts;
+  const acts = snapshot.acts;
+  const byShort = (sn: string) => acts.find((a) => a.short_name === sn);
 
   return (
     <>
@@ -40,17 +51,17 @@ export default function CorpusPage() {
           <section className="section">
             <div className="stat-grid">
               <StatCard
-                num={counts.articles}
+                num={byShort("Constitution")?.count}
                 label="Constitution of India, 1950"
                 source="Articles · Vikhram-S/IndianConstitution (Apache-2.0)"
               />
               <StatCard
-                num={358}
+                num={byShort("BNS")?.count}
                 label="Bharatiya Nyaya Sanhita, 2023"
                 source="Sections · PRS Legislative Research (CC BY 4.0)"
               />
               <StatCard
-                num={531}
+                num={byShort("BNSS")?.count}
                 label="Bharatiya Nagarik Suraksha Sanhita, 2023"
                 source="Sections (replaces CrPC) · PRS Legislative Research (CC BY 4.0)"
               />

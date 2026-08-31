@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import { CapTable, ChatPanel, McpConfig } from "@/components/HomePageClient";
 import StructuredData, { homeSchema } from "@/components/StructuredData";
+import { formatNumber } from "@/lib/api";
+import corpusStats from "@/data/corpus-stats.json";
 
 // Feature flag: enable/disable chat window
 const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
+
+// Headline corpus numbers come from the committed, generated snapshot (see
+// scripts/generate-corpus-stats.ts — single-sourced from CURATED), not from
+// hardcoded literals.
+const CORPUS_COUNTS = (corpusStats as { counts: { articles: number; sections: number; judgments: number } }).counts;
 
 export const metadata: Metadata = {
   title: "Home",
@@ -30,15 +37,15 @@ function HomePageContent() {
           </p>
           <div className="left-stats">
             <div className="ls">
-              <div className="ls-num num">464</div>
+              <div className="ls-num num">{formatNumber(CORPUS_COUNTS.articles)}</div>
               <div className="ls-lbl">Articles indexed</div>
             </div>
             <div className="ls">
-              <div className="ls-num num">3,257</div>
+              <div className="ls-num num">{formatNumber(CORPUS_COUNTS.sections)}</div>
               <div className="ls-lbl">Sections indexed</div>
             </div>
             <div className="ls">
-              <div className="ls-num num">5</div>
+              <div className="ls-num num">{formatNumber(CORPUS_COUNTS.judgments)}</div>
               <div className="ls-lbl">Judgments linked</div>
             </div>
           </div>

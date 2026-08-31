@@ -2,6 +2,12 @@
 
 import useSWR from "swr";
 import { api, type Act, type CorpusStats, type JudgmentsResponse, type ToolsResponse, type HealthSummary } from "./api";
+import corpusStatsFile from "@/data/corpus-stats.json";
+
+// Static build-time snapshot generated from CURATED (src/lib/data.ts) by
+// scripts/generate-corpus-stats.ts and committed; useCorpusStats falls back to
+// it while /api/corpus-stats is unreachable.
+const CORPUS_STATS_FALLBACK = corpusStatsFile as unknown as CorpusStats;
 
 // SWR defaults: 5-min dedup, 10s error retry, no revalidate on focus.
 // Static info pages don't need to react to tab focus.
@@ -13,7 +19,10 @@ const SWR_OPTS = {
 };
 
 export function useCorpusStats() {
-  return useSWR<CorpusStats>("/api/corpus-stats", api.corpusStats, SWR_OPTS);
+  return useSWR<CorpusStats>("/api/corpus-stats", api.corpusStats, {
+    ...SWR_OPTS,
+    fallbackData: CORPUS_STATS_FALLBACK,
+  });
 }
 
 export function useActs() {
