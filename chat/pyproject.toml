@@ -35,6 +35,24 @@ dev = [
     "mypy>=1.10,<3",
 ]
 
+# Shared-dependency alignment with mcp/uv.lock.
+# The Docker image installs mcp's exported pins first, then chat's exported
+# lock *constrained by* mcp's requirements (-c requirements.txt), so any
+# shared-pin disagreement between the two locks fails the image build loudly
+# instead of silently re-pinning. These constraints pin the six packages both
+# runtime trees depend on to exactly the versions in mcp/uv.lock. When mcp
+# bumps one of them, update here in the same change or the docker build will
+# refuse to build.
+[tool.uv]
+constraint-dependencies = [
+    "packaging==25.0",
+    "pydantic-settings==2.14.2",
+    "sse-starlette==3.4.6",
+    "starlette==1.3.1",
+    "typing-inspection==0.4.2",
+    "websockets==17.0.1",
+]
+
 [project.urls]
 Repository = "https://github.com/your-org/nyaya"
 

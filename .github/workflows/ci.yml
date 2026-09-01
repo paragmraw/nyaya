@@ -62,6 +62,13 @@ jobs:
       - name: Verify lockfile is up to date
         run: uv lock --check
 
+      - name: Verify chat lockfile is up to date
+        # chat/uv.lock pins the image's chat deps (Dockerfile exports it with
+        # --locked) and its shared pins are constrained to mcp's — a stale
+        # chat lock would fail the docker build, so catch it here first.
+        run: uv lock --check
+        working-directory: chat
+
   web:
     runs-on: ubuntu-latest
     permissions:

@@ -67,6 +67,19 @@ markers = [
 source = ["nyaya"]
 omit = ["*/tests/*"]
 
+# Shared-dependency alignment with chat/uv.lock (see the matching block in
+# chat/pyproject.toml). The Docker image installs mcp's exported pins first,
+# then chat's exported lock *constrained by* mcp's requirements
+# (-c requirements.txt), so any shared-pin disagreement between the two locks
+# fails the image build loudly instead of silently re-pinning. packaging is
+# the one package where the resolver direction goes chat-first: the langfuse
+# extra (langfuse>=2,<4) caps packaging at <26 in chat's lock, so mcp pins
+# 25.0 here rather than pulling chat up to 26.2.
+[tool.uv]
+constraint-dependencies = [
+    "packaging==25.0",
+]
+
 [tool.coverage.report]
 show_missing = true
 exclude_lines = [

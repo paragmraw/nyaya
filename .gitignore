@@ -236,6 +236,9 @@ scratch/
 # Playwright MCP session artifacts (local only)
 .playwright-mcp/
 
+# Node (no root package.json today — prevents a stray install from re-creating it)
+node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
