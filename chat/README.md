@@ -117,3 +117,24 @@ shape as the SSE `error` event: `{"message": "...", "detail": "...", "rid": "...
 cd chat && pytest        # unit tests (no live NVIDIA/MCP calls)
 ruff check . && mypy nyaya_chat
 ```
+
+Live-server eval (needs a running stack — DB, `NVIDIA_API_KEY`, and the MCP
+server in the same process):
+
+```bash
+cd chat
+NYAYA_EVAL_HOST=http://localhost:8001 uv run pytest -m eval   # pytest wrapper
+uv run python -m eval.chat_eval --host http://localhost:8001 --verbose   # full report
+uv run python -m eval.chat_eval --list                                  # scenario IDs
+uv run python -m eval.chat_eval --host http://localhost:8001 --test fact-ipc-302  # one scenario
+```
+
+`eval/chat_eval.py` is the single merged harness (it replaced the old
+`chat_eval.py` + `validate_chat.py` pair). It reads the SSE stream
+incrementally, so time-to-first-token is measured when the first `token`
+event actually arrives (the old harness estimated it as `latency * 0.3`).
+It ships 34 scenarios across guardrail, factual, semantic, comparison,
+refusal, judgment, definition, multi-turn, and edge-case categories, and
+exits non-zero when any quality check fails. `eval/e2e_eval.py` (golden
+dataset) and `eval/retrieval_eval.py` (offline retrieval scoring) remain
+separate, narrower tools.

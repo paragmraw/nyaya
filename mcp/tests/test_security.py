@@ -586,3 +586,30 @@ def test_429_carries_security_and_cors_headers():
         assert r.headers.get("retry-after") == "60"
         assert r.headers.get("content-security-policy", "").startswith("default-src")
         assert r.headers.get("access-control-allow-origin") == "https://nyaya.parag.tech"
+
+
+def test_production_app_middleware_stack_order():
+    """Structural check on the REAL app (not a rebuilt one): the middleware
+    stack must be exactly CORS -> SecurityHeaders -> RequestId -> RateLimit ->
+    BodySizeLimit (runtime order, request in).
+
+    Starlette stores ``user_middleware`` with the outermost layer FIRST
+    (add_middleware prepends; last-added = outermost). If someone reorders the
+    ``app.add_middleware`` calls in server.py, the 429/413 short-circuit
+    responses lose their CORS/security headers — this test catches that at
+    unit-test time instead of in a browser.
+    """
+    from nyaya.server import app
+
+    order = [m.cls.__name__ for m in app.user_middleware]
+    security_stack = [name for name in order if name in {
+        "CORSMiddleware", "SecurityHeadersMiddleware", "RequestIdMiddleware",
+        "RateLimitMiddleware", "BodySizeLimitMiddleware",
+    }]
+    assert security_stack == [
+        "CORSMiddleware",            # outermost: 429/413 carry CORS headers
+        "SecurityHeadersMiddleware", # CSP etc. stamped on every response
+        "RequestIdMiddleware",       # X-Request-ID on every response
+        "RateLimitMiddleware",
+        "BodySizeLimitMiddleware",   # innermost
+    ]

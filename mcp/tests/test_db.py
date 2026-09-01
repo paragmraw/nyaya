@@ -393,3 +393,74 @@ def test_promote_definitions_moves_definition_titled_results_to_top(monkeypatch)
     assert fallback is None
     assert total == 2
     assert [r.ref for r in results] == ["2", "302"]
+
+
+# ---------------------------------------------------------------------------
+# _LockedTTLCache — direct unit tests for the cache primitive itself
+# ---------------------------------------------------------------------------
+
+def test_ttl_cache_miss_then_hit():
+    cache = db._LockedTTLCache(ttl=60.0, maxsize=8)
+    assert cache.get("k") is db._MISS  # absent
+    cache.set("k", {"n": 1})
+    assert cache.get("k") == {"n": 1}  # hit within TTL
+
+
+def test_ttl_cache_expiry_deletes_the_entry(monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(db.time, "monotonic", lambda: now[0])
+    cache = db._LockedTTLCache(ttl=10.0, maxsize=8)
+    cache.set("k", "v")
+    assert cache.get("k") == "v"
+    now[0] += 10.0  # exactly at the TTL boundary -> expired (>= comparison)
+    assert cache.get("k") is db._MISS
+    # The expired entry is dropped on read, not left to rot in the store.
+    assert "k" not in cache._store
+
+
+def test_ttl_cache_evicts_oldest_at_maxsize():
+    cache = db._LockedTTLCache(ttl=300.0, maxsize=2)
+    cache.set("a", 1)
+    cache.set("b", 2)
+    cache.set("c", 3)  # 'a' is the oldest -> evicted
+    assert cache.get("a") is db._MISS
+    assert cache.get("b") == 2
+    assert cache.get("c") == 3
+    assert len(cache._store) <= cache._maxsize
+
+
+def test_ttl_cache_thread_safety_smoke():
+    """Concurrent set/get across threads never corrupts the store: every read
+    either misses cleanly or returns one of the written values, and the store
+    never exceeds maxsize."""
+    import threading
+
+    cache = db._LockedTTLCache(ttl=300.0, maxsize=16)
+    errors: list[Exception] = []
+
+    def _writer(tid: int) -> None:
+        try:
+            for i in range(200):
+                key = f"k{i % 32}"
+                cache.set(key, (tid, i))
+                value = cache.get(key)
+                assert value is db._MISS or isinstance(value, tuple)
+        except Exception as exc:  # pragma: no cover - only on a real failure
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_writer, args=(t,)) for t in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+    assert not errors
+    assert len(cache._store) <= cache._maxsize
+
+
+def test_ttl_cache_keys_are_independent():
+    """Different keys don't collide and don't evict each other below maxsize."""
+    cache = db._LockedTTLCache(ttl=300.0, maxsize=64)
+    cache.set(("IPC", "302"), "section")
+    cache.set(("IPC", "schedules", None, None), "schedules")
+    assert cache.get(("IPC", "302")) == "section"
+    assert cache.get(("IPC", "schedules", None, None)) == "schedules"

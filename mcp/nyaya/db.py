@@ -30,13 +30,11 @@ from psycopg_pool import ConnectionPool
 
 from .config import SNIPPET_CHARS, get_settings
 from .exceptions import DatabaseUnavailable
-from .models import Act, CrossRef, Document, SearchResult
+from .models import Act, CrossRef, CrossRefDirection, Document, SearchResult
+from .sanitize import BIDI_RE
 
 # Fallback provenance date used when an act row lacks a current ``as_of``.
 CORPUS_AS_OF = date(2026, 7, 1)
-
-# Strips Unicode bidi/format characters that could spoof act-name lookups.
-_BIDI_RE = re.compile(r"[\u200B-\u200F\u202A-\u202E\u2066-\u2069]")
 
 # Maps common act names / case variants to the canonical short_name stored
 # in the ``acts`` table. Lookup is case-insensitive.
@@ -98,7 +96,9 @@ _REF_PREFIX_RE = re.compile(
 # titles like IPC s.2 'Definitions' / 'Interpretation' clauses).
 _DEF_RE = re.compile(r"defin|interpret", re.IGNORECASE)
 
-_pool: ConnectionPool | None = None
+# The pool is parameterised with the dict-row connection type so every pooled
+# connection yields ``dict`` rows (psycopg's default is tuple rows).
+_pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] | None = None
 _pool_lock = threading.Lock()
 
 _as_of_cache: tuple[float, date | None] = (0.0, None)
@@ -181,7 +181,7 @@ def normalize_act(act: str | None) -> str | None:
     """Normalize an act short-name: strip, resolve aliases (case-insensitive)."""
     if act is None:
         return None
-    key = _BIDI_RE.sub("", act).strip()
+    key = BIDI_RE.sub("", act).strip()
     if not key:
         return None
     low = key.lower()
@@ -209,13 +209,13 @@ def _escape_like(s: str) -> str:
 # Connection management
 # ---------------------------------------------------------------------------
 
-def _get_pool() -> ConnectionPool:
+def _get_pool() -> ConnectionPool[psycopg.Connection[dict[str, Any]]]:
     global _pool
     with _pool_lock:
         if _pool is None or _pool.closed:
             settings = get_settings()
 
-            def _configure(conn: psycopg.Connection) -> None:
+            def _configure(conn: psycopg.Connection[dict[str, Any]]) -> None:
                 conn.autocommit = True
                 try:
                     if settings.statement_timeout_ms > 0:
@@ -239,7 +239,15 @@ def _get_pool() -> ConnectionPool:
 
 
 @contextlib.contextmanager
-def _conn() -> Iterator[psycopg.Connection]:
+def _conn() -> Iterator[psycopg.Connection[dict[str, Any]]]:
+    """Yield a pooled connection whose rows come back as dicts.
+
+    The ``Connection[dict[str, Any]]`` parameterisation is what makes
+    ``cursor.execute(...).fetchone()`` type as ``dict[str, Any] | None`` for
+    mypy — ``conn.row_factory = dict_row`` alone does not propagate through
+    the pool's generic, which is why every row access below used to need a
+    module-wide suppression.
+    """
     try:
         pool = _get_pool()
         with pool.connection(timeout=get_settings().pool_timeout) as conn:
@@ -622,8 +630,15 @@ def get_amendments_for_article(article_number: str) -> list[Document]:
 # Cross-references
 # ---------------------------------------------------------------------------
 
-def get_cross_refs(act: str, section: str, direction: str = "both") -> list[CrossRef]:
-    """Look up cross-references for a section (bidirectional by default)."""
+def get_cross_refs(
+    act: str, section: str, direction: CrossRefDirection = "both"
+) -> list[CrossRef]:
+    """Look up cross-references for a section (bidirectional by default).
+
+    ``direction`` is a closed Literal ('from' = outgoing, 'to' = incoming,
+    'both' = default) — invalid values are rejected at the tool boundary by
+    FastMCP's schema validation before this layer runs.
+    """
     sn = normalize_act(act)
     s = normalize_ref(section)
     if sn is None or s is None:

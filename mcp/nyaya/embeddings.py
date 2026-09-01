@@ -23,7 +23,6 @@ from typing import TYPE_CHECKING
 
 import httpx
 from cachetools import TTLCache, cached
-from cachetools.keys import hashkey
 
 from .config import RERANK_DEADLINE_S, get_settings
 from .exceptions import EmbeddingUnavailable, SearchError
@@ -147,24 +146,6 @@ def embed_query(text: str) -> list[float]:
     return vec
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts as passages (used by the hydration notebook).
-
-    Not cached — the notebook calls this once per corpus.
-    """
-    if not texts:
-        return []
-    vecs = _embed_via_api(texts, "passage")
-    if vecs:
-        first = vecs[0]
-        if len(first) != EXPECTED_DIM:
-            raise SearchError(
-                f"Embedding dimension mismatch: expected {EXPECTED_DIM}, got {len(first)}.",
-                hint=f"Re-build embeddings with a {EXPECTED_DIM}-d model.",
-            )
-    return vecs
-
-
 def rerank_query(query: str, candidates: list[str]) -> list[float]:
     """Rerank candidate passages against a query via the NVIDIA rerank API.
 
@@ -212,60 +193,3 @@ def rerank_query(query: str, candidates: list[str]) -> list[float]:
         f"NVIDIA rerank API call failed within the {RERANK_DEADLINE_S:.0f}s deadline: {last_err}",
         hint="Check NVIDIA_API_KEY and network connectivity to ai.api.nvidia.com.",
     ) from last_err
-
-
-class EmbeddingService:
-    """Encapsulates embedding + reranking so they can be injected / tested.
-
-    Accepts optional cache instances so tests can inject fresh caches or fakes.
-    A default singleton (backed by the module-level caches) is exposed via
-    :func:`get_default_service` for backward compatibility.
-    """
-
-    def __init__(
-        self,
-        query_cache: TTLCache | None = None,
-    ) -> None:
-        self._query_cache: TTLCache = query_cache if query_cache is not None else TTLCache(maxsize=256, ttl=3600)
-
-    def embed_query(self, text: str) -> list[float]:
-        k = hashkey(text)
-        if k in self._query_cache:
-            return self._query_cache[k]
-        if not text or not text.strip():
-            raise SearchError(
-                "Cannot embed an empty query.",
-                hint="Provide a non-empty query string to semantic_query.",
-            )
-        vecs = _embed_via_api([text], "query")
-        if not vecs:
-            raise SearchError(
-                "The embedding API returned no vector for the query.",
-                hint="This is unexpected; check the NVIDIA API status.",
-            )
-        vec = vecs[0]
-        if len(vec) != EXPECTED_DIM:
-            raise SearchError(
-                f"Embedding dimension mismatch: expected {EXPECTED_DIM}, got {len(vec)}.",
-                hint=f"Re-build embeddings with a {EXPECTED_DIM}-d model, or update EXPECTED_DIM.",
-            )
-        self._query_cache[k] = vec
-        return vec
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return embed_texts(texts)
-
-    def rerank(self, query: str, candidates: list[str]) -> list[float]:
-        return rerank_query(query, candidates)
-
-
-# Default singleton for backward compatibility with existing callers.
-_default_service: EmbeddingService | None = None
-
-
-def get_default_service() -> EmbeddingService:
-    """Return the process-wide default :class:`EmbeddingService`."""
-    global _default_service
-    if _default_service is None:
-        _default_service = EmbeddingService(query_cache=_query_cache)
-    return _default_service

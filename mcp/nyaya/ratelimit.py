@@ -26,7 +26,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .config import get_rate_limit_settings, get_settings
+from .config import _redact_url, get_rate_limit_settings, get_settings
 
 log = logging.getLogger("nyaya.ratelimit")
 
@@ -129,16 +129,9 @@ def _create_backend() -> RateLimitBackend:
     return InMemoryBackend()
 
 
-def _redact_url(url: str) -> str:
-    from urllib.parse import urlsplit, urlunsplit
-
-    parts = urlsplit(url)
-    if parts.hostname and (parts.username or parts.password):
-        netloc = f"***@{parts.hostname}"
-        if parts.port:
-            netloc += f":{parts.port}"
-        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
-    return url
+# NOTE: ``_redact_url`` used to be duplicated here and in ``config.py``; the
+# config copy is the single home now (imported above) — both call sites log
+# connection strings and must redact identically.
 
 
 class RateLimitMiddleware:

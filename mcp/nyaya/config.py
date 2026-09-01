@@ -80,6 +80,31 @@ def _required(name: str) -> str:
     return val
 
 
+# Opt-in flag that lets get_settings() load a local ``.env`` file. Off by
+# default so tests and CI (which set real env vars) never see a stray .env.
+DOTENV_ENV_VAR = "NYAYA_DOTENV"
+_DOTENV_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _maybe_load_dotenv() -> None:
+    """Load a local ``.env`` file, but only when explicitly enabled.
+
+    Makes the ``cp .env.example .env`` quickstart in ``mcp/README.md`` work
+    without exporting the variables by hand. Opt-in — ``NYAYA_DOTENV=1`` — so
+    tests and CI are never surprised by a stray ``.env``; also a no-op when
+    python-dotenv is not installed (it is an optional dependency, see the
+    ``dotenv`` extra in ``pyproject.toml``). ``load_dotenv`` never overrides
+    variables that are already set, so real environment always wins.
+    """
+    if os.environ.get(DOTENV_ENV_VAR, "").strip().lower() not in _DOTENV_TRUTHY:
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv()
+
+
 def _redact_url(url: str) -> str:
     from urllib.parse import urlsplit, urlunsplit
 
@@ -126,6 +151,8 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    _maybe_load_dotenv()
+
     port_raw = os.environ.get("PORT", str(PORT_DEFAULT))
     try:
         port = int(port_raw)

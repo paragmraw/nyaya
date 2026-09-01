@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .. import db
 from ..exceptions import NotFound
 from ..models import ActsList, DocumentsList
@@ -37,7 +39,7 @@ def register(mcp) -> None:
     )
     @structured_errors
     @run_sync
-    def list_chapters(act: str) -> dict:
+    def list_chapters(act: str) -> dict[str, Any]:
         """List chapters of an act.
 
         Args:

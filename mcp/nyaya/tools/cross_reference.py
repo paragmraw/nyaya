@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .. import db
-from ..models import CrossRefList
+from ..models import CrossRefDirection, CrossRefList
 from ._error import structured_errors
 from ._util import run_sync
 
@@ -26,21 +26,19 @@ def register(mcp) -> None:
     )
     @structured_errors
     @run_sync
-    def cross_reference(act: str, section: str,
-                        direction: str = "both") -> CrossRefList:
+    def cross_reference(
+        act: str,
+        section: str,
+        direction: CrossRefDirection = "both",
+    ) -> CrossRefList:
         """Find cross-references for a section (bidirectional by default).
 
         Args:
             act: Act short name or alias, e.g. 'IPC', 'Constitution'.
             section: Section or article number, e.g. '302', '21'.
             direction: 'both' (default), 'from' (outgoing only), or 'to' (incoming only).
-                Invalid values raise a validation error.
+                Anything else is rejected by schema validation before the call runs.
         """
-        if direction not in ("both", "from", "to"):
-            from ..exceptions import SearchError
-            raise SearchError(
-                f"direction must be 'both', 'from', or 'to', got {direction!r}.",
-            )
         refs = db.get_cross_refs(act, section, direction=direction)
         return CrossRefList(
             from_act=act, from_section=section, references=refs, direction=direction,

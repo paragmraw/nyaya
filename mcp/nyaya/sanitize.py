@@ -21,7 +21,9 @@ MAX_TEXT_BYTES = 200_000
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
 
 # Unicode bidi/format characters that can visually reorder text.
-_BIDI_RE = re.compile(r"[\u200B-\u200F\u202A-\u202E\u2066-\u2069]")
+# Single shared definition: db.normalize_act strips the same characters from
+# user-supplied act names, so both layers agree on exactly what is removed.
+BIDI_RE = re.compile(r"[\u200B-\u200F\u202A-\u202E\u2066-\u2069]")
 
 
 def strip_control_chars(s: str) -> str:
@@ -32,7 +34,7 @@ def strip_control_chars(s: str) -> str:
     (U+0000-U+001F), DEL (U+007F), C1 control characters (U+0080-U+009F),
     and Unicode bidi/format characters that could be used to spoof text.
     """
-    return _BIDI_RE.sub("", _CONTROL_RE.sub("", s))
+    return BIDI_RE.sub("", _CONTROL_RE.sub("", s))
 
 
 def cap_length(s: str, max_bytes: int = MAX_TEXT_BYTES) -> str:

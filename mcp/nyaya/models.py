@@ -15,7 +15,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 Kind = Literal["section", "article", "judgment", "schedule", "amendment"]
-HitKind = Literal["section", "article", "judgment", "schedule", "amendment"]
+# Same corpus buckets, used where a search hit reports what it matched.
+# (Alias, not a second union: one definition, one place to extend.)
+HitKind = Kind
+
+# Direction of a cross-reference lookup: outgoing (from the source section),
+# incoming (to it), or both.
+CrossRefDirection = Literal["from", "to", "both"]
 
 
 class Provenance(BaseModel):
@@ -112,7 +118,7 @@ class CrossRefList(BaseModel):
     from_act: str
     from_section: str
     references: list[CrossRef]
-    direction: Literal["from", "to", "both"] = Field(
+    direction: CrossRefDirection = Field(
         default="both", description="Whether the references are outgoing (from), incoming (to), or both."
     )
 

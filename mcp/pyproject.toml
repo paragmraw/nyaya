@@ -34,6 +34,10 @@ dev = [
     "ruff>=0.6,<1",
     "mypy>=1.10,<2",
 ]
+# Optional .env loading (get_settings() reads a local .env when NYAYA_DOTENV=1).
+dotenv = [
+    "python-dotenv>=1.0,<2",
+]
 
 [project.urls]
 Repository = "https://github.com/your-org/nyaya"
@@ -73,6 +77,9 @@ exclude_lines = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The hydration notebook is data-prep scratch code (its own cell style);
+# linting it only produces noise, so it is excluded from `ruff check .`.
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
@@ -85,19 +92,11 @@ warn_unused_configs = true
 ignore_missing_imports = true
 disable_error_code = ["no-any-return"]
 
-# psycopg's dict_row typing is incompatible with its own RowFactory generic;
-# the code is correct at runtime. Suppress until psycopg ships better stubs.
-[[tool.mypy.overrides]]
-module = "nyaya.db"
-disable_error_code = ["arg-type", "call-overload", "index", "assignment", "attr-defined"]
-
-[[tool.mypy.overrides]]
-module = "nyaya.tools.cross_reference"
-disable_error_code = ["arg-type"]
-
-[[tool.mypy.overrides]]
-module = "nyaya.server"
-disable_error_code = ["misc", "attr-defined"]
+# The former ``nyaya.db`` override (disable_error_code = arg-type,
+# call-overload, index, assignment, attr-defined) was removed in the Task 11
+# mypy tightening: the 28 suppressed errors were real typing debt, fixed by
+# parameterising the pool/connection generics with the dict row factory
+# (see ``db._conn`` / ``db._pool``).
 
 [[tool.mypy.overrides]]
 module = "cachetools.*"

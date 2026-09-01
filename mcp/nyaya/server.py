@@ -32,7 +32,7 @@ _ALLOWED_ORIGINS = ["https://nyaya.parag.tech"]
 
 
 @lifespan_decorator
-async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[None]:
+async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     # Pre-warm: build the chat agent at startup so the first request doesn't
     # pay the tool-loading + graph-compilation cost. The agent is built
     # lazily by get_agent() if this fails (e.g. DB unavailable at startup).
@@ -187,8 +187,6 @@ def _maybe_mount_chat() -> None:
     # the build + state injection.
     chat_app = _create_chat_app()
     app.mount("/chat", chat_app, name="chat")
-    # Stash on the mcp instance so the lifespan can find it and inject state.
-    mcp_instance._nyaya_chat_app = chat_app
     log.info("chat sub-app mounted at /chat (agent built at startup)")
 
 

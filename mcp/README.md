@@ -13,6 +13,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 - **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
 - **Fuzzy judgment lookup**: `get_judgment` matches by exact citation, exact title, or fuzzy title substring (≥ 8 chars to avoid false matches)
 - **Structured errors**: all `NotFound` responses return `is_error=true` with a machine-readable `structured_content={"error": {"code": "not_found", "message": "...", "kind": "section|article|act|judgment|schedule|amendment", "hint": "..."}}` so LLM clients can branch programmatically. `EmbeddingUnavailable` is distinct from "no matches".
+- **Text projection controls on the list tools**: `list_sections` / `list_articles` / `list_judgments` return short text snippets by default (300 chars, tunable via `snippet_chars`); pass `include_text=true` for full text (large responses — prefer `get_section`/`get_article`/`get_judgment` for a single document). The REST equivalents expose the same choice: `include_text=false` by default, `?full=1` for full text.
 
 ## Corpus and sources
 
@@ -50,7 +51,16 @@ cp .env.example .env
 # Edit .env:
 #   DATABASE_URL   — the Supabase/Postgres connection string
 #   NVIDIA_API_KEY — your NVIDIA API Catalog key (required for embeddings + reranking)
+
+# Then opt in to loading it: the server only reads .env when explicitly told to
+# (so tests and CI that export real env vars are never surprised by a stray file).
+export NYAYA_DOTENV=1
 ```
+
+`.env` loading requires the optional `dotenv` extra (`pip install -e ".[dotenv]"`);
+without it the flag is a silent no-op. Variables already set in the environment
+always win — `load_dotenv()` does not override them. Tests and CI leave
+`NYAYA_DOTENV` unset and pass variables directly.
 
 ### 3. Install and run
 
@@ -181,7 +191,7 @@ pytest --cov=nyaya              # with coverage
 ruff check .                    # lint
 ```
 
-The test suite is fully offline: `tests/conftest.py` stubs the DB layer with canned data, so `pytest` runs with no Supabase and no network. Integration tests that boot the ASGI app are marked `@pytest.mark.integration`.
+The test suite is fully offline: `tests/conftest.py` only pins the required env vars (`DATABASE_URL`, `NVIDIA_API_KEY`) to dummy values so `get_settings()` builds; the DB-layer fakes live next to the tests that use them (e.g. the `_FakeConn` pool fake in `tests/test_db.py`, the fake `db` functions in `tests/test_rest.py`). `pytest` runs with no Supabase and no network. Tests that boot the real ASGI app are marked `@pytest.mark.integration` and still run offline against fakes.
 
 ## Project structure
 
