@@ -54,9 +54,22 @@ RUN uv export --frozen --no-dev --no-emit-project --no-editable --format require
 # into site-packages so the host nyaya server can ``import nyaya_chat`` at
 # runtime. Non-editable so the code lives in site-packages (the builder's
 # /build is discarded).
-COPY chat/pyproject.toml chat/README.md ./chat/
+#
+# Dependencies are pinned by exporting chat/uv.lock (committed) rather than
+# letting uv resolve fresh against pyproject.toml. The langfuse telemetry
+# extra is behind a build ARG (default off) so the base image doesn't pull
+# the langfuse SDK stack; opt in with --build-arg CHAT_LANGFUSE=true.
+ARG CHAT_LANGFUSE=false
+COPY chat/pyproject.toml chat/uv.lock chat/README.md ./chat/
 COPY chat/nyaya_chat/ ./chat/nyaya_chat/
-RUN uv pip install --system --no-cache "./chat[langfuse]"
+RUN cd chat \
+    && if [ "$CHAT_LANGFUSE" = "true" ]; then \
+        uv export --frozen --no-dev --extra langfuse --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt; \
+    else \
+        uv export --frozen --no-dev --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt; \
+    fi \
+    && uv pip install --system --no-cache -r /tmp/chat-requirements.txt \
+    && uv pip install --system --no-cache --no-deps .
 
 # --- Stage 3: runtime -------------------------------------------------------
 # python:3.12-alpine pinned by digest for reproducible builds (amd64).

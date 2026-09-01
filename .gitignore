@@ -7,6 +7,10 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+#   lib/ is scoped to the repo root (/lib/) — Python build artifacts land there
+#   (or under build/, venv/, which are ignored separately). A bare `lib/` would
+#   also match web/src/lib/, the SPA's shared-code barrel, forcing an
+#   `!src/lib/` un-ignore hack in web/.gitignore.
 .Python
 build/
 develop-eggs/
@@ -14,7 +18,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -228,6 +232,9 @@ scratch/
 # IDE
 .vscode/
 .idea/
+
+# Playwright MCP session artifacts (local only)
+.playwright-mcp/
 
 # OS
 .DS_Store
