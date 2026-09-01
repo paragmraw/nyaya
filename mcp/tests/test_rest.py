@@ -72,7 +72,7 @@ def _fake_db(monkeypatch, *, stats=None, as_of=None, fail_stats=False):
 
 def test_corpus_stats_shape(monkeypatch):
     """GET /api/corpus-stats -> {counts, as_of} and no status key."""
-    db = _fake_db(monkeypatch)
+    _fake_db(monkeypatch)
 
     with TestClient(app) as client:
         r = client.get("/api/corpus-stats")
@@ -81,7 +81,6 @@ def test_corpus_stats_shape(monkeypatch):
     assert body["counts"] == _stats()
     assert body["as_of"] == "2026-07-01"
     assert "status" not in body
-    assert db  # imported for the monkeypatch side effects
 
 
 def test_acts_endpoint_serializes_models(monkeypatch):

@@ -47,7 +47,7 @@ asyncio_mode = "auto"
 addopts = "-ra --strict-markers --tb=short -q"
 markers = [
     "integration: requires live NVIDIA API key and a reachable MCP server",
-    "eval: golden dataset evaluation (requires NVIDIA_API_KEY, slow)",
+    "eval: live-server evaluation (SSE chat eval + golden dataset; skips offline)",
 ]
 
 [tool.ruff]

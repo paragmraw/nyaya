@@ -59,17 +59,12 @@ def test_guardrail_scenarios_pass():
         "greeting-hello", "capability-what-can-you-do",
         "thanks-thank-you", "off-topic-weather",
     ):
-        result, failed = _run_checked(scenario_id)
+        result, failed = _run(scenario_id)
         assert not failed, f"{scenario_id}: {failed}"
 
 
-def _run_checked(scenario_id: str):
-    result, failed = _run(scenario_id)
-    return result, failed
-
-
 def test_factual_lookup_scenario_passes():
-    result, failed = _run_checked("fact-ipc-302")
+    result, failed = _run("fact-ipc-302")
     assert not failed, failed
     assert result.tool_calls, "factual lookup must call at least one tool"
     assert result.citations, "factual lookup must produce citations"
@@ -78,7 +73,7 @@ def test_factual_lookup_scenario_passes():
 def test_real_time_to_first_token_is_measured():
     """The merged harness must measure TTFT off the live stream, not fake it
     as ``latency * 0.3`` like the pre-merge chat_eval.py did."""
-    result, _failed = _run_checked("greeting-hello")
+    result, _failed = _run("greeting-hello")
     # Guardrails stream instantly; only assert the field is populated when
     # tokens were actually received (a zero TTFT with tokens means the
     # incremental read is broken).
