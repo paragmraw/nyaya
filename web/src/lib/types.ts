@@ -9,9 +9,6 @@ import type { ReactNode } from "react";
 export type {
   CorpusCounts,
   CorpusStats,
-  Act,
-  Judgment,
-  JudgmentsResponse,
   ToolInfo,
   ToolsResponse,
   HealthSummary,

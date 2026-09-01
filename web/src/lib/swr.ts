@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { api, type Act, type CorpusStats, type JudgmentsResponse, type ToolsResponse, type HealthSummary } from "./api";
+import { api, type CorpusStats, type ToolsResponse, type HealthSummary } from "./api";
 import corpusStatsFile from "@/data/corpus-stats.json";
 
 // Static build-time snapshot generated from CURATED (src/lib/data.ts) by
@@ -23,18 +23,6 @@ export function useCorpusStats() {
     ...SWR_OPTS,
     fallbackData: CORPUS_STATS_FALLBACK,
   });
-}
-
-export function useActs() {
-  return useSWR<Act[]>("/api/acts", api.acts, SWR_OPTS);
-}
-
-export function useJudgments(limit = 50, offset = 0) {
-  return useSWR<JudgmentsResponse>(
-    ["/api/judgments", { limit, offset }],
-    () => api.judgments(limit, offset),
-    SWR_OPTS,
-  );
 }
 
 export function useTools(fallbackData?: ToolsResponse) {

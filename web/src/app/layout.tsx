@@ -9,6 +9,7 @@ import { WebVitals } from "@/lib/analytics";
 import { siteSchema } from "@/lib/schema";
 import { SITE, OG_IMAGE } from "@/lib/site";
 import { themePrepaintScript } from "@/lib/theme";
+import { routePrepaintScript } from "@/lib/route";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -92,6 +93,10 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themePrepaintScript() }} />
       </head>
       <body>
+        {/* Pre-paint route class: body.home (viewport lock) / body.info must
+            be on <body> before first paint. Runs synchronously during parsing;
+            RouteBodyClass below keeps it in sync across client-side navs. */}
+        <script dangerouslySetInnerHTML={{ __html: routePrepaintScript() }} />
         <a href="#content" className="skip-link">Skip to main content</a>
         <RouteBodyClass />
         <Topnav />

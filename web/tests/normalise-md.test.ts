@@ -1,4 +1,4 @@
-// Unit tests for normaliseMd (ChatMessage.tsx).
+// Unit tests for normaliseMd (src/lib/markdown.ts).
 //
 // Run with:  npx tsx --test tests/normalise-md.test.ts
 //
@@ -9,7 +9,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normaliseMd } from "../src/components/ChatMessage";
+import { normaliseMd } from "../src/lib/markdown";
 
 // A GFM table is a run of consecutive non-blank lines where:
 //   line 0: header row (contains |, starts/ends with | or has | inside)

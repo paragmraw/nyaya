@@ -228,6 +228,38 @@ export function parseSseBlock(block: string): { event: string; data: string } | 
 
 const STREAM_TIMEOUT_MS = 90_000;
 
+// ─── rAF token batching (plan user-decision 4) ────────────────────
+// Streamed `token` SSE events can arrive far more often than once per frame;
+// updating React state per token re-renders the markdown bubble per token
+// (O(n²) cumulative work over a long answer). createFrameBatcher coalesces
+// any number of schedule() calls between two frames into a single flush().
+// Exported for unit testing (tests/raf-batch.test.ts); raf/caf are injectable
+// so the batching contract is testable in node (no requestAnimationFrame there).
+export type FrameBatcher = { schedule: () => void; cancel: () => void };
+
+export function createFrameBatcher(
+  flush: () => void,
+  raf: (cb: () => void) => number = (cb) => requestAnimationFrame(cb),
+  caf: (handle: number) => void = (h) => cancelAnimationFrame(h),
+): FrameBatcher {
+  let handle: number | null = null;
+  return {
+    schedule() {
+      if (handle !== null) return; // a frame is already pending
+      handle = raf(() => {
+        handle = null;
+        flush();
+      });
+    },
+    cancel() {
+      if (handle !== null) {
+        caf(handle);
+        handle = null;
+      }
+    },
+  };
+}
+
 // Error thrown when the server replies non-2xx, carrying the unified error
 // contract's {message, detail} fields so the catch path can humanize them.
 class RequestError extends Error {
@@ -398,6 +430,31 @@ export function useChat(): UseChat {
       let accReasoning = "";
       let accPlan = "";
 
+      // Token/reasoning/plan deltas accumulate in the strings above and are
+      // flushed to React state at most once per animation frame (rAF batching,
+      // plan user-decision 4): per-token setState would re-render the markdown
+      // bubble per token. Each dirty accumulator is applied at most once per
+      // frame; `correction` and the final flush bypass the batcher so the last
+      // state written is always the authoritative one.
+      let contentDirty = false;
+      let reasoningDirty = false;
+      let planDirty = false;
+      const batcher = createFrameBatcher(() => {
+        if (contentDirty) {
+          contentDirty = false;
+          const { text: cleaned, citations } = parseCitations(accContent);
+          updateAssistant({ content: cleaned, citations });
+        }
+        if (reasoningDirty) {
+          reasoningDirty = false;
+          updateAssistant({ reasoning: accReasoning });
+        }
+        if (planDirty) {
+          planDirty = false;
+          updateAssistant({ plan: accPlan });
+        }
+      });
+
       resetStreamTimeout();
 
       while (true) {
@@ -420,20 +477,22 @@ export function useChat(): UseChat {
             case "token": {
               const c = (payload.content as string) || "";
               accContent += c;
-              const { text: cleaned, citations } = parseCitations(accContent);
-              updateAssistant({ content: cleaned, citations });
+              contentDirty = true;
+              batcher.schedule();
               break;
             }
             case "reasoning": {
               const r = (payload.content as string) || "";
               accReasoning += r;
-              updateAssistant({ reasoning: accReasoning });
+              reasoningDirty = true;
+              batcher.schedule();
               break;
             }
             case "plan": {
               const p = (payload.content as string) || "";
               accPlan += p;
-              updateAssistant({ plan: accPlan });
+              planDirty = true;
+              batcher.schedule();
               break;
             }
             case "tool_start":
@@ -467,6 +526,11 @@ export function useChat(): UseChat {
             case "correction": {
               const correctedText = (payload.content as string) || "";
               if (correctedText) {
+                // Authoritative replacement: drop any pending batched flush so
+                // it cannot overwrite the correction with stale accumulated
+                // tokens.
+                batcher.cancel();
+                contentDirty = false;
                 const { text: cleaned, citations } = parseCitations(correctedText);
                 updateAssistant({ content: cleaned, citations, status: undefined });
               }
@@ -494,6 +558,8 @@ export function useChat(): UseChat {
           }
         }
       }
+      // Stream complete: flush the final accumulated text authoritatively.
+      batcher.cancel();
       const { text: cleaned, citations } = parseCitations(accContent);
       updateAssistant({ content: cleaned, citations, status: undefined });
     } catch (err) {
