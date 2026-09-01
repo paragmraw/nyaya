@@ -396,6 +396,36 @@ export function useChat(): UseChat {
       );
     };
 
+    let accContent = "";
+    let accReasoning = "";
+    let accPlan = "";
+
+    // Token/reasoning/plan deltas accumulate in the strings above and are
+    // flushed to React state at most once per animation frame (rAF batching,
+    // plan user-decision 4): per-token setState would re-render the markdown
+    // bubble per token. Each dirty accumulator is applied at most once per
+    // frame; `correction` and the final flush bypass the batcher so the last
+    // state written is always the authoritative one. The batcher is declared
+    // outside the try so `catch` and `finally` can cancel any pending frame.
+    let contentDirty = false;
+    let reasoningDirty = false;
+    let planDirty = false;
+    const batcher = createFrameBatcher(() => {
+      if (contentDirty) {
+        contentDirty = false;
+        const { text: cleaned, citations } = parseCitations(accContent);
+        updateAssistant({ content: cleaned, citations });
+      }
+      if (reasoningDirty) {
+        reasoningDirty = false;
+        updateAssistant({ reasoning: accReasoning });
+      }
+      if (planDirty) {
+        planDirty = false;
+        updateAssistant({ plan: accPlan });
+      }
+    });
+
     try {
       const res = await fetch("/chat/turn", {
         method: "POST",
@@ -426,35 +456,9 @@ export function useChat(): UseChat {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let accContent = "";
-      let accReasoning = "";
-      let accPlan = "";
 
-      // Token/reasoning/plan deltas accumulate in the strings above and are
-      // flushed to React state at most once per animation frame (rAF batching,
-      // plan user-decision 4): per-token setState would re-render the markdown
-      // bubble per token. Each dirty accumulator is applied at most once per
-      // frame; `correction` and the final flush bypass the batcher so the last
-      // state written is always the authoritative one.
-      let contentDirty = false;
-      let reasoningDirty = false;
-      let planDirty = false;
-      const batcher = createFrameBatcher(() => {
-        if (contentDirty) {
-          contentDirty = false;
-          const { text: cleaned, citations } = parseCitations(accContent);
-          updateAssistant({ content: cleaned, citations });
-        }
-        if (reasoningDirty) {
-          reasoningDirty = false;
-          updateAssistant({ reasoning: accReasoning });
-        }
-        if (planDirty) {
-          planDirty = false;
-          updateAssistant({ plan: accPlan });
-        }
-      });
-
+      // Token batching: the batcher closure and accumulators are hoisted above
+      // so `catch`/`finally` can cancel any pending frame.
       resetStreamTimeout();
 
       while (true) {
@@ -528,9 +532,12 @@ export function useChat(): UseChat {
               if (correctedText) {
                 // Authoritative replacement: drop any pending batched flush so
                 // it cannot overwrite the correction with stale accumulated
-                // tokens.
+                // tokens, and rebase the accumulator onto the corrected text —
+                // otherwise the final flush below would re-apply the raw
+                // pre-correction tokens and win over the verified answer.
                 batcher.cancel();
                 contentDirty = false;
+                accContent = correctedText;
                 const { text: cleaned, citations } = parseCitations(correctedText);
                 updateAssistant({ content: cleaned, citations, status: undefined });
               }
@@ -576,6 +583,12 @@ export function useChat(): UseChat {
         prev.map((m) => (m.id === assistantId ? { ...m, error: human } : m)),
       );
     } finally {
+      // No pending frame may fire after abort/error/timeout: a late flush would
+      // write partial accumulated text into the aborted assistant bubble.
+      batcher.cancel();
+      contentDirty = false;
+      reasoningDirty = false;
+      planDirty = false;
       clearStreamTimeout();
       isStreamingRef.current = false;
       setIsStreaming(false);

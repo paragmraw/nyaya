@@ -6,11 +6,16 @@
 // (tool-chip clicks, toggles, sibling updates) cost a Map lookup, and the
 // O(n) normalisation runs only when the text actually grew.
 
-// Memoize normaliseMd by exact input. The cache is bounded (streamed answers
-// grow monotonically, so entries accumulate one per flush; the oldest entries
-// are dropped FIFO past the cap) to avoid unbounded growth in a long session.
-const NORMALISE_CACHE_CAP = 64;
+// Memoize normaliseMd by exact input. The cache is bounded by total cached
+// bytes (not entry count): during a long stream every flush produces a new,
+// longer key, so an entry-count cap would end up holding the N largest
+// accumulated prefixes of the answer (~copies of the whole text). A byte
+// budget evicts the oldest entries FIFO until the new entry fits, keeping the
+// most recent text (the one live re-renders hit) without the O(answer × cap)
+// transient memory.
+const NORMALISE_CACHE_CAP_BYTES = 512 * 1024;
 const normaliseCache = new Map<string, string>();
+let normaliseCacheBytes = 0;
 
 // Normalise streamed markdown so block-level constructs (headings, blockquotes,
 // lists, tables, code fences) are recognised by CommonMark even when the model
@@ -24,12 +29,19 @@ export function normaliseMd(src: string): string {
   if (cached !== undefined) return cached;
 
   const result = normaliseMdUncached(src);
-  if (normaliseCache.size >= NORMALISE_CACHE_CAP) {
-    // Map iterates in insertion order — drop the oldest entry (FIFO).
-    const oldest = normaliseCache.keys().next().value;
-    if (oldest !== undefined) normaliseCache.delete(oldest);
+  const cost = src.length + result.length;
+  if (cost <= NORMALISE_CACHE_CAP_BYTES) {
+    // Map iterates in insertion order — evict oldest (FIFO) until the new
+    // entry fits within the byte budget.
+    while (normaliseCache.size > 0 && normaliseCacheBytes + cost > NORMALISE_CACHE_CAP_BYTES) {
+      const oldest = normaliseCache.keys().next().value;
+      if (oldest === undefined) break;
+      normaliseCacheBytes -= oldest.length + (normaliseCache.get(oldest)?.length ?? 0);
+      normaliseCache.delete(oldest);
+    }
+    normaliseCacheBytes += cost;
+    normaliseCache.set(src, result);
   }
-  normaliseCache.set(src, result);
   return result;
 }
 

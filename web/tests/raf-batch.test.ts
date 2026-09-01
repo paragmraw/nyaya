@@ -14,20 +14,22 @@ import assert from "node:assert/strict";
 import { createFrameBatcher } from "../src/lib/chat";
 
 // A deterministic frame clock: schedule() queues a callback for the next
-// tick(); each tick() runs all queued callbacks exactly once.
+// tick(); each tick() runs all queued callbacks exactly once. Queued entries
+// are keyed by handle (like the real cancelAnimationFrame) so a cancel between
+// schedules removes exactly the callback it was handed, never a neighbour.
 function makeFrameClock() {
-  let queued: Array<() => void> = [];
+  const queued = new Map<number, () => void>();
   let nextId = 1;
   const raf = (cb: () => void) => {
-    queued.push(cb);
+    queued.set(nextId, cb);
     return nextId++;
   };
   const caf = (handle: number) => {
-    queued = queued.filter((_, i) => i !== handle - 1);
+    queued.delete(handle);
   };
   const tick = () => {
-    const run = queued;
-    queued = [];
+    const run = [...queued.values()];
+    queued.clear();
     for (const cb of run) cb();
     return run.length;
   };
