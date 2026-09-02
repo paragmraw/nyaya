@@ -114,7 +114,21 @@ railway up
 
 `PORT` is set automatically by Railway (defaults to `8000`).
 
-### 3. Run ingestion (one-time)
+### 3. Apply the schema migration (before/at first deploy)
+
+The server expects two **additive** statements that may not exist on a database provisioned before the `ref_num` change:
+
+```sql
+alter table documents add column if not exists ref_num int
+    generated always as (coalesce(nullif(regexp_replace(ref, '[^0-9].*$', ''), '')::int, 0)) stored;
+create index if not exists documents_act_ref_num_idx on documents (act_id, ref_num);
+```
+
+Apply these to the deployed database (they are the only safe-to-apply block, at the bottom of `schema.sql`) **before deploying the image** — until they exist, `list_sections` (ORDER BY `ref_num`) fails with `UndefinedColumn` and the flagship list tool 500s. Everything else degrades fine.
+
+> **Never run `psql -f schema.sql` against a populated database** — the file starts with `DROP ... CASCADE` statements and will destroy the corpus. See the warning header at the top of `schema.sql`.
+
+### 4. Run ingestion (one-time)
 
 Ingestion writes to Supabase, so you can run it from your local machine (with the same `.env`) — the Railway deployment reads from the same database. Run the notebook `mcp/notebooks/hydrate.ipynb` locally once, and the deployed server immediately serves the data.
 

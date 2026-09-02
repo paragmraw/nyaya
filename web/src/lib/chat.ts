@@ -261,12 +261,15 @@ export function createFrameBatcher(
 }
 
 // Error thrown when the server replies non-2xx, carrying the unified error
-// contract's {message, detail} fields so the catch path can humanize them.
+// contract's {message, detail, rid} fields so the catch path can humanize
+// them and surface the request id for support/debugging.
 class RequestError extends Error {
   detail: string;
-  constructor(code: string, detail = "") {
+  rid: string;
+  constructor(code: string, detail = "", rid = "") {
     super(code);
     this.detail = detail;
+    this.rid = rid;
   }
 }
 
@@ -291,6 +294,10 @@ export function useChat(): UseChat {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when the stream timeout fires, so the catch path can keep the
+  // timeout error copy instead of letting the deliberate abort read as a
+  // user cancellation ("Response cancelled.").
+  const timedOutRef = useRef(false);
   const retryTextRef = useRef<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
   // A mirror of `messages` so retry can read the latest list and mutate refs
@@ -317,6 +324,7 @@ export function useChat(): UseChat {
   const resetStreamTimeout = useCallback(() => {
     clearStreamTimeout();
     timeoutRef.current = globalThis.setTimeout(() => {
+      timedOutRef.current = true;
       abortRef.current?.abort();
       abortRef.current = null;
       isStreamingRef.current = false;
@@ -355,6 +363,7 @@ export function useChat(): UseChat {
     const trimmed = text.trim();
     if (!trimmed || isStreamingRef.current) return;
     isStreamingRef.current = true;
+    timedOutRef.current = false;
     setError(null);
     setIsStreaming(true);
 
@@ -439,17 +448,19 @@ export function useChat(): UseChat {
         // `error` key. Fall back to the status line for non-JSON bodies.
         let code = `${res.status} ${res.statusText}`;
         let detail = "";
+        let rid = "";
         try {
           const body: unknown = await res.json();
           if (body && typeof body === "object") {
-            const b = body as { message?: unknown; detail?: unknown };
+            const b = body as { message?: unknown; detail?: unknown; rid?: unknown };
             if (typeof b.message === "string" && b.message) code = b.message;
             if (typeof b.detail === "string") detail = b.detail;
+            if (typeof b.rid === "string") rid = b.rid;
           }
         } catch {
           /* non-JSON body: keep the status-line message */
         }
-        throw new RequestError(code, detail);
+        throw new RequestError(code, detail, rid);
       }
       if (!res.body) throw new RequestError("no response body");
 
@@ -571,17 +582,23 @@ export function useChat(): UseChat {
       updateAssistant({ content: cleaned, citations, status: undefined });
     } catch (err) {
       // Humanize the failure for both the footer note and the failed assistant
-      // bubble: aborts (user stop / stream timeout), network errors, non-2xx
-      // RequestErrors (message + detail), and anything unexpected.
-      const human = err instanceof Error && err.name === "AbortError"
-        ? humanizeError("cancelled")
-        : err instanceof RequestError
-          ? humanizeError(err.message, err.detail)
-          : humanizeError(err instanceof Error ? err.message : "request_failed");
+      // bubble: stream timeouts (the deliberate abort must keep the timeout
+      // copy, not read as a user cancellation), user stops, network errors,
+      // non-2xx RequestErrors (message + detail + rid), and anything else.
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      const human = timedOutRef.current
+        ? humanizeError("stream_timeout")
+        : isAbort
+          ? humanizeError("cancelled")
+          : err instanceof RequestError
+            ? humanizeError(err.message, err.detail)
+            : humanizeError(err instanceof Error ? err.message : "request_failed");
+      const rid = err instanceof RequestError ? err.rid : "";
       setError(human);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === assistantId ? { ...m, error: human } : m)),
-      );
+      updateAssistant({
+        error: human,
+        ...(rid ? { requestId: rid } : {}),
+      } as Partial<ChatMessage> & { requestId?: string });
     } finally {
       // No pending frame may fire after abort/error/timeout: a late flush would
       // write partial accumulated text into the aborted assistant bubble.
