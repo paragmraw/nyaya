@@ -8,8 +8,11 @@
 # node:20-alpine pinned by digest for reproducible builds (amd64).
 FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb AS web-builder
 ENV NODE_ENV=production
-# Feature flag for chat UI (embedded at build time for static export)
-ARG NEXT_PUBLIC_CHAT_ENABLED=false
+# Feature flag for chat UI (embedded at build time for static export).
+# Defaults to true so the production image ships with the chat panel live
+# (the server mounts /chat whenever NVIDIA_API_KEY is set); override the
+# build arg to build a chat-less image.
+ARG NEXT_PUBLIC_CHAT_ENABLED=true
 ENV NEXT_PUBLIC_CHAT_ENABLED=${NEXT_PUBLIC_CHAT_ENABLED}
 WORKDIR /web
 # Install deps first for layer caching (lockfile is committed for reproducibility).
