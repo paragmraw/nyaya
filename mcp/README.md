@@ -96,13 +96,14 @@ The notebook is **idempotent** — re-running it rebuilds the corpus from scratc
 
 ## Deploy to Railway
 
-nyaya ships with a Dockerfile (repo root) and a root `railway.toml` configured for Railway. The build context is the repo root.
+nyaya ships with a Dockerfile (repo root) and a [Railway IaC](https://docs.railway.com/infrastructure-as-code) config at `.railway/railway.ts`. The build context is the repo root.
 
 ### 1. Create the project
 
 ```bash
-railway init
-railway up
+railway login
+railway link   # or `railway init` for a fresh project
+railway up     # first deploy
 ```
 
 ### 2. Set environment variables
@@ -112,7 +113,11 @@ railway up
 | `DATABASE_URL` | Supabase/Postgres connection string |
 | `NVIDIA_API_KEY` | NVIDIA API Catalog key (required for embeddings + reranking) |
 
-`PORT` is set automatically by Railway (defaults to `8000`).
+`PORT` is set automatically by Railway (defaults to `8000`). Both secrets are `preserve()`d in `.railway/railway.ts`, so `railway config apply` never touches their values — but any variable you set in the Railway Variables tab must also appear there (or be added to the IaC file) before applying, since an apply can delete live variables absent from the file.
+
+### Changing the deploy config
+
+`.railway/railway.ts` is the source of truth for service settings (source branch, healthcheck, replicas, variables). Edit it, review with `railway config plan`, apply with `railway config apply --yes`. Code deploys ride on autodeploy from `main` (or a manual `railway up`). Railway's legacy `railway.toml`/`railway.json` Config-as-Code is deprecated (unread after 2026-12-01) and not used here.
 
 ### 3. Apply the schema migration (before/at first deploy)
 
@@ -134,7 +139,7 @@ Ingestion writes to Supabase, so you can run it from your local machine (with th
 
 ### Health check
 
-Railway polls `GET /health`. The endpoint returns:
+Railway polls `GET /health` (declared in `.railway/railway.ts`). The endpoint returns:
 
 ```json
 {
@@ -211,7 +216,7 @@ The test suite is fully offline: `tests/conftest.py` only pins the required env 
 
 ```
 nyaya/                          # repo root
-├── railway.toml                # Railway deploy config
+├── .railway/                   # Railway IaC (railway.ts deploy config)
 ├── docker-compose.yml          # local container run (build context = repo root)
 ├── .env.example                # copy to .env and fill in
 ├── Dockerfile                  # Alpine image (~270 MB)

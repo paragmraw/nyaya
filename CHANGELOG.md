@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Deployment config migrated from Railway's deprecated `railway.toml` Config-as-Code to Railway IaC (`.railway/railway.ts`, managed via `railway config plan`/`apply`) — the legacy format stops being read by Railway on 2026-12-01. Production images now also build with the chat panel enabled (`NEXT_PUBLIC_CHAT_ENABLED` Dockerfile default flipped to `true`).
 - MCP tool registration now fails fast: a duplicate tool name, a raising register function, or a module that does not land the tools it claims aborts startup with a `RuntimeError` instead of logging and continuing with a silently crippled tool surface (supersedes the 0.2.0 log-and-continue behavior — FastMCP itself only warns on duplicates and keeps the first registration).
 - `cross_reference`'s `direction` parameter is now a closed Literal (`from`/`to`/`both`) enforced by FastMCP schema validation at the tool boundary, replacing runtime validation; `db.get_cross_refs` types it as `CrossRefDirection`.
 - `Kind`/`HitKind` consolidated: `HitKind` is now an alias of `Kind` (one definition, one place to extend).

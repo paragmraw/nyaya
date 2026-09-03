@@ -243,6 +243,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Railway
+# Railway (CLI state; .railway/*.json = config plan artifacts, railway.ts stays tracked)
 railway.json
 railway.lock
+.railway/*.json
