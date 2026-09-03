@@ -15,13 +15,13 @@ import { defineRailway, github, preserve, project, service } from "railway/iac";
 //
 // Managed with `railway config plan` (dry run) and `railway config apply`.
 //
-// NOTE (hand-authored fallback): the Railway CLI was not installed when this
-// file was written, so only fields from the public IaC reference are declared.
-// Builder (DOCKERFILE + dockerfilePath "Dockerfile"), restart policy
-// (ON_FAILURE, max 3 retries) and the healthcheck interval (30 s) live as
-// dashboard service settings carried over from the railway.toml deploys —
-// verify them in the service Settings panel, or run `railway config migrate`
-// after installing the CLI to reconcile the canonical fields into this file.
+// NOTE: reconciled against the live project via `railway config plan`. The
+// builder (DOCKERFILE, root Dockerfile — auto-detected), restart policy
+// (ON_FAILURE, max 3 retries) and the healthcheck interval (30 s) are not
+// IaC-authorable fields; they live as dashboard service settings carried
+// over from the railway.toml deploys — verify them in the service Settings
+// panel. Always review `railway config plan --detailed-exit-code` before
+// applying: variables and deploy settings absent from this file are deleted.
 
 export default defineRailway(() =>
   project("nyaya", {
@@ -31,6 +31,10 @@ export default defineRailway(() =>
         healthcheck: "/health",
         healthcheckTimeout: 60,
         replicas: 1,
+        // Dashboard-managed service settings that Railway IaC's "omit means
+        // delete" would otherwise unset: keep scale-to-zero sleep and IPv6
+        // egress exactly as configured live.
+        deploy: { sleepApplication: true, ipv6EgressEnabled: true },
         env: {
           // External Supabase Postgres+pgvector — NOT a Railway-managed
           // database. Do not add postgres()/redis() resources here.
@@ -39,6 +43,9 @@ export default defineRailway(() =>
           // apply can delete live variables absent from this map.
           DATABASE_URL: preserve(),
           NVIDIA_API_KEY: preserve(),
+          // Build-time flag for the chat panel (Dockerfile ARG); "true" makes
+          // the intent explicit — a preserve() would keep a stale "false".
+          NEXT_PUBLIC_CHAT_ENABLED: "true",
         },
       }),
     ],

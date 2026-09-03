@@ -117,7 +117,7 @@ railway up     # first deploy
 
 ### Changing the deploy config
 
-`.railway/railway.ts` is the source of truth for service settings (source branch, healthcheck, replicas, variables). Edit it, review with `railway config plan`, apply with `railway config apply --yes`. Code deploys ride on autodeploy from `main` (or a manual `railway up`). Railway's legacy `railway.toml`/`railway.json` Config-as-Code is deprecated (unread after 2026-12-01) and not used here.
+`.railway/railway.ts` is the source of truth for service settings (source branch, healthcheck, replicas, variables). It needs its TypeScript SDK installed locally — run `npm install` inside `.railway/` once. Edit the file, review with `railway config plan`, apply with `railway config apply --yes`. Code deploys ride on autodeploy from `main` (or a manual `railway up`). Railway's legacy `railway.toml`/`railway.json` Config-as-Code is deprecated (unread after 2026-12-01) and not used here.
 
 ### 3. Apply the schema migration (before/at first deploy)
 
