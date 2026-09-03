@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -106,102 +108,69 @@ async def test_agent_supervisor_emits_tool_calls(fake_model, fake_tools):
     assert fake_model.calls  # the model was invoked
 
 
-def test_parse_text_tool_calls_bracket_format():
-    """Parse [[tool_calls]] JSON array [[/tool_calls]] format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[tool_calls]]\n[\n {\n  "name": "get_section",\n  "arguments": {"act": "IPC", "section": "302"}\n }\n]\n[[/tool_calls]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
-    assert calls[0]["args"]["act"] == "IPC"
-    assert calls[0]["args"]["section"] == "302"
+# ---------------------------------------------------------------------------
+# Model factory (_make_model) tests
+# ---------------------------------------------------------------------------
 
 
-def test_parse_text_tool_calls_bare_json():
-    """Parse bare JSON object format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
+def test_make_model_passes_phase_params_to_fake(fake_model, settings):
+    """Fakes honour the requested temperature/max_tokens (recorded via the
+    ``nyaya_fake_model`` protocol) instead of silently ignoring them."""
+    from nyaya_chat.agent import _make_model
+
+    m = _make_model(
+        settings, model_name="nvidia/fake", max_tokens=512, temperature=0.2,
+    )
+    assert m is fake_model
+    assert fake_model.temperature == 0.2
+    assert fake_model.max_completion_tokens == 512
 
 
-def test_parse_text_tool_calls_json_array():
-    """Parse bare JSON array format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
+def test_make_model_reuses_cached_base_when_config_matches(monkeypatch, settings):
+    """A phase whose configuration equals the cached base model's reuses it
+    (no duplicate API client); a phase with different settings constructs one."""
+    from nyaya_chat import agent as agent_mod
+    from nyaya_chat import llm as llm_mod
 
+    constructed: list[dict] = []
 
-def test_parse_text_tool_calls_no_tool_calls():
-    """Return empty list when no tool calls are found."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    assert _parse_text_tool_calls("This is a plain text answer.") == []
-    assert _parse_text_tool_calls("") == []
-    assert _parse_text_tool_calls(None) == []
+    class FakeChatNVIDIA:
+        def __init__(self, **kw):
+            # Records only the clients _make_model itself builds; the cached
+            # base below is a plain namespace, so it never lands here.
+            constructed.append(kw)
+            self.model = kw.get("model")
+            self.temperature = kw.get("temperature")
+            self.max_tokens = kw.get("max_completion_tokens")
 
+    monkeypatch.setattr("langchain_nvidia_ai_endpoints.ChatNVIDIA", FakeChatNVIDIA)
+    llm_mod.reset_model_cache()
+    base = FakeChatNVIDIA(
+        model=settings.llm_model,
+        temperature=settings.llm_temperature,
+        max_completion_tokens=settings.llm_max_tokens,
+    )
+    monkeypatch.setattr(llm_mod, "get_model", lambda _=None: base)
+    monkeypatch.setattr(agent_mod, "get_model", lambda _=None: base)
 
-def test_parse_text_tool_calls_multiple():
-    """Parse multiple tool calls from [[tool_calls]] format."""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[tool_calls]]\n[\n {"name": "get_section", "arguments": {"act": "IPC", "section": "302"}},\n {"name": "get_section", "arguments": {"act": "BNS", "section": "103"}}\n]\n[[/tool_calls]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 2
-    assert calls[0]["name"] == "get_section"
-    assert calls[1]["args"]["act"] == "BNS"
+    # Synthesis defaults match the base configuration exactly -> reuse.
+    constructed.clear()  # forget the base's own construction
+    reused = agent_mod._make_model(
+        settings, model_name=settings.llm_model, max_tokens=settings.llm_max_tokens,
+    )
+    assert reused is base
+    assert constructed == []  # no second client built
 
-
-def test_parse_text_xml_tag_wrapped_json():
-    """XML-tag wrapped JSON: <toolname>{...json...}</toolname>"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '<semantic_query>{"query": "dowry prohibition India laws", "limit": 10}</semantic_query>'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "semantic_query"
-    assert calls[0]["args"]["query"] == "dowry prohibition India laws"
-    assert calls[0]["args"]["limit"] == 10
-
-
-def test_parse_text_xml_tag_multiple():
-    """Multiple XML tags in one response"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '<semantic_query>{"query": "IPC 302"}</semantic_query>\n<get_section>{"act": "IPC", "section": "302"}</get_section>'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 2
-    assert calls[0]["name"] == "semantic_query"
-    assert calls[1]["name"] == "get_section"
-
-
-def test_parse_text_bracket_pipe_format():
-    """Bracket-pipe: [[tool tool call|tool_name: "...", tool_args: {...}]]"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[semantic_query tool call|tool_name: "semantic_query", tool_args: {"query": "dowry prohibition India laws", "limit": 10}]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "semantic_query"
-    assert calls[0]["args"]["query"] == "dowry prohibition India laws"
-
-
-def test_parse_text_bracket_pipe_nested_json():
-    """Bracket-pipe with nested JSON objects in tool_args"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[semantic_query tool call|tool_name: "semantic_query", tool_args: {"query": "test", "filter": {"act": "IPC", "kind": "section"}}}]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["args"]["filter"]["act"] == "IPC"
-
-
-def test_parse_text_attribute_style():
-    """Attribute-style: [[tool_name key="value" key2="value2"]]"""
-    from nyaya_chat.agent import _parse_text_tool_calls
-    content = '[[get_section act="IPC" section="24"]]'
-    calls = _parse_text_tool_calls(content)
-    assert len(calls) == 1
-    assert calls[0]["name"] == "get_section"
-    assert calls[0]["args"]["act"] == "IPC"
-    assert calls[0]["args"]["section"] == "24"
+    # Supervisor's short token cap differs -> a new instance is built.
+    supervisor = agent_mod._make_model(
+        settings, model_name=settings.llm_model,
+        max_tokens=settings.supervisor_max_tokens,
+        temperature=settings.supervisor_temperature,
+    )
+    assert supervisor is not reused
+    assert len(constructed) == 1
+    assert constructed[0]["max_completion_tokens"] == settings.supervisor_max_tokens
+    assert constructed[0]["temperature"] == settings.supervisor_temperature
 
 
 def test_supervisor_prompt_has_sequential_rules():
@@ -279,6 +248,13 @@ def _make_fake_tool(name="get_section"):
 
 @pytest.mark.asyncio
 async def test_dedup_skips_duplicate_calls():
+    """Within ONE request (state carried across rounds), a repeated call is skipped.
+
+    The node is stateless; LangGraph merges the returned ``dedup_seen`` /
+    ``dedup_results`` into state, so a later round of the same request sees
+    the first round's dedup memory. Here we simulate that by seeding the
+    second invoke with the keys the first one returned.
+    """
     from nyaya_chat.agent import DedupToolNode
 
     tool = _make_fake_tool("get_section")
@@ -286,7 +262,7 @@ async def test_dedup_skips_duplicate_calls():
     fake_node = _FakeToolNode([tool])
     dedup._tool_node = fake_node
 
-    # First call: unique
+    # First round: unique
     state = {"messages": [AIMessage(
         content="", tool_calls=[
             {"id": "tc1", "name": "get_section", "args": {"query": "302"}},
@@ -299,12 +275,17 @@ async def test_dedup_skips_duplicate_calls():
     assert "result(302)" in str(msgs[0].content)
     assert len(fake_node.calls_seen) == 1
 
-    # Second call with same args: duplicate, should be skipped
-    state2 = {"messages": [AIMessage(
-        content="", tool_calls=[
-            {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
-        ]),
-    ]}
+    # Second round of the SAME request (seeded state): same (name+args) call
+    # is a duplicate and must be skipped, reusing the first round's result.
+    state2 = {
+        "messages": [AIMessage(
+            content="", tool_calls=[
+                {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
+            ]),
+        ],
+        "dedup_seen": result["dedup_seen"],
+        "dedup_results": result["dedup_results"],
+    }
     result2 = await dedup(state2)
     msgs2 = result2["messages"]
     assert len(msgs2) == 1
@@ -337,6 +318,7 @@ async def test_dedup_passes_unique_calls_through():
 
 @pytest.mark.asyncio
 async def test_dedup_mixed_unique_and_duplicate():
+    """Within one request: a repeated call is skipped, a new one executes."""
     from nyaya_chat.agent import DedupToolNode
 
     tool = _make_fake_tool("get_section")
@@ -349,17 +331,235 @@ async def test_dedup_mixed_unique_and_duplicate():
             {"id": "tc1", "name": "get_section", "args": {"query": "302"}},
         ]),
     ]}
-    await dedup(state1)
+    result1 = await dedup(state1)
 
-    state2 = {"messages": [AIMessage(
-        content="", tool_calls=[
-            {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
-            {"id": "tc3", "name": "get_section", "args": {"query": "304"}},
-        ]),
-    ]}
+    # Second round of the SAME request (seeded state): "302" is a duplicate,
+    # "304" is new and must execute.
+    state2 = {
+        "messages": [AIMessage(
+            content="", tool_calls=[
+                {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
+                {"id": "tc3", "name": "get_section", "args": {"query": "304"}},
+            ]),
+        ],
+        "dedup_seen": result1["dedup_seen"],
+        "dedup_results": result1["dedup_results"],
+    }
     result = await dedup(state2)
     msgs = result["messages"]
     assert len(msgs) == 2
     assert any(tc["args"]["query"] == "304" for tc in fake_node.calls_seen)
     queries_302 = [tc for tc in fake_node.calls_seen if tc["args"].get("query") == "302"]
     assert len(queries_302) == 1
+
+
+@pytest.mark.asyncio
+async def test_dedup_state_does_not_leak_across_requests():
+    """Regression: dedup memory is per-request, not node instance state.
+
+    The compiled graph (and therefore this node instance) is shared across
+    all requests, so a tool call seen in a previous request must NOT be
+    treated as a duplicate in a later one — each request starts with fresh
+    state and must get fresh tool results.
+    """
+    from nyaya_chat.agent import DedupToolNode
+
+    tool = _make_fake_tool("get_section")
+    dedup = DedupToolNode([tool])
+    fake_node = _FakeToolNode([tool])
+    dedup._tool_node = fake_node
+
+    call_302 = AIMessage(content="", tool_calls=[
+        {"id": "tc1", "name": "get_section", "args": {"query": "302"}},
+    ])
+
+    # Request 1: the call executes.
+    result1 = await dedup({"messages": [call_302]})
+    assert len(fake_node.calls_seen) == 1
+    assert "result(302)" in str(result1["messages"][0].content)
+
+    # Request 2: FRESH state (as every new request gets), same (name+args).
+    # Must execute again — not skipped, no stale cached result.
+    result2 = await dedup({"messages": [AIMessage(
+        content="", tool_calls=[
+            {"id": "tc2", "name": "get_section", "args": {"query": "302"}},
+        ]),
+    ]})
+    assert len(fake_node.calls_seen) == 2
+    msgs2 = result2["messages"]
+    assert len(msgs2) == 1
+    assert "result(302)" in str(msgs2[0].content)
+    assert "(duplicate call skipped)" not in str(msgs2[0].content)
+
+    # Within ONE invocation, a repeated (name+args) call is still deduped:
+    # only one of the two identical calls reaches the underlying ToolNode.
+    result3 = await dedup({"messages": [AIMessage(
+        content="", tool_calls=[
+            {"id": "tc3", "name": "get_section", "args": {"query": "302"}},
+            {"id": "tc4", "name": "get_section", "args": {"query": "302"}},
+        ]),
+    ]})
+    assert len(fake_node.calls_seen) == 3  # only tc3 executed
+    msgs3 = result3["messages"]
+    assert len(msgs3) == 2
+    assert all("result(302)" in str(m.content) for m in msgs3)
+
+
+# ---------------------------------------------------------------------------
+# Synthesis node: the single authoritative verification + disclaimer pass
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_appends_disclaimer_when_missing(fake_model, settings):
+    """The verified message carries the disclaimer — it is NOT appended
+    post-stream by the SSE layer."""
+    from langchain_core.messages import HumanMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+    from nyaya_chat.llm import DISCLAIMER
+
+    fake_model.responses = [AIMessage(content="Punishment for murder is death.")]
+    node = _make_synthesis_node(fake_model, settings, has_tools=False)
+    out = await node({"messages": [HumanMessage(content="What is IPC 302?")]})
+    content = out["messages"][0].content
+    assert content.startswith("Punishment for murder is death.")
+    assert content.endswith(f"\n\n*{DISCLAIMER}*")
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_does_not_duplicate_disclaimer(fake_model, settings):
+    """When the model already emitted the disclaimer, it is left as-is."""
+    from langchain_core.messages import HumanMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+    from nyaya_chat.llm import DISCLAIMER
+
+    answer = "Answer.\n\nThis is not legal advice; verify citations before filing."
+    fake_model.responses = [AIMessage(content=answer)]
+    node = _make_synthesis_node(fake_model, settings, has_tools=False)
+    out = await node({"messages": [HumanMessage(content="q")]})
+    assert out["messages"][0].content == answer
+    assert out["messages"][0].content.count(DISCLAIMER) == 1
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_verifies_and_disclaims_in_one_pass(fake_model, settings):
+    """Verification (strip ungrounded citations) and the disclaimer append both
+    happen in the synthesis node, so the returned message is final."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+    from nyaya_chat.llm import DISCLAIMER
+
+    fake_model.responses = [AIMessage(
+        content="Grounded [[act: IPC, ref: s. 302]] and ungrounded [[act: GhostAct, ref: 1]]."
+    )]
+    node = _make_synthesis_node(fake_model, settings, has_tools=True)
+    state = {
+        "messages": [
+            HumanMessage(content="What is IPC 302?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            ]),
+            ToolMessage(
+                content='{"act": "IPC", "ref": "s. 302", "kind": "section", "text": "..."}',
+                tool_call_id="tc1", name="get_section",
+            ),
+        ],
+    }
+    out = await node(state)
+    content = out["messages"][0].content
+    assert "[[act: IPC, ref: s. 302]]" in content
+    assert "GhostAct" not in content
+    assert content.endswith(f"\n\n*{DISCLAIMER}*")
+
+
+# ---------------------------------------------------------------------------
+# Synthesis input pruning: LIST-type results bounded, full text preserved
+# ---------------------------------------------------------------------------
+
+
+def _semantic_query_result(n_hits: int, snippet_len: int = 2000) -> str:
+    import json
+    return json.dumps({
+        "query": "punishment for murder",
+        "total": n_hits * 5, "returned": n_hits, "offset": 0, "limit": n_hits,
+        "source": "nyaya", "as_of": "2024-01-01", "fallback_reason": None,
+        "results": [
+            {"act": f"Act{i}", "ref": f"s. {100 + i}", "title": f"T{i}",
+             "snippet": f"HIT{i}-" + "z" * snippet_len,
+             "rank": 1.0 - i * 0.01, "citation": None, "kind": "section"}
+            for i in range(n_hits)
+        ],
+    })
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_prunes_list_type_tool_results(fake_model, settings):
+    """A multi-hit semantic_query result is bounded in what reaches the model:
+    the top hit's snippet survives in full, later hits are condensed to
+    identification fields + a 300-char snippet, and envelope metadata is gone."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+
+    fake_model.responses = [AIMessage(content="Answer [[act: Act0, ref: s. 100]].")]
+    node = _make_synthesis_node(fake_model, settings, has_tools=True)
+    payload = _semantic_query_result(8)
+    state = {
+        "messages": [
+            HumanMessage(content="What is the punishment for murder?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "semantic_query", "args": {"query": "punishment for murder"}},
+            ]),
+            ToolMessage(
+                content=payload, tool_call_id="tc1", name="semantic_query",
+            ),
+        ],
+    }
+    await node(state)
+
+    sent = fake_model.calls[-1]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "semantic_query"]
+    assert len(tool_msgs) == 1
+    sent_content = tool_msgs[0].content
+    # The ~12K-token worst case is cut down to a third of the original payload.
+    assert len(sent_content) < len(payload) / 3
+    # Top hit verbatim; tail hits condensed (snippet capped) but identifiable.
+    assert "HIT0-" + "z" * 2000 in sent_content
+    assert "HIT3-" + "z" * 2000 not in sent_content
+    assert '"ref": "s. 103"' in sent_content  # tail hit still citable/fetchable
+    assert '"as_of"' not in sent_content  # envelope metadata pruned
+
+
+@pytest.mark.asyncio
+async def test_synthesis_node_prunes_only_list_type_results(fake_model, settings):
+    """Full text of a single-document tool (get_section) passes to the model
+    UNPRUNED — pruning never touches single-document results."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    from nyaya_chat.agent import _make_synthesis_node
+
+    full_text = "SECTION-TEXT:" + "F" * 3000
+    fake_model.responses = [AIMessage(content="Answer [[act: IPC, ref: s. 302]].")]
+    node = _make_synthesis_node(fake_model, settings, has_tools=True)
+    payload = json.dumps({"act": "IPC", "ref": "s. 302", "text": full_text})
+    state = {
+        "messages": [
+            HumanMessage(content="What is IPC 302?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            ]),
+            ToolMessage(
+                content=payload,
+                tool_call_id="tc1", name="get_section",
+            ),
+        ],
+    }
+    await node(state)
+
+    sent = fake_model.calls[-1]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_section"]
+    assert len(tool_msgs) == 1
+    assert full_text in tool_msgs[0].content  # verbatim, unpruned

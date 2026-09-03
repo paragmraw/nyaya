@@ -1,0 +1,8 @@
+{
+  "name": "nyaya-railway-iac",
+  "private": true,
+  "description": "TypeScript SDK for .railway/railway.ts — required by `railway config plan` / `apply`. Run `npm install` in this directory.",
+  "dependencies": {
+    "railway": "^3.11.0"
+  }
+}

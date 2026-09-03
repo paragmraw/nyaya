@@ -30,9 +30,9 @@ log = logging.getLogger("nyaya.rest")
 T = TypeVar("T")
 
 
-def _safe(fn: Callable[..., T], *args: Any) -> Any:
+def _safe(fn: Callable[..., T], *args: Any, **kwargs: Any) -> Any:
     """Run a synchronous db function in a worker thread, returning its result."""
-    return asyncio.to_thread(fn, *args)
+    return asyncio.to_thread(fn, *args, **kwargs)
 
 
 def _error_response(exc: Exception, request: Request | None = None) -> JSONResponse:
@@ -57,17 +57,33 @@ def _error_response(exc: Exception, request: Request | None = None) -> JSONRespo
     return JSONResponse(body, status_code=500)
 
 
-async def corpus_stats_endpoint(_request: Request) -> JSONResponse:
-    """GET /api/corpus-stats -> {counts: {...}, as_of: "YYYY-MM-DD"|null}"""
+async def _stats_payload(*, include_status: bool) -> dict[str, Any]:
+    """Fetch corpus stats + as_of; shared by both stats-shaped endpoints.
+
+    ``include_status`` adds the ``status`` key (``healthy``/``degraded``) that
+    ``/api/health-summary`` carries — a failure there degrades to empty counts
+    instead of an error response, so the SPA renders partial numbers.
+    """
     try:
         stats = await _safe(db.corpus_stats)
         as_of = await _safe(db.corpus_as_of)
-        return JSONResponse(
-            {
-                "counts": stats,
-                "as_of": as_of.isoformat() if as_of else None,
-            }
-        )
+        status = "healthy"
+    except Exception:
+        if not include_status:
+            raise
+        stats = {}
+        as_of = None
+        status = "degraded"
+    payload: dict[str, Any] = {"counts": stats, "as_of": as_of.isoformat() if as_of else None}
+    if include_status:
+        payload["status"] = status
+    return payload
+
+
+async def corpus_stats_endpoint(_request: Request) -> JSONResponse:
+    """GET /api/corpus-stats -> {counts: {...}, as_of: "YYYY-MM-DD"|null}"""
+    try:
+        return JSONResponse(await _stats_payload(include_status=False))
     except Exception as exc:
         log.warning("corpus_stats endpoint failed", exc_info=True)
         return _error_response(exc, _request)
@@ -84,14 +100,21 @@ async def acts_endpoint(_request: Request) -> JSONResponse:
 
 
 async def judgments_endpoint(request: Request) -> JSONResponse:
-    """GET /api/judgments?limit=50&offset=0 -> {items: [...], total: int}"""
+    """GET /api/judgments?limit=50&offset=0&full=1 -> {items: [...], total: int}
+
+    Ships text snippets by default (a page load of up to 200 judgments with
+    full texts is multiple MB for the SPA). ``?full=1`` opts into full texts.
+    """
     try:
         limit = max(1, min(int(request.query_params.get("limit", "50")), 200))
         offset = max(0, int(request.query_params.get("offset", "0")))
     except ValueError:
         return JSONResponse({"error": "bad_request", "detail": "limit/offset must be integers"}, status_code=400)
+    full = request.query_params.get("full") in ("1", "true", "yes")
     try:
-        judgments, total = await _safe(db.list_judgments, limit, offset)
+        judgments, total = await _safe(
+            db.list_judgments, limit, offset, include_text=full
+        )
         return JSONResponse(
             {
                 "items": [j.model_dump(mode="json") for j in judgments],
@@ -132,21 +155,7 @@ async def health_summary_endpoint(_request: Request) -> JSONResponse:
     Falls back to ``degraded`` if the DB is down so the SPA renders partial
     numbers instead of a blank.
     """
-    try:
-        stats = await _safe(db.corpus_stats)
-        as_of = await _safe(db.corpus_as_of)
-        status = "healthy"
-    except Exception:
-        stats = {}
-        as_of = None
-        status = "degraded"
-    return JSONResponse(
-        {
-            "status": status,
-            "counts": stats,
-            "as_of": as_of.isoformat() if as_of else None,
-        }
-    )
+    return JSONResponse(await _stats_payload(include_status=True))
 
 
 def register(app: Any, mcp_instance: Any) -> None:

@@ -22,36 +22,6 @@ export type CorpusStats = {
   as_of: string | null;
 };
 
-export type Act = {
-  short_name: string;
-  full_name: string;
-  year: number | null;
-  citation: string | null;
-  kind: "constitution" | "criminal" | "civil" | "commercial" | "judgment";
-  source: string;
-  source_license: string | null;
-  as_of: string | null;
-};
-
-export type Judgment = {
-  case_name: string;
-  citation: string | null;
-  court: string;
-  date: string | null;
-  summary: string | null;
-  text: string;
-  source: string;
-  source_license: string | null;
-  as_of: string | null;
-};
-
-export type JudgmentsResponse = {
-  items: Judgment[];
-  total: number;
-  limit: number;
-  offset: number;
-};
-
 export type ToolInfo = {
   name: string;
   description: string;
@@ -133,9 +103,6 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export const api = {
   corpusStats: () => fetchJson<CorpusStats>("/api/corpus-stats"),
-  acts: () => fetchJson<Act[]>("/api/acts"),
-  judgments: (limit = 50, offset = 0) =>
-    fetchJson<JudgmentsResponse>(`/api/judgments?limit=${limit}&offset=${offset}`),
   tools: () => fetchJson<ToolsResponse>("/api/tools"),
   healthSummary: () => fetchJson<HealthSummary>("/api/health-summary"),
 };

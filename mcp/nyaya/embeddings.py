@@ -17,20 +17,71 @@ Raises:
 
 from __future__ import annotations
 
+import threading
 import time
+from typing import TYPE_CHECKING
 
 import httpx
 from cachetools import TTLCache, cached
-from cachetools.keys import hashkey
 
-from .config import get_settings
+from .config import RERANK_DEADLINE_S, get_settings
 from .exceptions import EmbeddingUnavailable, SearchError
+
+if TYPE_CHECKING:
+    from openai import OpenAI
 
 EXPECTED_DIM = 2048
 
 # Query embeddings: cached 1 hour, 256 entries. The NVIDIA API is stateless;
 # caching avoids re-embedding identical queries within the TTL.
 _query_cache: TTLCache = TTLCache(maxsize=256, ttl=3600)
+
+_NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+# Lazily-built process-wide singletons (double-checked under a lock, matching
+# the ``_pool_lock`` pattern in db.py). The OpenAI SDK client keeps its own
+# connection pool, and httpx.Client reuses connections — constructing them per
+# call wasted TLS handshakes and pooled sockets.
+_openai_client: OpenAI | None = None
+_http_client: httpx.Client | None = None
+_client_lock = threading.Lock()
+
+
+def _get_openai_client() -> OpenAI:
+    """Return the shared OpenAI API client, building it on first use."""
+    global _openai_client
+    if _openai_client is None:
+        with _client_lock:
+            if _openai_client is None:
+                from openai import OpenAI
+
+                settings = get_settings()
+                _openai_client = OpenAI(
+                    base_url=_NVIDIA_BASE_URL,
+                    api_key=settings.nvidia_api_key,
+                )
+    return _openai_client
+
+
+def _get_http_client() -> httpx.Client:
+    """Return the shared httpx client for the rerank API, built on first use.
+
+    Per-request timeouts (see :func:`rerank_query`) override the client
+    default, so a single long-lived client is safe.
+    """
+    global _http_client
+    if _http_client is None:
+        with _client_lock:
+            if _http_client is None:
+                settings = get_settings()
+                _http_client = httpx.Client(
+                    timeout=RERANK_DEADLINE_S,
+                    headers={
+                        "Authorization": f"Bearer {settings.nvidia_api_key}",
+                        "Accept": "application/json",
+                    },
+                )
+    return _http_client
 
 
 def _embed_via_api(texts: list[str], input_type: str) -> list[list[float]]:
@@ -39,13 +90,8 @@ def _embed_via_api(texts: list[str], input_type: str) -> list[list[float]]:
     ``input_type`` is 'query' or 'passage' — the nemotron model uses this to
     apply the appropriate encoding strategy.
     """
-    from openai import OpenAI
-
     settings = get_settings()
-    client = OpenAI(
-        base_url="https://integrate.api.nvidia.com/v1",
-        api_key=settings.nvidia_api_key,
-    )
+    client = _get_openai_client()
     out: list[list[float]] = []
     for i in range(0, len(texts), 64):
         batch = texts[i : i + 64]
@@ -100,29 +146,17 @@ def embed_query(text: str) -> list[float]:
     return vec
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embed a batch of texts as passages (used by the hydration notebook).
-
-    Not cached — the notebook calls this once per corpus.
-    """
-    if not texts:
-        return []
-    vecs = _embed_via_api(texts, "passage")
-    if vecs:
-        first = vecs[0]
-        if len(first) != EXPECTED_DIM:
-            raise SearchError(
-                f"Embedding dimension mismatch: expected {EXPECTED_DIM}, got {len(first)}.",
-                hint=f"Re-build embeddings with a {EXPECTED_DIM}-d model.",
-            )
-    return vecs
-
-
 def rerank_query(query: str, candidates: list[str]) -> list[float]:
     """Rerank candidate passages against a query via the NVIDIA rerank API.
 
     Returns a list of relevance logits (higher = more relevant), one per
     candidate, in the same order as ``candidates``.
+
+    The whole operation runs under a total deadline of ``RERANK_DEADLINE_S``
+    seconds: each attempt's HTTP timeout is clamped to the remaining budget
+    and retries are abandoned once it expires, so a stalled reranker fails
+    into the ``reranker_unavailable`` fallback within the deadline instead of
+    hanging for 3 attempts x 120s + backoff (~6 minutes worst case).
     """
     if not candidates:
         return []
@@ -135,80 +169,27 @@ def rerank_query(query: str, candidates: list[str]) -> list[float]:
         "passages": [{"text": c} for c in candidates],
         "truncate": "END",
     }
+    deadline = time.monotonic() + RERANK_DEADLINE_S
+    client = _get_http_client()
     last_err: Exception | None = None
     for attempt in range(3):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         try:
-            with httpx.Client(timeout=120.0, headers={
-                "Authorization": f"Bearer {settings.nvidia_api_key}",
-                "Accept": "application/json",
-            }) as client:
-                r = client.post(url, json=payload)
-                r.raise_for_status()
-                data = r.json()
-                arr = sorted(data["rankings"], key=lambda x: x["index"])
-                return [float(x["logit"]) for x in arr]
+            r = client.post(url, json=payload, timeout=remaining)
+            r.raise_for_status()
+            data = r.json()
+            arr = sorted(data["rankings"], key=lambda x: x["index"])
+            return [float(x["logit"]) for x in arr]
         except Exception as e:
             last_err = e
             if attempt < 2:
-                time.sleep(2**attempt)
+                delay = min(2**attempt, max(0.0, deadline - time.monotonic()))
+                if delay <= 0:
+                    break
+                time.sleep(delay)
     raise EmbeddingUnavailable(
-        f"NVIDIA rerank API call failed after 3 attempts: {last_err}",
+        f"NVIDIA rerank API call failed within the {RERANK_DEADLINE_S:.0f}s deadline: {last_err}",
         hint="Check NVIDIA_API_KEY and network connectivity to ai.api.nvidia.com.",
     ) from last_err
-
-
-class EmbeddingService:
-    """Encapsulates embedding + reranking so they can be injected / tested.
-
-    Accepts optional cache instances so tests can inject fresh caches or fakes.
-    A default singleton (backed by the module-level caches) is exposed via
-    :func:`get_default_service` for backward compatibility.
-    """
-
-    def __init__(
-        self,
-        query_cache: TTLCache | None = None,
-    ) -> None:
-        self._query_cache: TTLCache = query_cache if query_cache is not None else TTLCache(maxsize=256, ttl=3600)
-
-    def embed_query(self, text: str) -> list[float]:
-        k = hashkey(text)
-        if k in self._query_cache:
-            return self._query_cache[k]
-        if not text or not text.strip():
-            raise SearchError(
-                "Cannot embed an empty query.",
-                hint="Provide a non-empty query string to semantic_query.",
-            )
-        vecs = _embed_via_api([text], "query")
-        if not vecs:
-            raise SearchError(
-                "The embedding API returned no vector for the query.",
-                hint="This is unexpected; check the NVIDIA API status.",
-            )
-        vec = vecs[0]
-        if len(vec) != EXPECTED_DIM:
-            raise SearchError(
-                f"Embedding dimension mismatch: expected {EXPECTED_DIM}, got {len(vec)}.",
-                hint=f"Re-build embeddings with a {EXPECTED_DIM}-d model, or update EXPECTED_DIM.",
-            )
-        self._query_cache[k] = vec
-        return vec
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return embed_texts(texts)
-
-    def rerank(self, query: str, candidates: list[str]) -> list[float]:
-        return rerank_query(query, candidates)
-
-
-# Default singleton for backward compatibility with existing callers.
-_default_service: EmbeddingService | None = None
-
-
-def get_default_service() -> EmbeddingService:
-    """Return the process-wide default :class:`EmbeddingService`."""
-    global _default_service
-    if _default_service is None:
-        _default_service = EmbeddingService(query_cache=_query_cache)
-    return _default_service

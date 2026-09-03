@@ -5,7 +5,7 @@ services:
       # Root Dockerfile builds the Next.js SPA in a Node stage and serves it
       # alongside the Python MCP/REST API and the chat sub-app from a single
       # Alpine runtime on :8000. Same image Railway deploys from (see
-      # railway.toml).
+      # .railway/railway.ts).
       dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8000:8000"

@@ -7,7 +7,6 @@ parsing.
 - ``Intent``: enum for the guardrail Tier 2 classifier
 - ``ToolCallSpec``: a single tool call in a supervisor plan
 - ``ToolPlan``: structured output from the supervisor (reasoning + tool calls)
-- ``CitationRef``: a single citation reference (act + ref)
 """
 
 from __future__ import annotations
@@ -58,13 +57,4 @@ class ToolPlan(BaseModel):
     tool_calls: list[ToolCallSpec] = Field(
         description="Tool calls to execute in parallel. Empty list if "
         "no retrieval is needed."
-    )
-
-
-class CitationRef(BaseModel):
-    """A single citation reference extracted from the answer."""
-
-    act: str = Field(description="Act short name, e.g. 'IPC', 'Constitution'")
-    ref: str = Field(
-        description="Section/article number, e.g. '302', '21', 's. 302'"
     )

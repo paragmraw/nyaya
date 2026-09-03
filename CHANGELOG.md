@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Deployment config migrated from Railway's deprecated `railway.toml` Config-as-Code to Railway IaC (`.railway/railway.ts`, managed via `railway config plan`/`apply`) — the legacy format stops being read by Railway on 2026-12-01. Production images now also build with the chat panel enabled (`NEXT_PUBLIC_CHAT_ENABLED` Dockerfile default flipped to `true`).
+- MCP tool registration now fails fast: a duplicate tool name, a raising register function, or a module that does not land the tools it claims aborts startup with a `RuntimeError` instead of logging and continuing with a silently crippled tool surface (supersedes the 0.2.0 log-and-continue behavior — FastMCP itself only warns on duplicates and keeps the first registration).
+- `cross_reference`'s `direction` parameter is now a closed Literal (`from`/`to`/`both`) enforced by FastMCP schema validation at the tool boundary, replacing runtime validation; `db.get_cross_refs` types it as `CrossRefDirection`.
+- `Kind`/`HitKind` consolidated: `HitKind` is now an alias of `Kind` (one definition, one place to extend).
+- `load_dotenv()` in `get_settings()` is now opt-in: set `NYAYA_DOTENV=1` to load a local `.env` (the quickstart flow). Off by default so tests/CI are never surprised by a stray `.env`; a no-op when the optional `python-dotenv` dependency (new `dotenv` extra) is not installed.
+- `list_chapters` tool signature now returns a typed `dict[str, Any]`.
+- Chat eval harnesses merged: `eval/validate_chat.py` folded into `eval/chat_eval.py` (superset of both scenario datasets and check sets). Time-to-first-token is now measured off the live incremental SSE stream instead of being estimated as `latency * 0.3`, and the harness is wrapped by offline-skipping pytest tests under the `eval` marker (`chat/tests/test_chat_eval.py`, opt-in via `NYAYA_EVAL_HOST`).
+- `mypy` is genuinely clean on `nyaya.db`: the pool/connection are typed as `ConnectionPool[psycopg.Connection[dict[str, Any]]]` so dict rows propagate, and the module-wide `disable_error_code` override that hid 28 real errors is removed (24 source files, 0 errors, 0 suppression overrides left).
+
+### Added
+- `mcp/tests/test_rest.py` — REST endpoint contract tests against the real ASGI app (stats shapes, degraded health, error redaction, clamping, tool listing), all offline via fakes.
+- `mcp/tests/test_tools_contract.py` — per-tool contract tests (16-tool registration surface, readOnly annotations, Literal enum in the `cross_reference` schema, `include_text`/`snippet_chars` parameters) plus fail-fast registration tests, TTL-cache unit tests for `_LockedTTLCache`, and a middleware-stack-order structural test on the real app.
+- `NYAYA_DOTENV=1` opt-in `.env` loading (see Changed) documented in the mcp README quickstart.
+
+### Removed
+- Unused `EmbeddingService`/`get_default_service`/`embed_texts` indirection from `nyaya.embeddings` (the module-level `embed_query`/`rerank_query` functions are the only API).
+- Duplicate `_BIDI_RE` (now a single `BIDI_RE` in `nyaya/sanitize.py`, shared with `db.py`) and duplicate `_redact_url` (single home in `config.py`; `ratelimit.py` imports it).
+- The dead `mcp_instance._nyaya_chat_app` write-only attribute in `server.py`.
+
+### Fixed
+- CHANGELOG 0.2.0 entry: `SYNTHESIS_MAX_TOKENS` was recorded as 4096 but ships as 2048; the `article_amendments` junction-table claim was wrong — the v0.2 schema **dropped** `article_amendments` (schema.sql only `DROP`s it) and keeps `articles_affected` as a CSV in `documents.metadata`.
+
 ## [0.2.0] - 2026-08-18
 
 ### Security
@@ -18,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Chat agent refactored from a single-node ReAct loop to a two-phase **supervisor-synthesis** LangGraph architecture. The supervisor node plans and emits all tool calls in one `AIMessage` for parallel execution; a `DedupToolNode` runs them concurrently (deduplicating repeated name+args calls); the synthesis node composes the final grounded answer from the `ToolMessage` results. See `chat/nyaya_chat/agent.py`.
 - Chat streaming now uses LangGraph v2 dual stream mode (`["messages", "updates"]`). Supervisor content is routed to a new `plan` SSE event so it doesn't mix with the synthesis answer (`token` events). Phase-transition `status` events now report `analyzing` → `searching` → `composing`.
-- Chat LLM default model is now `nvidia/nemotron-3.5-lightning-30b-a3b` (was `nvidia/nemotron-3-super-120b-a12b`). Supervisor and synthesis phases get distinct model instances with separate token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=4096`).
+- Chat LLM default model is now `nvidia/nemotron-3.5-lightning-30b-a3b` (was `nvidia/nemotron-3-super-120b-a12b`). Supervisor and synthesis phases get distinct model instances with separate token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=2048`).
 - Chat tool loading switched to `langchain-mcp-adapters`' `MultiServerMCPClient` with a curated 6-tool allowlist (`DEFAULT_TOOLS` in `chat/nyaya_chat/config.py`).
 - `semantic_query` tool now returns a structured `SearchResponse` with `fallback_reason` instead of raising `EmbeddingUnavailable`.
 - Consolidated 20 → 16 MCP tools for better LLM tool-selection accuracy (see Removed section).
@@ -27,7 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/__init__.py` now wraps each tool registration in try/except so one failure doesn't block all tools.
 
 ### Added
-- `article_amendments` junction table in schema (normalizes the `articles_affected` CSV column).
+- `articles_affected` stays a CSV column inside `documents.metadata` in the v0.2 unified schema (the old `article_amendments` junction table is dropped by schema.sql, not added — the original entry here claimed the opposite).
 - Self-contained hydration notebook (`mcp/notebooks/hydrate.ipynb`) replaces the old CLI-based ingestion pipeline — fetches all sources live, embeds via NVIDIA API, writes to Postgres.
 - `EmbeddingService` class with injectable caches for testing.
 - Structured error contract: `NotFound` errors now return `ToolResult(is_error=True, structured_content={"error": {"code", "message", "kind", "hint"}})` via `@structured_errors` decorator (`tools/_error.py`).

@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import threading
 from typing import Any
 
 from .config import Settings
@@ -221,31 +222,85 @@ _CLASSIFIER_PROMPT = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Tier 2 classifier client (built once, reused across requests).
+# ---------------------------------------------------------------------------
+
+# One classifier client per distinct Settings instance, built on the first
+# Tier-2 hit (see :func:`get_classifier_model`). Keyed by Settings rather than
+# a single slot so a changed/reloaded configuration never silently reuses a
+# stale client — and so tests that pass fresh Settings objects get a fresh
+# client without a reset.
+_classifier_models: dict[Settings, Any] = {}
+_classifier_build_lock = threading.Lock()
+
+
+def _build_classifier_model(settings: Settings):
+    """Build the dedicated Tier-2 classifier client.
+
+    This is the seam for tests: monkeypatch
+    ``nyaya_chat.guardrail._build_classifier_model`` (or, as the existing
+    tests do, ``langchain_nvidia_ai_endpoints.ChatNVIDIA``) to count
+    constructions or inject a fake — whatever this returns is cached and
+    handed to every Tier-2 classification for the same Settings.
+    """
+    from langchain_nvidia_ai_endpoints import ChatNVIDIA
+
+    return ChatNVIDIA(
+        model=settings.llm_model,
+        temperature=0.0,  # deterministic for classification
+        max_completion_tokens=settings.guardrail_classifier_max_tokens,
+        timeout=settings.guardrail_classifier_timeout_s,
+        api_key=settings.nvidia_api_key.get_secret_value(),
+    )
+
+
+def get_classifier_model(settings: Settings) -> Any:
+    """Return the shared classifier client for ``settings`` (lazy singleton).
+
+    One client per distinct Settings, created on the first Tier-2
+    classification (the first ambiguous message pays the one-time build
+    cost) and reused for the process lifetime — ambiguous messages used to
+    pay connection setup on every call. Double-checked locking keeps
+    concurrent first calls from building duplicates; the dict-based cache
+    means per-test Settings instances get their own client.
+    """
+    cached = _classifier_models.get(settings)
+    if cached is not None:
+        return cached
+    with _classifier_build_lock:
+        cached = _classifier_models.get(settings)
+        if cached is None:
+            cached = _build_classifier_model(settings)
+            _classifier_models[settings] = cached
+    return cached
+
+
+def reset_classifier_cache() -> None:
+    """Clear the classifier client cache. Intended for tests."""
+    with _classifier_build_lock:
+        _classifier_models.clear()
+
+
 async def classify_intent_tier2(
     message: str,
-    model: Any,
     settings: Settings,
 ) -> Intent:
     """LLM-based intent classification using structured output.
 
-    Uses ``with_structured_output(Intent)`` to get a structured ``Intent``
+    Uses the SHARED classifier client (:func:`get_classifier_model`) with
+    ``with_structured_output(Intent)`` per call to get a structured ``Intent``
     enum value directly from the model. If the API doesn't support structured
     output (some hosted endpoints don't expose guided_json/response_format),
     falls back to free-text parsing (first-word match). Falls to LEGAL on
     timeout/error (fail-open).
     """
     from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
     try:
-        # Create a dedicated classifier model with low token cap for efficiency
-        classifier_model = ChatNVIDIA(
-            model=settings.llm_model,
-            temperature=0.0,  # deterministic for classification
-            max_completion_tokens=settings.guardrail_classifier_max_tokens,
-            timeout=settings.guardrail_classifier_timeout_s,
-            api_key=settings.nvidia_api_key.get_secret_value(),
-        )
+        # One classifier model with the low token cap, built lazily on the
+        # first Tier-2 hit and reused across requests.
+        classifier_model = get_classifier_model(settings)
 
         msgs = [
             SystemMessage(content=_CLASSIFIER_PROMPT),
@@ -309,7 +364,6 @@ async def classify_intent_tier2(
 
 async def classify_intent(
     message: str,
-    model: Any,
     settings: Settings,
 ) -> Intent:
     """Two-tier intent classification.
@@ -320,10 +374,6 @@ async def classify_intent(
     Tier 2: if Tier 1 returns None (unknown), make a structured LLM
     classification call using ``with_structured_output(Intent)``. Falls
     open to LEGAL on error/timeout.
-
-    The ``model`` parameter is kept for API compatibility but is no longer
-    used directly -- Tier 2 creates its own dedicated classifier model
-    instance with appropriate token/temperature settings.
 
     When ``settings.guardrail_enabled`` is False, always returns LEGAL
     (the guardrail is bypassed entirely).
@@ -345,4 +395,4 @@ async def classify_intent(
         return Intent.LEGAL
 
     # Tier 2: LLM-based with structured output (only for messages Tier 1 couldn't classify)
-    return await classify_intent_tier2(message, model, settings)
+    return await classify_intent_tier2(message, settings)

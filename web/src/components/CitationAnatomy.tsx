@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import BalanceIcon from "@mui/icons-material/Balance";
+import { BalanceIcon } from "@/components/icons";
 import SourceCard from "@/components/SourceCard";
 
 export default function CitationAnatomy() {
@@ -26,7 +26,7 @@ export default function CitationAnatomy() {
       <div className="annotated">
         <div className="answer-bubble">
           <div className="ab-head">
-            <span className="avatar" aria-hidden="true"><BalanceIcon fontSize="small" /></span>
+            <span className="avatar" aria-hidden="true"><BalanceIcon /></span>
             <span className="ab-title">Nyaya Assistant</span>
           </div>
           <p>

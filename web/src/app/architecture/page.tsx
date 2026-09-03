@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { McpToolsList } from "@/components/ArchitecturePageClient";
+import McpToolsList from "@/components/McpToolsList";
 import Breadcrumb from "@/components/Breadcrumb";
 import McpConfig from "@/components/McpConfig";
 import PipelineStage from "@/components/PipelineStage";
 import { FLOW, INFRA, PLANNED, SERVICES, TODAY } from "@/lib";
 import StructuredData, { architectureSchema } from "@/components/StructuredData";
+import { pageOpenGraph } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Architecture",
   description:
     "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
-  openGraph: {
+  openGraph: pageOpenGraph({
     title: "Nyaya Architecture - Retrieval-Grounded Legal AI Pipeline",
     description:
-"How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
-    type: "website",
-  },
+      "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
+  }),
 };
 
 export default function ArchitecturePage() {

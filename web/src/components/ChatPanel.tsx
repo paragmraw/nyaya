@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import BalanceIcon from "@mui/icons-material/Balance";
+import { BalanceIcon } from "./icons";
 import ChatComposer from "./ChatComposer";
-import ChatMessageView from "./ChatMessage";
+import ChatMessageView, { phaseLabel } from "./ChatMessage";
 import { useChat } from "@/lib";
 
 // ChatPanel: the live Nyaya assistant. Streams tokens from the FastAPI chat
@@ -48,6 +48,17 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
   const canReset = messages.length > 0 || !!error;
   const canRetry = !!error && !isStreaming;
   const modelUrl = `https://build.nvidia.com/${modelId}`;
+
+  // The streaming tail's announcement text for screen readers. Kept in its own
+  // aria-live region (below) so token-by-token updates don't re-read the whole
+  // conversation log, and phase changes / completion / failure are announced
+  // in plain language.
+  const lastMsg = messages[messages.length - 1];
+  const liveText = isStreaming
+    ? (lastMsg?.role === "assistant" && lastMsg.status ? phaseLabel(lastMsg.status) : "Nyaya is responding…")
+    : lastMsg?.role === "assistant" && lastMsg.content
+      ? "Response complete."
+      : "";
 
   // Auto-scroll to the latest message as tokens stream in
   useEffect(() => {
@@ -95,20 +106,31 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
         </div>
       </div>
 
-      <div className="chat-body" id="chatBody" ref={bodyRef} role="log" aria-live="polite" aria-label="Chat conversation">
+      {/* The transcript itself is NOT a live region (role="log" was): each
+          token made screen readers re-read the whole log. Announcements are
+          handled by the streaming-tail live region below. */}
+      <div className="chat-body" id="chatBody" ref={bodyRef} aria-label="Chat conversation">
         {showGreeting ? (
           <div className="msg bot">
-            <div className="avatar" aria-hidden="true"><BalanceIcon fontSize="small" /></div>
+            <div className="avatar" aria-hidden="true"><BalanceIcon /></div>
             <div className="bubble">
               {GREETING}
               <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
             </div>
           </div>
         ) : (
-          messages.map((m) => (
-            <ChatMessageView key={m.id} msg={m} isStreaming={isStreaming} />
+          messages.map((m, i) => (
+            <ChatMessageView
+              key={m.id}
+              msg={m}
+              isStreaming={isStreaming && i === messages.length - 1}
+              onRetry={m.role === "assistant" && i === messages.length - 1 ? retry : undefined}
+            />
           ))
         )}
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {liveText}
+        </div>
       </div>
 
       <div className="chat-foot">

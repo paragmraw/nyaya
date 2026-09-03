@@ -40,10 +40,11 @@ request-id, rate limiting, body-size cap) is provided by the host.
 - **LLM**: `ChatNVIDIA`, reads `NVIDIA_API_KEY` from the environment. The
   default model is `nvidia/nemotron-3.5-lightning-30b-a3b` (see `config.py`).
   The supervisor and synthesis phases each get their own model instance with
-  distinct token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=4096`).
+  distinct token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=2048`).
 - **Streaming**: LangGraph v2 dual stream mode (`["messages", "updates"]`)
   -> typed SSE events (`status`, `plan`, `token`, `reasoning`, `tool_start`,
-  `tool_result`, `error`, `done`). Supervisor node content is routed to
+  `tool_result`, `citations`, `correction`, `ping`, `error`, `done`).
+  Supervisor node content is routed to
   `plan` events so it doesn't mix with the synthesis answer (`token` events).
   Phase transitions emit `status` events (`analyzing` -> `searching` ->
   `composing`).
@@ -81,22 +82,33 @@ lives as Python constants in `chat/nyaya_chat/config.py`.
 
 ### `GET /chat/health`
 ```json
-{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":6}
+{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":6,"reason":null}
 ```
+Fast by design: the health probe **never** builds the agent — it reports
+`"degraded"` with a `reason` (agent still initializing / no tools loaded)
+immediately if the graph isn't built yet; only `/chat/turn` triggers a build.
+The `model` field is always present (the frontend model badge reads it).
 
 ### `POST /chat/turn`
 **Body**: `{"message": "...", "history": [{"role":"user","content":"..."}, ...]}`
-**Response**: `text/event-stream` of typed SSE events:
+**Response**: `text/event-stream` of typed SSE events. On failure before the
+stream opens, the endpoint returns a JSON error body in the SAME unified
+shape as the SSE `error` event: `{"message": "...", "detail": "...", "rid": "..."}`
+(e.g. HTTP 503 `{"message": "agent_unavailable", "detail": "...", "rid": "..."}`).
 
 | event | data | meaning |
 |---|---|---|
-| `status` | `{"msg": "analyzing"\|"searching"\|"composing"}` | phase transition (supervisor -> tools -> synthesis) |
+| `meta` | `{"request_id": "..."}` | request id (first event) |
+| `status` | `{"msg": "analyzing"\|"searching"\|"composing", "rid": "..."}` | phase transition (supervisor -> tools -> synthesis); every status event echoes the request id |
 | `plan` | `{"content": "..."}` | supervisor plan text (routed separately from the answer) |
 | `token` | `{"content": "..."}` | synthesis LLM token delta (the final answer) |
 | `reasoning` | `{"content": "..."}` | reasoning_content delta (forward-compat for reasoning-capable models) |
 | `tool_start` | `{"id","name","args"}` | the model called a tool |
 | `tool_result` | `{"id","name","summary"}` | a tool returned |
-| `error` | `{"message", "detail"}` | a node failed |
+| `citations` | `{"citations": [{"act": "...", "ref": "..."}]}` | citations parsed from the synthesis node's VERIFIED answer (no re-verification stream-side) |
+| `correction` | `{"content": "..."}` | the verified answer, emitted ONLY when it differs from the raw streamed tokens; absent when they match |
+| `ping` | `{"ts": 123}` | keepalive (every ~15s) |
+| `error` | `{"message", "detail", "rid"}` | a node failed (unified error shape) |
 | `done` | `{}` | stream complete |
 
 ## Tests
@@ -105,3 +117,24 @@ lives as Python constants in `chat/nyaya_chat/config.py`.
 cd chat && pytest        # unit tests (no live NVIDIA/MCP calls)
 ruff check . && mypy nyaya_chat
 ```
+
+Live-server eval (needs a running stack — DB, `NVIDIA_API_KEY`, and the MCP
+server in the same process):
+
+```bash
+cd chat
+NYAYA_EVAL_HOST=http://localhost:8001 uv run pytest -m eval   # pytest wrapper
+uv run python -m eval.chat_eval --host http://localhost:8001 --verbose   # full report
+uv run python -m eval.chat_eval --list                                  # scenario IDs
+uv run python -m eval.chat_eval --host http://localhost:8001 --test fact-ipc-302  # one scenario
+```
+
+`eval/chat_eval.py` is the single merged harness (it replaced the old
+`chat_eval.py` + `validate_chat.py` pair). It reads the SSE stream
+incrementally, so time-to-first-token is measured when the first `token`
+event actually arrives (the old harness estimated it as `latency * 0.3`).
+It ships 34 scenarios across guardrail, factual, semantic, comparison,
+refusal, judgment, definition, multi-turn, and edge-case categories, and
+exits non-zero when any quality check fails. `eval/e2e_eval.py` (golden
+dataset) and `eval/retrieval_eval.py` (offline retrieval scoring) remain
+separate, narrower tools.

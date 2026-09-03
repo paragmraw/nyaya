@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Script from "next/script";
+import { SITE } from "@/lib/site";
 
 interface BreadcrumbItem {
   label: string;
@@ -35,7 +36,7 @@ export default function Breadcrumb() {
       "@type": "ListItem",
       position: index + 1,
       name: item.label,
-      item: `https://nyaya.example.com${item.href}`,
+      item: `${SITE}${item.href}`,
     })),
   };
 

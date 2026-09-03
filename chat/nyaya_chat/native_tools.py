@@ -228,18 +228,22 @@ _GET_SECTION_DESC = (
     "Fetch the full text of a specific section of an Indian act by its number. "
     "Supports IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA, etc. Act names are "
     "normalized (case-insensitive). Also accepts combined citation strings like "
-    "'IPC s.302' or 's.302 of IPC'. Use get_article for Constitution articles."
+    "'IPC s.302' or 's.302 of IPC'. Use get_article for Constitution articles. "
+    "List tools (list_sections, list_articles, list_judgments) return only "
+    "~300-char text snippets; call get_section for full text."
 )
 
 _GET_ARTICLE_DESC = (
     "Fetch the full text of a Constitution of India article by its number. "
-    "Handles bare numbers ('21') and citation strings like 'Art.21' or 'Article 21'."
+    "Handles bare numbers ('21') and citation strings like 'Art.21' or 'Article 21'. "
+    "List tools (list_articles) return only ~300-char snippets; use this for full text."
 )
 
 _GET_JUDGMENT_DESC = (
     "Fetch the full text of a landmark Supreme Court judgment by citation or "
     "case-name slug. Matches exact citation ('AIR 1973 SC 1461'), slugified "
-    "case name, or fuzzy case-name substring (>= 8 chars)."
+    "case name, or fuzzy case-name substring (>= 8 chars). "
+    "list_judgments returns only ~300-char snippets per case; call this for full text."
 )
 
 _CROSS_REF_DESC = (
@@ -250,7 +254,9 @@ _CROSS_REF_DESC = (
 
 _LIST_ACTS_DESC = (
     "List all acts available in the nyaya corpus with provenance. Use this first "
-    "to discover what's searchable."
+    "to discover what's searchable. Note: list-style tools (list_sections, "
+    "list_articles, list_judgments) return short text snippets (~300 chars); "
+    "call get_section / get_article / get_judgment to read full text."
 )
 
 

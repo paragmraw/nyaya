@@ -7,6 +7,10 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+#   lib/ is scoped to the repo root (/lib/) — Python build artifacts land there
+#   (or under build/, venv/, which are ignored separately). A bare `lib/` would
+#   also match web/src/lib/, the SPA's shared-code barrel, forcing an
+#   `!src/lib/` un-ignore hack in web/.gitignore.
 .Python
 build/
 develop-eggs/
@@ -14,7 +18,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
 lib64/
 parts/
 sdist/
@@ -229,10 +233,17 @@ scratch/
 .vscode/
 .idea/
 
+# Playwright MCP session artifacts (local only)
+.playwright-mcp/
+
+# Node (no root package.json today — prevents a stray install from re-creating it)
+node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
 
-# Railway
+# Railway (CLI state; .railway/railway.ts + package*.json stay tracked)
 railway.json
 railway.lock
+.railway/railway-plan*.json

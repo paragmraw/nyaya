@@ -16,12 +16,12 @@ See [`mcp/README.md`](mcp/README.md) for setup, deployment, and client-configura
 
 ## Deploy to Railway
 
-A single Railway service serves the SPA, the REST API, the MCP endpoint, and the chat assistant from one origin (root `Dockerfile`).
+A single Railway service serves the SPA, the REST API, the MCP endpoint, and the chat assistant from one origin (root `Dockerfile`). Service settings are declared with [Railway IaC](https://docs.railway.com/infrastructure-as-code) in [`.railway/railway.ts`](.railway/railway.ts) — the deprecated `railway.toml` Config-as-Code format is not used.
 
-1. `railway init` (or connect the GitHub repo for autodeploy from `main`).
-2. Set `DATABASE_URL` (Supabase/Postgres connection string) and `NVIDIA_API_KEY` (NVIDIA API Catalog key for the chat assistant) in the Railway Variables tab. `PORT` is set automatically.
-3. `railway up` — builds the root `Dockerfile` (Node 20 stage builds `web/out/`, Python 3.12-alpine stage serves it alongside the MCP server and the chat sub-app).
-4. Railway polls `GET /health` (configured in `railway.toml`).
+1. Install the [Railway CLI](https://docs.railway.com/guides/cli), then `railway login` and `railway link` to the nyaya project's production environment.
+2. Set `DATABASE_URL` (Supabase/Postgres connection string) and `NVIDIA_API_KEY` (NVIDIA API Catalog key for the chat assistant) in the Railway Variables tab. `PORT` is set automatically. Both secrets are `preserve()`d in the IaC file, so `railway config apply` never touches their values.
+3. Push to `main` for autodeploy (or `railway up` for a manual deploy) — Railway builds the root `Dockerfile` (Node 20 stage builds `web/out/`, Python 3.12-alpine stage serves it alongside the MCP server and the chat sub-app).
+4. Railway polls `GET /health` (declared in `.railway/railway.ts`).
 5. Run the hydration notebook `mcp/notebooks/hydrate.ipynb` locally once (with the same `.env`) to populate the corpus — the deployed server reads from the same database.
 6. Smoke checks against the deployed domain:
    - `GET /` → SPA home renders, chat panel live (streaming).

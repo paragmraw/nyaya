@@ -19,8 +19,10 @@ from dataclasses import dataclass
 
 log = logging.getLogger("nyaya_chat.citations")
 
-# Matches [[act: <short_name>, ref: <ref>]] inline citation markers.
-_CITE_RE = re.compile(r"\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]")
+# Matches [[act: <short_name>, ref: <ref>]] inline citation markers. This is
+# the single source of truth for the marker syntax: the agent's reflection
+# check, the citation verifier below, and the eval scripts all import it.
+CITATION_RE = re.compile(r"\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]")
 
 
 @dataclass
@@ -33,7 +35,7 @@ def parse_citations(text: str) -> list[Citation]:
     """Extract all [[act: X, ref: Y]] markers from the answer text."""
     citations: list[Citation] = []
     seen: set[str] = set()
-    for m in _CITE_RE.finditer(text):
+    for m in CITATION_RE.finditer(text):
         act = m.group(1).strip()
         ref = m.group(2).strip()
         key = f"{act}|{ref}"

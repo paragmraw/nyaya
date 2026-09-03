@@ -5,7 +5,21 @@ from __future__ import annotations
 import json
 
 from .. import db
+from ..config import SNIPPET_CHARS
 from ..exceptions import NotFound
+from ..models import Document
+
+
+def _with_snippet(doc: Document, chars: int = SNIPPET_CHARS) -> dict:
+    """Serialize a Document with its text truncated to ``chars``.
+
+    List-style resources (judgments://, schedules://, amendments://) would
+    otherwise ship multi-KB texts per row; full text stays available through
+    the singular resources (judgment://{slug}, schedule://{n}, ...).
+    """
+    data = doc.model_dump(mode="json")
+    data["text"] = doc.text[: max(1, int(chars))]
+    return data
 
 
 def register(mcp) -> None:
@@ -42,32 +56,41 @@ def register(mcp) -> None:
     @mcp.resource(
         "schedules://",
         name="Constitution schedules",
-        description="All schedules of the Constitution of India.",
+        description=(
+            "All schedules of the Constitution of India (text snippets; use "
+            "schedule://{number} for a full schedule text)."
+        ),
         mime_type="application/json",
     )
     def all_schedules() -> str:
         scheds = db.list_schedules()
-        return json.dumps([s.model_dump(mode="json") for s in scheds], indent=2)
+        return json.dumps([_with_snippet(s) for s in scheds], indent=2)
 
     @mcp.resource(
         "amendments://",
         name="Constitution amendments",
-        description="All amendments to the Constitution of India.",
+        description=(
+            "All amendments to the Constitution of India (text snippets; use "
+            "amendment://{number} for full amendment details)."
+        ),
         mime_type="application/json",
     )
     def all_amendments() -> str:
         ams = db.list_amendments()
-        return json.dumps([a.model_dump(mode="json") for a in ams], indent=2)
+        return json.dumps([_with_snippet(a) for a in ams], indent=2)
 
     @mcp.resource(
         "judgments://",
         name="All landmark judgments",
-        description="List of landmark Supreme Court judgments in the corpus (first 100).",
+        description=(
+            "List of landmark Supreme Court judgments in the corpus, first 100 "
+            "(text snippets; use judgment://{slug} for a case's full text)."
+        ),
         mime_type="application/json",
     )
     def all_judgments() -> str:
         juds, _ = db.list_judgments(limit=100)
-        return json.dumps([j.model_dump(mode="json") for j in juds], indent=2)
+        return json.dumps([_with_snippet(j) for j in juds], indent=2)
 
     @mcp.resource(
         "act://{short_name}",

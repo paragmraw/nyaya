@@ -44,6 +44,16 @@ EMBEDDING_MODEL = "nvidia/nemotron-3-embed-1b"
 RERANKER_MODEL = "nvidia/llama-nemotron-rerank-1b-v2"
 EMBEDDING_DIM = 2048
 
+# Total wall-clock budget for one rerank call (attempts + backoff + HTTP).
+# Without a deadline, 3 attempts x 120s httpx timeout + exponential backoff
+# can hang ~6 minutes worst case; beyond this deadline the reranker is
+# abandoned and search falls back to raw ANN scores (reranker_unavailable).
+RERANK_DEADLINE_S = 15.0
+
+# Default text-snippet length for list-style responses (matches the
+# historical ``left(d.text, 300)`` used by semantic search).
+SNIPPET_CHARS = 300
+
 # Redis connection string for distributed rate limiting. When set,
 # rate-limit counters are shared across all workers. When None, falls back
 # to in-memory (single-worker only). Read from the REDIS_URL env var at
@@ -68,6 +78,31 @@ def _required(name: str) -> str:
             "Copy .env.example to .env and fill in the values."
         )
     return val
+
+
+# Opt-in flag that lets get_settings() load a local ``.env`` file. Off by
+# default so tests and CI (which set real env vars) never see a stray .env.
+DOTENV_ENV_VAR = "NYAYA_DOTENV"
+_DOTENV_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _maybe_load_dotenv() -> None:
+    """Load a local ``.env`` file, but only when explicitly enabled.
+
+    Makes the ``cp .env.example .env`` quickstart in ``mcp/README.md`` work
+    without exporting the variables by hand. Opt-in — ``NYAYA_DOTENV=1`` — so
+    tests and CI are never surprised by a stray ``.env``; also a no-op when
+    python-dotenv is not installed (it is an optional dependency, see the
+    ``dotenv`` extra in ``pyproject.toml``). ``load_dotenv`` never overrides
+    variables that are already set, so real environment always wins.
+    """
+    if os.environ.get(DOTENV_ENV_VAR, "").strip().lower() not in _DOTENV_TRUTHY:
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv()
 
 
 def _redact_url(url: str) -> str:
@@ -116,6 +151,8 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
+    _maybe_load_dotenv()
+
     port_raw = os.environ.get("PORT", str(PORT_DEFAULT))
     try:
         port = int(port_raw)

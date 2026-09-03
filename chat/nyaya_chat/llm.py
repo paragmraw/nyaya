@@ -25,6 +25,12 @@ log = logging.getLogger("nyaya_chat.llm")
 _model_instance: Any = None
 _model_initialised = False
 
+# The one-line disclaimer every answer must end with (SYSTEM_PROMPT rule 5).
+# Defined ONCE here: the synthesis prompt quotes it and the synthesis node
+# (agent.py) appends it to the verified answer when the model omitted it, so
+# the streamed text and the verified message agree by construction.
+DISCLAIMER = "This is not legal advice; verify citations before filing."
+
 # System prompt for the supervisor: plans which tools to call, then delegates.
 # It must emit all tool calls in a single AIMessage for parallel execution.
 # It does not answer the question itself.
@@ -92,16 +98,41 @@ SYSTEM_PROMPT = (
     "*italics* sparingly for emphasis only.\n"
     "   f. Use a > blockquote for one short, important takeaway per answer.\n"
     "   g. Keep paragraphs to 2-4 sentences. Avoid walls of text.\n"
-    "5. Add a one-line disclaimer at the end: \"This is not legal advice; verify "
-    'citations before filing."'
+    "5. Add a one-line disclaimer at the end: \"" + DISCLAIMER + "\""
 )
 
 
 def _is_retryable(exc: BaseException) -> bool:
-    """Return True if the exception is a rate-limit or transient server error."""
+    """Classify an exception as retryable (rate limit / transient) or not.
+
+    Classification, most to least specific:
+
+    1. A numeric ``status_code`` attribute (LangChain / openai-style API
+       errors): retry on 429 (rate limit) and 5xx (transient server).
+    2. A ``response.status_code`` pair (httpx / requests-style
+       ``HTTPStatusError``): same rule.
+    3. Exception type: timeouts and transport failures are transient by
+       definition (``TimeoutError`` — which ``asyncio.TimeoutError`` aliases
+       on Python >= 3.11 — and httpx ``TransportError`` subclasses such as
+       ``ConnectError``).
+    4. Last resort, for exception types that carry no structured status:
+       substring match on the message — some hosted endpoints stringify
+       429s into the error text.
+    """
     status = getattr(exc, "status_code", None)
-    if status is not None:
+    if isinstance(status, int):
         return status == 429 or status >= 500
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status == 429 or status >= 500
+    if isinstance(exc, TimeoutError):
+        return True
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover - httpx ships with the LLM stack
+        httpx = None  # type: ignore[assignment]
+    if httpx is not None and isinstance(exc, httpx.TransportError):
+        return True
     msg = str(exc).lower()
     return "rate limit" in msg or "429" in msg or "timeout" in msg or "overloaded" in msg
 
@@ -151,19 +182,23 @@ async def astream_with_retry(
     """Stream model tokens with exponential backoff on retryable errors.
 
     Like :func:`ainvoke_with_retry` but yields ``AIMessageChunk`` objects as
-    they arrive from the model's streaming endpoint. If a retryable error
-    occurs mid-stream, the stream restarts from the beginning (the model has
-    no memory of partial output).
+    they arrive from the model's streaming endpoint. Retries only if NO chunk
+    has been yielded yet: once a chunk has reached the caller it cannot be
+    retracted, so restarting the stream would duplicate output. A retryable
+    error mid-stream therefore propagates to the caller (surfaced as a stream
+    error) instead of silently doubling the answer.
     """
     last_exc: BaseException | None = None
+    yielded = False
     for attempt in range(max_retries + 1):
         try:
             async for chunk in model.astream(messages, **kwargs):
+                yielded = True
                 yield chunk
             return
         except Exception as exc:
             last_exc = exc
-            if attempt >= max_retries or not _is_retryable(exc):
+            if attempt >= max_retries or not _is_retryable(exc) or yielded:
                 raise
             delay = min(max_delay, base_delay * (2**attempt))
             delay = random.uniform(0, delay)

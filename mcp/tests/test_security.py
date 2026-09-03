@@ -7,15 +7,19 @@ live server. ``monkeypatch`` handles time mocking for the rate-limit window.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
+import nyaya.ratelimit as rl
 from nyaya.ratelimit import (
     BodySizeLimitMiddleware,
     InMemoryBackend,
     RateLimitMiddleware,
+    RedisBackend,
     _get_remote_address,
 )
 from nyaya.sanitize import (
@@ -144,8 +148,8 @@ def test_inmemory_backend_window_resets(monkeypatch):
         backend.is_limited("ip1", limit=3)
     assert backend.is_limited("ip1", limit=3) is True
 
-    # Advance monotonic time past the 60-second window by directly
-    # manipulating the stored entry (the backend reads time.monotonic() at
+    # Advance wall-clock time past the 60-second window by directly
+    # manipulating the stored entry (the backend reads time.time() at
     # call time, so we patch the entry's window start).
     entry = backend._counts["ip1"]
     entry["window"] -= 61.0
@@ -153,17 +157,96 @@ def test_inmemory_backend_window_resets(monkeypatch):
 
 
 def test_inmemory_backend_window_reset_via_time_mock(monkeypatch):
-    """The window reset is driven by time.monotonic(); mocking time confirms it."""
-    t = [100.0]
-    import nyaya.ratelimit as rl
-
-    monkeypatch.setattr(rl.time, "monotonic", lambda: t[0])
+    """The window reset is driven by time.time(); mocking time confirms it."""
+    t = [1_800_000_000.0]
+    monkeypatch.setattr(rl.time, "time", lambda: t[0])
     backend = InMemoryBackend()
     for _ in range(2):
         backend.is_limited("ip1", limit=2)
     assert backend.is_limited("ip1", limit=2) is True
     t[0] += 61  # past the 60s window
     assert backend.is_limited("ip1", limit=2) is False
+
+
+def test_inmemory_backend_concurrent_increments_exact():
+    """N concurrent is_limited calls for one key record exactly N hits.
+
+    The middleware dispatches backend calls to worker threads via
+    asyncio.to_thread, so the counter mutation must be lock-guarded; without
+    the lock concurrent read-modify-writes lose increments and the final
+    count lands below N.
+    """
+    backend = InMemoryBackend()
+    total = 400
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        futures = [pool.submit(backend.is_limited, "ip1", limit=total) for _ in range(total)]
+        results = [f.result() for f in futures]
+    # Every call is under the limit, and every hit was recorded.
+    assert results == [False] * total
+    assert backend._counts["ip1"]["count"] == total
+
+
+# ---------------------------------------------------------------------------
+# RedisBackend
+# ---------------------------------------------------------------------------
+
+class _FakeRedis:
+    """Minimal redis-py stand-in that records pipeline INCR/EXPIRE commands."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, int] = {}
+        self.expires: list[tuple[str, int]] = []
+        self._last_key: str | None = None
+
+    def pipeline(self) -> _FakeRedis:
+        return self
+
+    def incr(self, key: str) -> int:
+        self.store[key] = self.store.get(key, 0) + 1
+        self._last_key = key
+        return self.store[key]
+
+    def expire(self, key: str, ttl: int) -> bool:
+        self.expires.append((key, ttl))
+        return True
+
+    def execute(self) -> list:
+        assert self._last_key is not None
+        return [self.store[self._last_key], True]
+
+
+def test_redis_backend_window_key_uses_wall_clock(monkeypatch):
+    """The Redis window key is derived from wall-clock time.time(), not time.monotonic().
+
+    Monotonic time has a different origin in every process, so a
+    monotonic-derived bucket key would give each worker its own counters and
+    silently defeat the global limit. A wildly different monotonic origin
+    must leave the keys (and limiting behaviour) unaffected.
+    """
+    import redis as redis_mod
+
+    fake = _FakeRedis()
+    monkeypatch.setattr(redis_mod, "from_url", lambda url, **kwargs: fake)
+    backend = RedisBackend("redis://localhost:6379/0")
+
+    now = 1_800_000_000  # fixed wall-clock instant
+    monkeypatch.setattr(rl.time, "time", lambda: float(now))
+    monkeypatch.setattr(rl.time, "monotonic", lambda: 987_654.321)  # wild per-process origin
+
+    expected_key = f"rl:ip1:read:{now // 60}"
+    assert backend.is_limited("ip1:read", limit=5) is False
+    assert list(fake.store) == [expected_key]
+
+    # Repeated calls accumulate in the same bucket (no per-process drift).
+    for _ in range(2):
+        assert backend.is_limited("ip1:read", limit=5) is False
+    assert fake.store == {expected_key: 3}
+
+    # The limit is enforced on the shared counter: at count 3, a limit-3
+    # window increments to 4 and blocks.
+    assert backend.is_limited("ip1:read", limit=3) is True
+    assert fake.store == {expected_key: 4}
+    assert fake.expires[-1] == (expected_key, 61)
 
 
 # ---------------------------------------------------------------------------
@@ -456,3 +539,77 @@ def test_get_remote_address_strips_whitespace():
     }
     req = Request(scope)
     assert _get_remote_address(req) == "203.0.113.5"
+
+
+# ---------------------------------------------------------------------------
+# Middleware ordering (Task 5 item 6): CORS outermost, security headers just
+# inside it, rate limiter inside both — so 429 short-circuits carry CORS and
+# security headers instead of failing opaquely in browsers.
+# ---------------------------------------------------------------------------
+
+def test_429_carries_security_and_cors_headers():
+    """A rate-limited 429 gets CSP/X-Frame-Options and CORS headers.
+
+    Runtime order must be CORS -> SecurityHeaders -> RateLimit -> app, so the
+    429 Response the limiter short-circuits is still wrapped by the security
+    header and CORS send-wrappers.
+    """
+    from starlette.middleware.cors import CORSMiddleware
+
+    from nyaya.security_headers import SecurityHeadersMiddleware
+
+    backend = InMemoryBackend()
+    # Build the app without middleware (routes only), then add layers with
+    # last-added = outermost: CORS > SecurityHeaders > RateLimit.
+    app = Starlette()
+
+    async def echo(request):
+        return JSONResponse({"ok": True})
+
+    app.router.add_route("/echo", echo, methods=["POST"])
+    app.add_middleware(RateLimitMiddleware, read_per_min=1, backend=backend)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["https://nyaya.parag.tech"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept"],
+        allow_credentials=False,
+    )
+    with TestClient(app) as client:
+        client.post("/echo", json={})  # exhaust the read limit
+        r = client.post(
+            "/echo", json={},
+            headers={"Origin": "https://nyaya.parag.tech"},
+        )
+        assert r.status_code == 429
+        assert r.headers.get("retry-after") == "60"
+        assert r.headers.get("content-security-policy", "").startswith("default-src")
+        assert r.headers.get("access-control-allow-origin") == "https://nyaya.parag.tech"
+
+
+def test_production_app_middleware_stack_order():
+    """Structural check on the REAL app (not a rebuilt one): the middleware
+    stack must be exactly CORS -> SecurityHeaders -> RequestId -> RateLimit ->
+    BodySizeLimit (runtime order, request in).
+
+    Starlette stores ``user_middleware`` with the outermost layer FIRST
+    (add_middleware prepends; last-added = outermost). If someone reorders the
+    ``app.add_middleware`` calls in server.py, the 429/413 short-circuit
+    responses lose their CORS/security headers — this test catches that at
+    unit-test time instead of in a browser.
+    """
+    from nyaya.server import app
+
+    order = [m.cls.__name__ for m in app.user_middleware]
+    security_stack = [name for name in order if name in {
+        "CORSMiddleware", "SecurityHeadersMiddleware", "RequestIdMiddleware",
+        "RateLimitMiddleware", "BodySizeLimitMiddleware",
+    }]
+    assert security_stack == [
+        "CORSMiddleware",            # outermost: 429/413 carry CORS headers
+        "SecurityHeadersMiddleware", # CSP etc. stamped on every response
+        "RequestIdMiddleware",       # X-Request-ID on every response
+        "RateLimitMiddleware",
+        "BodySizeLimitMiddleware",   # innermost
+    ]

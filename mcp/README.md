@@ -13,6 +13,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 - **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
 - **Fuzzy judgment lookup**: `get_judgment` matches by exact citation, exact title, or fuzzy title substring (≥ 8 chars to avoid false matches)
 - **Structured errors**: all `NotFound` responses return `is_error=true` with a machine-readable `structured_content={"error": {"code": "not_found", "message": "...", "kind": "section|article|act|judgment|schedule|amendment", "hint": "..."}}` so LLM clients can branch programmatically. `EmbeddingUnavailable` is distinct from "no matches".
+- **Text projection controls on the list tools**: `list_sections` / `list_articles` / `list_judgments` return short text snippets by default (300 chars, tunable via `snippet_chars`); pass `include_text=true` for full text (large responses — prefer `get_section`/`get_article`/`get_judgment` for a single document). The REST equivalents expose the same choice: `include_text=false` by default, `?full=1` for full text.
 
 ## Corpus and sources
 
@@ -50,7 +51,16 @@ cp .env.example .env
 # Edit .env:
 #   DATABASE_URL   — the Supabase/Postgres connection string
 #   NVIDIA_API_KEY — your NVIDIA API Catalog key (required for embeddings + reranking)
+
+# Then opt in to loading it: the server only reads .env when explicitly told to
+# (so tests and CI that export real env vars are never surprised by a stray file).
+export NYAYA_DOTENV=1
 ```
+
+`.env` loading requires the optional `dotenv` extra (`pip install -e ".[dotenv]"`);
+without it the flag is a silent no-op. Variables already set in the environment
+always win — `load_dotenv()` does not override them. Tests and CI leave
+`NYAYA_DOTENV` unset and pass variables directly.
 
 ### 3. Install and run
 
@@ -86,13 +96,14 @@ The notebook is **idempotent** — re-running it rebuilds the corpus from scratc
 
 ## Deploy to Railway
 
-nyaya ships with a Dockerfile (repo root) and a root `railway.toml` configured for Railway. The build context is the repo root.
+nyaya ships with a Dockerfile (repo root) and a [Railway IaC](https://docs.railway.com/infrastructure-as-code) config at `.railway/railway.ts`. The build context is the repo root.
 
 ### 1. Create the project
 
 ```bash
-railway init
-railway up
+railway login
+railway link   # or `railway init` for a fresh project
+railway up     # first deploy
 ```
 
 ### 2. Set environment variables
@@ -102,15 +113,33 @@ railway up
 | `DATABASE_URL` | Supabase/Postgres connection string |
 | `NVIDIA_API_KEY` | NVIDIA API Catalog key (required for embeddings + reranking) |
 
-`PORT` is set automatically by Railway (defaults to `8000`).
+`PORT` is set automatically by Railway (defaults to `8000`). Both secrets are `preserve()`d in `.railway/railway.ts`, so `railway config apply` never touches their values — but any variable you set in the Railway Variables tab must also appear there (or be added to the IaC file) before applying, since an apply can delete live variables absent from the file.
 
-### 3. Run ingestion (one-time)
+### Changing the deploy config
+
+`.railway/railway.ts` is the source of truth for service settings (source branch, healthcheck, replicas, variables). It needs its TypeScript SDK installed locally — run `npm install` inside `.railway/` once. Edit the file, review with `railway config plan`, apply with `railway config apply --yes`. Code deploys ride on autodeploy from `main` (or a manual `railway up`). Railway's legacy `railway.toml`/`railway.json` Config-as-Code is deprecated (unread after 2026-12-01) and not used here.
+
+### 3. Apply the schema migration (before/at first deploy)
+
+The server expects two **additive** statements that may not exist on a database provisioned before the `ref_num` change:
+
+```sql
+alter table documents add column if not exists ref_num int
+    generated always as (coalesce(nullif(regexp_replace(ref, '[^0-9].*$', ''), '')::int, 0)) stored;
+create index if not exists documents_act_ref_num_idx on documents (act_id, ref_num);
+```
+
+Apply these to the deployed database (they are the only safe-to-apply block, at the bottom of `schema.sql`) **before deploying the image** — until they exist, `list_sections` (ORDER BY `ref_num`) fails with `UndefinedColumn` and the flagship list tool 500s. Everything else degrades fine.
+
+> **Never run `psql -f schema.sql` against a populated database** — the file starts with `DROP ... CASCADE` statements and will destroy the corpus. See the warning header at the top of `schema.sql`.
+
+### 4. Run ingestion (one-time)
 
 Ingestion writes to Supabase, so you can run it from your local machine (with the same `.env`) — the Railway deployment reads from the same database. Run the notebook `mcp/notebooks/hydrate.ipynb` locally once, and the deployed server immediately serves the data.
 
 ### Health check
 
-Railway polls `GET /health`. The endpoint returns:
+Railway polls `GET /health` (declared in `.railway/railway.ts`). The endpoint returns:
 
 ```json
 {
@@ -181,13 +210,13 @@ pytest --cov=nyaya              # with coverage
 ruff check .                    # lint
 ```
 
-The test suite is fully offline: `tests/conftest.py` stubs the DB layer with canned data, so `pytest` runs with no Supabase and no network. Integration tests that boot the ASGI app are marked `@pytest.mark.integration`.
+The test suite is fully offline: `tests/conftest.py` only pins the required env vars (`DATABASE_URL`, `NVIDIA_API_KEY`) to dummy values so `get_settings()` builds; the DB-layer fakes live next to the tests that use them (e.g. the `_FakeConn` pool fake in `tests/test_db.py`, the fake `db` functions in `tests/test_rest.py`). `pytest` runs with no Supabase and no network. Tests that boot the real ASGI app are marked `@pytest.mark.integration` and still run offline against fakes.
 
 ## Project structure
 
 ```
 nyaya/                          # repo root
-├── railway.toml                # Railway deploy config
+├── .railway/                   # Railway IaC (railway.ts deploy config)
 ├── docker-compose.yml          # local container run (build context = repo root)
 ├── .env.example                # copy to .env and fill in
 ├── Dockerfile                  # Alpine image (~270 MB)

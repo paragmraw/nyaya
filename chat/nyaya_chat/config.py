@@ -86,8 +86,14 @@ GUARDRAIL_CLASSIFIER_TIMEOUT_S = 10.0
 SUPERVISOR_TEMPERATURE = 0.1
 
 # Message constraints.
-MAX_MESSAGE_CHARS = 4000          # max length of a single user message
 MAX_HISTORY = 8                   # max prior (role, content) turns the client may send
+
+# Tool-result truncation: cleaned tool content that is fed back to the
+# model (dedup cache, synthesis prompt) or rendered in the UI summary is
+# capped at this many characters. Single source of truth for the cap
+# (tool_content.py); the per-message input cap lives in schemas.py
+# (``ChatRequest.message``'s ``Field(max_length=4000)``).
+MAX_TOOL_CHARS = 8000
 
 # Chat logger level.
 LOG_LEVEL = "INFO"
@@ -127,7 +133,6 @@ class Settings:
     llm_max_tokens: int = LLM_MAX_TOKENS
     llm_timeout_s: float = LLM_TIMEOUT_S
     llm_max_retries: int = LLM_MAX_RETRIES
-    max_message_chars: int = MAX_MESSAGE_CHARS
     max_history: int = MAX_HISTORY
     log_level: str = LOG_LEVEL
     supervisor_max_tokens: int = SUPERVISOR_MAX_TOKENS
@@ -160,7 +165,6 @@ class Settings:
             "llm_max_tokens": self.llm_max_tokens,
             "llm_timeout_s": self.llm_timeout_s,
             "llm_max_retries": self.llm_max_retries,
-            "max_message_chars": self.max_message_chars,
             "max_history": self.max_history,
             "nvidia_api_key": _redact(self.nvidia_api_key.get_secret_value()),
             "tools": list(self.tool_allowlist),

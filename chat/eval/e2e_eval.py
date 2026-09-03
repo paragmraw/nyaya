@@ -15,9 +15,11 @@ Usage::
     cd chat
     python -m eval.e2e_eval [--golden eval/golden.jsonl] [--timeout 120]
 
-Marked with pytest marker ``eval`` so it can be run selectively::
-
-    pytest --eval -m eval
+This is a standalone script, not a pytest module — run it directly with the
+command above. (An earlier version of this docstring claimed it could be run
+via ``pytest -m eval``, which was never wired up.) The live-server SSE harness
+is ``eval/chat_eval.py``; offline golden-dataset scoring is
+``eval/retrieval_eval.py``.
 """
 
 from __future__ import annotations
@@ -65,9 +67,6 @@ class E2EReport:
     per_case: list[CaseResult] = field(default_factory=list)
 
 
-_CITE_RE = re.compile(r"\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]")
-
-
 def load_golden(path: str) -> list[GoldenCase]:
     cases: list[GoldenCase] = []
     p = Path(path)
@@ -111,6 +110,7 @@ def _check_refusal(answer: str) -> bool:
 
 async def eval_e2e(cases: list[GoldenCase], timeout: float = 120) -> E2EReport:
     from nyaya_chat.agent import _build_messages, get_agent
+    from nyaya_chat.citations import CITATION_RE
 
     report = E2EReport(total=len(cases))
     results: list[CaseResult] = []
@@ -146,7 +146,7 @@ async def eval_e2e(cases: list[GoldenCase], timeout: float = 120) -> E2EReport:
 
         # Parse citations from the answer
         citations_found: list[dict[str, str]] = []
-        for m in _CITE_RE.finditer(answer):
+        for m in CITATION_RE.finditer(answer):
             citations_found.append({"act": m.group(1).strip(), "ref": m.group(2).strip()})
 
         # Check expected citations

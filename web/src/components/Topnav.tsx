@@ -3,7 +3,40 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { applyTheme, currentTheme, THEME_STORAGE_KEY } from "@/lib/theme";
+
+// Subscribe to <html data-theme> so components re-render when the theme
+// changes (via the pre-paint script, the toggle, or the OS listener).
+function subscribeToTheme(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+  window.addEventListener("storage", onChange);
+  return () => {
+    observer.disconnect();
+    window.removeEventListener("storage", onChange);
+  };
+}
+
+// Sun / moon glyphs for the theme toggle. Both icons are always rendered and
+// visibility is driven purely by CSS ([data-theme] on <html>), so the markup
+// matches the server HTML exactly — no hydration flicker. The moon shows in
+// light mode, the sun in dark mode (the icon names the current scheme).
+function ThemeIcon({ variant }: { variant: "sun" | "moon" }) {
+  return variant === "sun" ? (
+    <svg className="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </svg>
+  ) : (
+    <svg className="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  );
+}
 
 const NAV_LINKS = [
   { href: "/corpus/", label: "Corpus" },
@@ -102,6 +135,33 @@ export default function Topnav() {
     return () => window.removeEventListener("pointerdown", onPointer);
   }, [menuOpen]);
 
+  // Theme toggle. The effective theme lives on <html data-theme> (set
+  // pre-paint; globals.css implements both schemes as token redefinitions).
+  // useSyncExternalStore subscribes to that attribute (MutationObserver) —
+  // during hydration React reads getServerSnapshot ("light"), then swaps to
+  // the real value without a hydration mismatch.
+  const theme = useSyncExternalStore(subscribeToTheme, currentTheme, () => "light");
+
+  // Follow live OS changes only while the user has not pinned a choice —
+  // once they toggle, their stored entry wins and this becomes a no-op.
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = (e: MediaQueryListEvent) => {
+      try {
+        if (localStorage.getItem(THEME_STORAGE_KEY)) return;
+      } catch {
+        /* storage blocked — treat as unpinned */
+      }
+      applyTheme(e.matches ? "dark" : "light", false);
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    applyTheme(theme === "dark" ? "light" : "dark", true);
+  }, [theme]);
+
   const toggleMenu = useCallback(() => setMenuOpen((v) => !v), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -141,6 +201,16 @@ export default function Topnav() {
               <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0016 8c0-4.42-3.58-8-8-8z" />
             </svg>
           </a>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            <ThemeIcon variant="sun" />
+            <ThemeIcon variant="moon" />
+          </button>
           <button
             type="button"
             ref={toggleRef}

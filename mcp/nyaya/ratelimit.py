@@ -17,16 +17,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections import defaultdict
 from typing import Any, Protocol
 
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .config import get_rate_limit_settings, get_settings
+from .config import _redact_url, get_rate_limit_settings, get_settings
 
 log = logging.getLogger("nyaya.ratelimit")
 
@@ -55,23 +55,31 @@ class RateLimitBackend(Protocol):
 
 
 class InMemoryBackend:
-    """Per-worker in-memory fixed-window counter (default, no Redis needed)."""
+    """Per-worker in-memory fixed-window counter (default, no Redis needed).
+
+    Uses wall-clock time for the window so behaviour matches
+    :class:`RedisBackend`. Mutations of ``_counts`` run under a lock because
+    the middleware dispatches backend calls to worker threads via
+    ``asyncio.to_thread``; an unguarded read-modify-write can lose increments.
+    """
 
     def __init__(self) -> None:
+        self._lock = threading.Lock()
         self._counts: dict[str, dict[str, Any]] = defaultdict(
-            lambda: {"count": 0, "window": time.monotonic()}
+            lambda: {"count": 0, "window": time.time()}
         )
 
     def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
-        now = time.monotonic()
-        entry = self._counts[key]
-        if now - entry["window"] > window_seconds:
-            entry["count"] = 0
-            entry["window"] = now
-        if entry["count"] >= limit:
-            return True
-        entry["count"] += 1
-        return False
+        now = time.time()
+        with self._lock:
+            entry = self._counts[key]
+            if now - entry["window"] > window_seconds:
+                entry["count"] = 0
+                entry["window"] = now
+            if entry["count"] >= limit:
+                return True
+            entry["count"] += 1
+            return False
 
 
 class RedisBackend:
@@ -79,6 +87,11 @@ class RedisBackend:
 
     Uses a single INCR + EXPIRE per request. The key includes the window
     start timestamp so it rotates cleanly.
+
+    The window bucket is derived from wall-clock time (``time.time()``), not
+    monotonic time: monotonic origins differ per process, so per-worker
+    buckets would silently defeat the global limit across workers (or across
+    restarts against a persistent Redis).
     """
 
     def __init__(self, redis_url: str) -> None:
@@ -87,7 +100,7 @@ class RedisBackend:
         self._redis = redis.from_url(redis_url, decode_responses=True)
 
     def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
-        now = int(time.monotonic())
+        now = int(time.time())
         window_key = f"rl:{key}:{now // int(window_seconds)}"
         pipe = self._redis.pipeline()
         pipe.incr(window_key)
@@ -116,20 +129,13 @@ def _create_backend() -> RateLimitBackend:
     return InMemoryBackend()
 
 
-def _redact_url(url: str) -> str:
-    from urllib.parse import urlsplit, urlunsplit
-
-    parts = urlsplit(url)
-    if parts.hostname and (parts.username or parts.password):
-        netloc = f"***@{parts.hostname}"
-        if parts.port:
-            netloc += f":{parts.port}"
-        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
-    return url
+# NOTE: ``_redact_url`` used to be duplicated here and in ``config.py``; the
+# config copy is the single home now (imported above) — both call sites log
+# connection strings and must redact identically.
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Per-IP fixed-window rate limiter with pluggable backend.
+class RateLimitMiddleware:
+    """Per-IP fixed-window rate limiter with pluggable backend (pure ASGI).
 
     When Redis is configured, limits are enforced globally across all
     workers. Without Redis, each worker has its own counters and the
@@ -138,6 +144,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Synchronous backend calls (Redis) are dispatched to a worker thread so
     the event loop is not blocked. If a Redis error occurs at runtime, the
     middleware falls back to an in-memory backend (fail-open).
+
+    The middleware is a pure-ASGI callable: the 429 short-circuit sends the
+    same ``{"error": "rate_limited"}`` JSON body + ``Retry-After: 60`` header
+    the previous ``BaseHTTPMiddleware`` version produced, and streaming
+    responses no longer pass through a buffering response task.
     """
 
     def __init__(
@@ -148,7 +159,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         chat_per_min: int = 15,
         backend: RateLimitBackend | None = None,
     ) -> None:
-        super().__init__(app)
+        self.app = app
         self.read_per_min = read_per_min
         self.embedding_per_min = embedding_per_min
         self.chat_per_min = chat_per_min
@@ -171,19 +182,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """
         return request.url.path.startswith("/chat") and request.method == "POST"
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        # A lightweight Request view over the scope (no body consumption):
+        # gives header/path/method access with unchanged semantics.
+        request = Request(scope)
+
         ip = _get_remote_address(request)
 
         # /health is always allowed (used by Railway healthchecks).
         if request.url.path == "/health":
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         # Loopback self-calls (e.g. chat agent -> MCP in the same container)
         # are exempt from rate limiting. The absence of X-Forwarded-For
         # ensures external requests cannot bypass the limiter by spoofing
         # 127.0.0.1 in that header.
         if not request.headers.get("x-forwarded-for") and ip in _LOOPBACK:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         if self._is_chat_request(request):
             bucket = "chat"
@@ -213,36 +233,47 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             limited = await asyncio.to_thread(self._fallback.is_limited, key, limit)
 
         if limited:
-            return Response(
+            response = Response(
                 content='{"error": "rate_limited"}',
                 status_code=429,
                 media_type="application/json",
                 headers={"Retry-After": "60"},
             )
+            await response(scope, receive, send)
+            return
 
-        return await call_next(request)
+        await self.app(scope, receive, send)
 
 
-class BodySizeLimitMiddleware(BaseHTTPMiddleware):
-    """Reject requests with a body larger than ``max_bytes``.
+class BodySizeLimitMiddleware:
+    """Reject requests with a body larger than ``max_bytes`` (pure ASGI).
 
     Early-rejects on ``Content-Length``; also caps the streamed body as
     defense-in-depth.
     """
 
     def __init__(self, app: ASGIApp, max_bytes: int = 1_048_576) -> None:
-        super().__init__(app)
+        self.app = app
         self.max_bytes = max_bytes
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
-        content_length = request.headers.get("content-length")
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        content_length = next(
+            (v.decode("latin-1") for k, v in scope.get("headers") or []
+             if k.lower() == b"content-length"),
+            None,
+        )
         if content_length and int(content_length) > self.max_bytes:
-            return Response(
+            response = Response(
                 content='{"error": "request_too_large"}',
                 status_code=413,
                 media_type="application/json",
             )
-        return await call_next(request)
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 def register_rate_limiting(app: Any) -> None:

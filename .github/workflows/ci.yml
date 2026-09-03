@@ -39,11 +39,13 @@ jobs:
         run: uv run mypy nyaya/
 
       - name: Test MCP with coverage
-        run: uv run pytest --cov=nyaya --cov-report=term-missing --cov-report=xml
+        # Floor = measured actual at the time of introduction (78.7% on
+        # 2026-09-01, 187 tests). Ratchet this up as coverage improves;
+        # never lower it.
+        run: uv run pytest --cov=nyaya --cov-report=term-missing --cov-report=xml --cov-fail-under=78
 
       - name: Lint chat (ruff)
         run: uv run ruff check ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
-        continue-on-error: true
 
       - name: Test chat
         run: uv run pytest ../chat/tests/ -v
@@ -59,6 +61,13 @@ jobs:
 
       - name: Verify lockfile is up to date
         run: uv lock --check
+
+      - name: Verify chat lockfile is up to date
+        # chat/uv.lock pins the image's chat deps (Dockerfile exports it with
+        # --locked) and its shared pins are constrained to mcp's — a stale
+        # chat lock would fail the docker build, so catch it here first.
+        run: uv lock --check
+        working-directory: chat
 
   web:
     runs-on: ubuntu-latest
@@ -85,6 +94,9 @@ jobs:
         # Next.js 16 removed `next lint`; use ESLint directly with the flat config.
         run: npx eslint .
 
+      - name: Test (node:test via tsx)
+        run: npm test
+
       - name: Build (static export)
         run: npm run build
         env:
@@ -99,3 +111,32 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t nyaya-ci .
+
+      - name: Smoke-run image and check /health
+        # A green build is not enough — the plan's only invisibly-breaking
+        # item is the runtime image itself. Boot it and hit the healthcheck.
+        run: |
+          docker run -d --name nyaya-smoke \
+            -e DATABASE_URL=postgresql://postgres:pw@localhost:5432/nyaya \
+            -e NVIDIA_API_KEY=nvapi-ci-placeholder \
+            -p 8000:8000 nyaya-ci
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health || true)
+            [ "$code" = "200" ] && echo "/health -> 200" && exit 0
+            sleep 3
+          done
+          echo "::error::/health never returned 200"; docker logs nyaya-smoke; exit 1
+
+      - name: Trivy image scan
+        # Scan the just-verified image; fails the job on HIGH/CRITICAL vulns
+        # with a published fix. No secrets or tokens required.
+        # v0.28.0 is un-runnable: it internally pins aquasecurity/setup-trivy
+        # @v0.2.1, a tag that was deleted upstream. v0.36.0 pins setup-trivy
+        # by commit hash instead.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: nyaya-ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

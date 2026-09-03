@@ -1,0 +1,148 @@
+{
+  "counts": {
+    "acts": 14,
+    "articles": 464,
+    "sections": 1884,
+    "judgments": 5,
+    "schedules": 12,
+    "amendments": 0,
+    "chapters": 0,
+    "cross_refs": 0
+  },
+  "as_of": "2026-08-31",
+  "acts": [
+    {
+      "short_name": "Constitution",
+      "name": "Constitution of India",
+      "type": "Constitution",
+      "coverage": "All 464 articles + 12 schedules",
+      "status": "live",
+      "count": 464
+    },
+    {
+      "short_name": "BNS",
+      "name": "Bharatiya Nyaya Sanhita, 2023",
+      "type": "Statute",
+      "coverage": "All 358 sections",
+      "status": "live",
+      "count": 358
+    },
+    {
+      "short_name": "BNSS",
+      "name": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+      "type": "Statute",
+      "coverage": "All 531 sections",
+      "status": "live",
+      "count": 531
+    },
+    {
+      "short_name": "BSA",
+      "name": "Bharatiya Sakshya Adhiniyam, 2023",
+      "type": "Statute",
+      "coverage": "All sections (replaces Evidence Act)",
+      "status": "live"
+    },
+    {
+      "short_name": "IPC",
+      "name": "Indian Penal Code, 1860",
+      "type": "Statute",
+      "coverage": "All 511 sections (legacy reference)",
+      "status": "live",
+      "count": 511
+    },
+    {
+      "short_name": "CrPC",
+      "name": "Code of Criminal Procedure, 1973",
+      "type": "Statute",
+      "coverage": "All 484 sections (legacy reference)",
+      "status": "live",
+      "count": 484
+    },
+    {
+      "short_name": "EvidenceAct",
+      "name": "Indian Evidence Act, 1872",
+      "type": "Statute",
+      "coverage": "All sections (legacy reference)",
+      "status": "live"
+    },
+    {
+      "short_name": "CPC",
+      "name": "Code of Civil Procedure, 1908",
+      "type": "Statute",
+      "coverage": "All sections (legacy reference)",
+      "status": "live"
+    },
+    {
+      "short_name": "Companies",
+      "name": "Companies Act, 2013",
+      "type": "Statute",
+      "coverage": "Commercial statute",
+      "status": "live"
+    },
+    {
+      "short_name": "IGST",
+      "name": "Integrated Goods and Services Tax Act, 2017",
+      "type": "Statute",
+      "coverage": "Commercial statute",
+      "status": "live"
+    },
+    {
+      "short_name": "CGST",
+      "name": "Central Goods and Services Tax Act, 2017",
+      "type": "Statute",
+      "coverage": "Commercial statute",
+      "status": "live"
+    },
+    {
+      "short_name": "ITAct",
+      "name": "Information Technology Act, 2000",
+      "type": "Statute",
+      "coverage": "Commercial statute",
+      "status": "live"
+    },
+    {
+      "short_name": "Arbitration",
+      "name": "Arbitration and Conciliation Act, 1996",
+      "type": "Statute",
+      "coverage": "Commercial statute",
+      "status": "live"
+    },
+    {
+      "short_name": "ConsumerProtection",
+      "name": "Consumer Protection Act, 2019",
+      "type": "Statute",
+      "coverage": "Commercial statute",
+      "status": "live"
+    },
+    {
+      "short_name": "",
+      "name": "Supreme Court landmark judgments",
+      "type": "Case law",
+      "coverage": "5 curated judgments (Kesavananda, Maneka, Puttaswamy, Shah Bano, Navtej Johar)",
+      "status": "live",
+      "fallback_date": "2026-07-01",
+      "count": 5
+    },
+    {
+      "short_name": "",
+      "name": "High Court reported judgments",
+      "type": "Case law",
+      "coverage": "Planned",
+      "status": "coming"
+    },
+    {
+      "short_name": "",
+      "name": "Subordinate legislation & rules",
+      "type": "Regulation",
+      "coverage": "Planned",
+      "status": "coming"
+    },
+    {
+      "short_name": "",
+      "name": "Pre-1950 Privy Council decisions",
+      "type": "Case law",
+      "coverage": "Planned",
+      "status": "coming"
+    }
+  ]
+}

@@ -30,9 +30,7 @@ client-supplied history plus the new user message.
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -40,20 +38,31 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
+from .citations import CITATION_RE
 from .config import Settings, get_settings
 from .llm import SUPERVISOR_PROMPT, ainvoke_with_retry, astream_with_retry, get_model
 from .schemas_llm import ToolPlan
+from .tool_call_parser import parse_text_tool_calls
+from .tool_content import clean_tool_content, prune_list_result, strip_corpus_tags
 from .tools import load_tools
 
 log = logging.getLogger("nyaya_chat.agent")
 
-# Citation marker regex (used by reflection check)
-_CITE_RE = re.compile(r"\[\[act:\s*[^,\]]+?\s*,\s*ref:\s*[^\]]+?\s*\]\]")
+# LangGraph node names, shared with streaming.py (which reads node updates
+# from the streamed graph state by name). The degraded no-tools graph has a
+# single node whose synthesis logic runs under the name "agent".
+SYNTHESIS_NODE_NAME = "synthesis"
+DEGRADED_NODE_NAME = "agent"
 
 
 class ChatState(TypedDict, total=False):
     messages: Annotated[list[BaseMessage], add_messages]
     round: int
+    # Per-request tool-call dedup state used by ``DedupToolNode``. The compiled
+    # graph (and thus the node instance) is shared across all requests, so the
+    # dedup memory must live in state, not on the node.
+    dedup_seen: dict[str, str]
+    dedup_results: dict[str, str]
 
 
 def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMessage]:
@@ -77,17 +86,33 @@ def _build_messages(message: str, history: list[dict[str, str]]) -> list[BaseMes
 # ---------------------------------------------------------------------------
 
 def _make_model(settings: Settings, *, model_name: str, max_tokens: int, temperature: float | None = None) -> Any:
-    """Create a ChatNVIDIA instance for a specific phase."""
+    """Create a chat model instance for a specific graph phase.
+
+    The cached base model (``get_model``) is reused only when its
+    configuration already matches the phase exactly — same model id,
+    temperature, and token cap — which is what keeps a phase that shares
+    the base configuration from constructing a second API client.
+
+    Test fakes advertise themselves with the ``nyaya_fake_model`` marker
+    attribute (the fake protocol documented in ``tests/conftest.py``) and
+    honour the requested temperature/max_tokens via
+    ``with_generation_params``; no duck-type sniffing of ``model`` /
+    ``_client`` attributes.
+    """
     base = get_model(settings)
-    cached_name = getattr(base, "model", None) or getattr(getattr(base, "_client", None), "model", None)
     temp = temperature if temperature is not None else settings.llm_temperature
 
-    if cached_name == model_name and max_tokens == settings.llm_max_tokens:
-        return base
-    if not hasattr(base, "model") and not hasattr(base, "_client"):
-        return base
+    if getattr(base, "nyaya_fake_model", False):
+        return base.with_generation_params(temperature=temp, max_tokens=max_tokens)
 
     from langchain_nvidia_ai_endpoints import ChatNVIDIA
+    if (
+        isinstance(base, ChatNVIDIA)
+        and base.model == model_name
+        and base.temperature == temp
+        and base.max_tokens == max_tokens
+    ):
+        return base
     return ChatNVIDIA(
         model=model_name,
         temperature=temp,
@@ -107,47 +132,19 @@ def _tool_call_key(name: str, args: dict) -> str:
     return f"{name}:{normalised}"
 
 
-def _clean_tool_content(content: Any) -> str:
-    """Normalise a ToolMessage's content to a clean string."""
-    if isinstance(content, str):
-        stripped = content.strip()
-        if stripped.startswith("[{") and "'type'" in stripped and "'text'" in stripped:
-            try:
-                import ast
-                parsed = ast.literal_eval(stripped)
-                if isinstance(parsed, list):
-                    parts = []
-                    for block in parsed:
-                        if isinstance(block, dict):
-                            t = block.get("text") or block.get("content")
-                            if t:
-                                parts.append(str(t))
-                        elif isinstance(block, str):
-                            parts.append(block)
-                    return (" ".join(parts))[:8000]
-            except Exception:
-                pass
-        return content[:8000]
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                t = block.get("text") or block.get("content")
-                if t:
-                    parts.append(str(t))
-            elif isinstance(block, str):
-                parts.append(block)
-        return (" ".join(parts))[:8000]
-    return str(content)[:8000]
-
-
 class DedupToolNode:
-    """A ToolNode wrapper that skips duplicate (name+args) tool calls."""
+    """A ToolNode wrapper that skips duplicate (name+args) tool calls.
+
+    The node itself is STATELESS: dedup memory lives in ``ChatState``
+    (``dedup_seen`` maps a tool-call key to the id of the call that first
+    issued it; ``dedup_results`` maps a key to its cleaned result) so it is
+    scoped to a single request. The compiled graph is built once and shared
+    across all requests, so instance-level state here would leak tool calls
+    from one request (or one user's conversation) into the next.
+    """
 
     def __init__(self, tools: list[Any]):
         self._tool_node = ToolNode(tools)
-        self._seen: set[str] = set()
-        self._results: dict[str, str] = {}
 
     async def __call__(self, state: ChatState) -> dict[str, Any]:
         messages = state.get("messages", [])
@@ -159,22 +156,27 @@ class DedupToolNode:
         if last_ai is None:
             return await self._tool_node.ainvoke(state)
 
+        # Per-request dedup state; LangGraph merges the returned dicts back
+        # into state, so rounds within one request share this memory.
+        seen: dict[str, str] = dict(state.get("dedup_seen", {}))
+        results: dict[str, str] = dict(state.get("dedup_results", {}))
+
         unique_calls: list[Any] = []
         duplicate_calls: list[Any] = []
         for tc in last_ai.tool_calls:
             key = _tool_call_key(tc["name"], tc.get("args", {}))
-            if key in self._seen:
+            if key in seen:
                 duplicate_calls.append(tc)
             else:
                 unique_calls.append(tc)
-                self._seen.add(key)
+                seen[key] = tc.get("id", "")
 
         if not duplicate_calls:
             result = await self._tool_node.ainvoke(state)
             cleaned_msgs: list[BaseMessage] = []
             for m in result.get("messages", []):
                 if isinstance(m, ToolMessage):
-                    cleaned = _clean_tool_content(m.content)
+                    cleaned = clean_tool_content(m.content)
                     m = ToolMessage(
                         content=cleaned,
                         tool_call_id=m.tool_call_id,
@@ -183,10 +185,14 @@ class DedupToolNode:
                     for tc in last_ai.tool_calls:
                         if tc.get("id") == m.tool_call_id:
                             key = _tool_call_key(tc["name"], tc.get("args", {}))
-                            self._results[key] = cleaned
+                            results[key] = cleaned
                             break
                 cleaned_msgs.append(m)
-            return {"messages": cleaned_msgs}
+            return {
+                "messages": cleaned_msgs,
+                "dedup_seen": seen,
+                "dedup_results": results,
+            }
 
         new_msgs: list[ToolMessage] = []
         if unique_calls:
@@ -196,7 +202,7 @@ class DedupToolNode:
             result = await self._tool_node.ainvoke(modified_state)
             for m in result.get("messages", []):
                 if isinstance(m, ToolMessage):
-                    cleaned = _clean_tool_content(m.content)
+                    cleaned = clean_tool_content(m.content)
                     m = ToolMessage(
                         content=cleaned,
                         tool_call_id=m.tool_call_id,
@@ -205,14 +211,14 @@ class DedupToolNode:
                     for tc in unique_calls:
                         if tc.get("id") == m.tool_call_id:
                             key = _tool_call_key(tc["name"], tc.get("args", {}))
-                            self._results[key] = cleaned
+                            results[key] = cleaned
                             break
                     new_msgs.append(m)
 
         dup_msgs: list[ToolMessage] = []
         for tc in duplicate_calls:
             key = _tool_call_key(tc["name"], tc.get("args", {}))
-            cached = self._results.get(key, "")
+            cached = results.get(key, "")
             dup_msgs.append(ToolMessage(
                 content=cached or "(duplicate call skipped)",
                 tool_call_id=tc.get("id", ""),
@@ -220,12 +226,54 @@ class DedupToolNode:
             ))
             log.info("dedup: skipped duplicate tool call %s args=%s", tc["name"], tc.get("args", {}))
 
-        return {"messages": new_msgs + dup_msgs}
+        return {
+            "messages": new_msgs + dup_msgs,
+            "dedup_seen": seen,
+            "dedup_results": results,
+        }
 
 
 # ---------------------------------------------------------------------------
 # Helpers for synthesis: wrap tool results in corpus_text delimiters
 # ---------------------------------------------------------------------------
+
+def _prune_tool_results_for_synthesis(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Prune bulk, non-essential fields from LIST-type tool results.
+
+    **Pruning rule (conservative):** before the message list goes to the
+    synthesis model, only LIST-type tool results (the multi-hit array of
+    ``semantic_query`` — up to 50 hits of snippet text, the ~12K-token worst
+    case per round) are pruned, and only beyond the top hit:
+
+    * Hit 0 survives verbatim (full snippet). Hits 1..N keep their
+      identification fields (act, ref, title, kind, rank, citation) and a
+      300-char snippet — enough to cite the provision or fetch its full text
+      via ``get_section``/``get_article`` in a follow-up round.
+    * Redundant envelope metadata (query echo, source, as_of, offset, limit,
+      fallback_reason) is dropped.
+    * Single-document results — ``get_section``/``get_article``/
+      ``get_judgment``, whose full text the answer must quote and the
+      citation verifier must match — and anything that does not parse as the
+      expected JSON shape pass through UNCHANGED. When in doubt, don't prune.
+
+    The details live in :func:`nyaya_chat.tool_content.prune_list_result`; this
+    only applies it to ToolMessages and rebuilds those whose content changed.
+    Pruning is read-time: it affects the model input, not the dedup cache or
+    the unpruned ``messages`` used for citation verification.
+    """
+    pruned_messages: list[BaseMessage] = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            pruned_content = prune_list_result(m.content, m.name)
+            if pruned_content is not m.content:
+                m = ToolMessage(
+                    content=pruned_content,
+                    tool_call_id=m.tool_call_id,
+                    name=m.name,
+                )
+        pruned_messages.append(m)
+    return pruned_messages
+
 
 def _wrap_tool_results_in_corpus_tags(messages: list[BaseMessage]) -> list[BaseMessage]:
     """Wrap ToolMessage content in <corpus_text>...</corpus_text> tags.
@@ -251,7 +299,7 @@ def _wrap_tool_results_in_corpus_tags(messages: list[BaseMessage]) -> list[BaseM
 
 def _has_citations(text: str) -> bool:
     """Check if the answer text contains at least one [[act: X, ref: Y]] marker."""
-    return bool(_CITE_RE.search(text))
+    return bool(CITATION_RE.search(text))
 
 
 def _has_refusal(text: str) -> bool:
@@ -277,214 +325,6 @@ def _had_tool_calls(messages: list[BaseMessage]) -> bool:
     return False
 
 
-def _parse_text_tool_calls(content: Any) -> list[dict[str, Any]]:
-    """Parse tool calls from free-text when the model emits them as JSON
-    instead of using the tool-calling protocol.
-
-    The model sometimes emits tool calls in these text formats:
-    - ``[[tool_calls]] [ {"name": "get_section", "arguments": {...}} ] [[/tool_calls]]``
-    - ``{"name": "get_section", "arguments": {"act": "IPC", "section": "302"}}``
-    - ``get_section(act="IPC", section="302")``
-    - ``<tool_name>{...json args...}</tool_name>``
-    - ``[[<tool> tool call|tool_name: "...", tool_args: {...}]]``
-    - ``[[tool_name key="value" key2="value2"]]``
-
-    Returns a list of {"id", "name", "args"} dicts, or empty list if no
-    tool calls could be parsed.
-    """
-    if not isinstance(content, str):
-        return []
-
-    tool_calls: list[dict[str, Any]] = []
-
-    # Pattern 1: [[tool_calls]] ... JSON array ... [[/tool_calls]]
-    tc_match = re.search(r"\[\[tool_?calls\]\](.*?)\[\[/tool_?calls\]\]", content, re.DOTALL | re.IGNORECASE)
-    if tc_match:
-        try:
-            calls = json.loads(tc_match.group(1).strip())
-            for i, call in enumerate(calls):
-                name = call.get("name", "")
-                args = call.get("arguments") or call.get("args") or {}
-                if name:
-                    tool_calls.append({"id": f"tc_text_{i}", "name": name, "args": args})
-        except (json.JSONDecodeError, KeyError):
-            pass
-
-    if tool_calls:
-        return tool_calls
-
-    # Pattern 2: Bare JSON object with "name" and "arguments"
-    try:
-        parsed = json.loads(content.strip())
-        if isinstance(parsed, dict) and "name" in parsed:
-            name = parsed.get("name", "")
-            args = parsed.get("arguments") or parsed.get("args") or {}
-            if name:
-                return [{"id": "tc_text_0", "name": name, "args": args}]
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    # Pattern 3: JSON array of tool calls (without [[tool_calls]] wrapper)
-    try:
-        parsed = json.loads(content.strip())
-        if isinstance(parsed, list):
-            for i, call in enumerate(parsed):
-                if isinstance(call, dict) and "name" in call:
-                    name = call.get("name", "")
-                    args = call.get("arguments") or call.get("args") or {}
-                    if name:
-                        tool_calls.append({"id": f"tc_text_{i}", "name": name, "args": args})
-            if tool_calls:
-                return tool_calls
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    # Pattern 4: Nemotron-style tool_calls block (YAML-like)
-    # reasoning: ...
-    # tool_calls:
-    # - name: get_section arguments:
-    #     act: IPC section: 302
-    ytc_match = re.search(r"tool_calls:\s*\n(.*?)(?:\n\w+:|\Z)", content, re.DOTALL | re.IGNORECASE)
-    if ytc_match:
-        tool_block = ytc_match.group(1).strip()
-        for line in tool_block.split('\n'):
-            line = line.strip()
-            if line.startswith('- name:'):
-                name = line.split(':', 1)[1].strip()
-            elif line.startswith('  name:'):
-                name = line.split(':', 1)[1].strip()
-            elif line.startswith('    name:'):
-                name = line.split(':', 1)[1].strip()
-            elif 'name:' in line and 'arguments:' not in line:
-                match = re.search(r'name:\s*(\S+).*?arguments?:\s*(\{.*?\})', line)
-                if match:
-                    name = match.group(1).strip()
-                    args_str = match.group(2).strip()
-                    try:
-                        args = json.loads(args_str)
-                    except json.JSONDecodeError:
-                        args_str = args_str.replace("'", '"')
-                        try:
-                            args = json.loads(args_str)
-                        except json.JSONDecodeError:
-                            continue
-                    if name:
-                        tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
-        if tool_calls:
-            return tool_calls
-
-    # Pattern 5: XML-tag wrapped JSON: <tool_name>{...json args...}</tool_name>
-    for m in re.finditer(r"<(\w+)>(.*?)</\1>", content, re.DOTALL):
-        name = m.group(1)
-        try:
-            args = json.loads(m.group(2).strip())
-        except json.JSONDecodeError:
-            continue
-        if name and isinstance(args, dict):
-            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
-
-    if tool_calls:
-        return tool_calls
-
-    # Pattern 6: Bracket-pipe: [[<tool> tool call|tool_name: "...", tool_args: {...}]]
-    # Uses balanced brace scan since tool_args JSON may contain nested braces.
-    bp_match = re.search(
-        r"\[\[\w+\s+tool\s*call\|tool_name:\s*\"(\w+)\"\s*,\s*tool_args:\s*",
-        content, re.IGNORECASE,
-    )
-    if bp_match:
-        name = bp_match.group(1)
-        json_start = bp_match.end()
-        depth = 0
-        json_end = json_start
-        for i in range(json_start, len(content)):
-            if content[i] == '{':
-                depth += 1
-            elif content[i] == '}':
-                depth -= 1
-                if depth == 0:
-                    json_end = i + 1
-                    break
-        if depth == 0 and json_end > json_start:
-            json_str = content[json_start:json_end]
-            try:
-                args = json.loads(json_str)
-                tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
-            except json.JSONDecodeError:
-                pass
-
-    if tool_calls:
-        return tool_calls
-
-    # Pattern 7: Attribute-style: [[tool_name key="value" key2="value2"]]
-    # Must NOT match Pattern 5 (XML-tag) or Pattern 6 (bracket-pipe)
-    # Only matches if the content inside [[ ]] contains key="value" pairs
-    # and is NOT a JSON object/array.
-    attr_match = re.search(
-        r'\[\[(\w+)\s+(\w+="[^"]*"(?:\s+\w+="[^"]*")*)\s*\]\]',
-        content,
-    )
-    if attr_match:
-        name = attr_match.group(1)
-        attrs_str = attr_match.group(2).strip()
-        attrs = dict(re.findall(r'(\w+)="([^"]*)"', attrs_str))
-        if attrs:
-            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": attrs})
-
-    # Pattern 8: Function-call style: [[tool_name(key="val", key2="val2")]]
-    # e.g. [[get_section(act="IPC", section="24")]]
-    func_match = re.search(
-        r'\[\[(\w+)\((.*?)\)\]\]',
-        content,
-    )
-    if func_match:
-        name = func_match.group(1)
-        args_str = func_match.group(2).strip()
-        args = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', args_str))
-        if args:
-            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
-
-    # Pattern 9: Bare function-call style: tool_name(key="val", key2="val2")
-    # e.g. get_judgment(case_slug="Kesavananda Bharati")
-    if not tool_calls:
-        bare_match = re.search(
-            r'(?<![\w\[])(\w+)\((\w+=["\'][^"\']*["\'](?:\s*,\s*\w+=["\'][^"\']*["\'])*)\)',
-            content,
-        )
-        if bare_match:
-            name = bare_match.group(1)
-            args_str = bare_match.group(2).strip()
-            args = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', args_str))
-            if args and name in ("get_section", "get_article", "get_judgment", "semantic_query", "cross_reference", "list_acts"):
-                tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
-
-    # Pattern 10: [[tool: tool_name]] or [[tool_name]]
-    # e.g. [[tool: get_judgment]] with case_slug "Kesavananda Bharati"
-    if not tool_calls:
-        tool_prefix_match = re.search(r'\[\[tool:\s*(\w+)\]\]', content, re.IGNORECASE)
-        if tool_prefix_match:
-            name = tool_prefix_match.group(1)
-            if name in ("get_section", "get_article", "get_judgment", "semantic_query", "cross_reference", "list_acts"):
-                # Try to extract args from the surrounding text
-                # Look for key="val" patterns after the [[tool: ...]] marker
-                after_marker = content[tool_prefix_match.end():]
-                args = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', after_marker[:200]))
-                if args:
-                    tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": args})
-                else:
-                    # No args found, try bare tool call
-                    tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": name, "args": {}})
-
-    # Pattern 11: Bare tool name with no args (just "get_judgment" or "get_article")
-    # Only match if the content is ONLY a tool name (no other text)
-    if not tool_calls:
-        stripped_content = content.strip()
-        if stripped_content in ("get_section", "get_article", "get_judgment", "semantic_query", "cross_reference", "list_acts"):
-            tool_calls.append({"id": f"tc_text_{len(tool_calls)}", "name": stripped_content, "args": {}})
-
-    return tool_calls
-
-
 def _get_tool_content_list(messages: list[BaseMessage]) -> list[str]:
     """Extract content strings from all ToolMessages in the conversation."""
     result: list[str] = []
@@ -492,8 +332,7 @@ def _get_tool_content_list(messages: list[BaseMessage]) -> list[str]:
         if isinstance(m, ToolMessage):
             content = m.content if isinstance(m.content, str) else str(m.content)
             # Strip the corpus_text wrapper if present
-            content = re.sub(r"^<corpus_text>\n?", "", content)
-            content = re.sub(r"\n?</corpus_text>$", "", content)
+            content = strip_corpus_tags(content)
             result.append(content)
     return result
 
@@ -509,9 +348,9 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
         log.warning("no tools loaded, building degraded agent")
         model = get_model(settings)
         builder: StateGraph = StateGraph(ChatState)
-        builder.add_node("agent", _make_synthesis_node(model, settings, has_tools=False))
-        builder.add_edge(START, "agent")
-        builder.add_edge("agent", END)
+        builder.add_node(DEGRADED_NODE_NAME, _make_synthesis_node(model, settings, has_tools=False))
+        builder.add_edge(START, DEGRADED_NODE_NAME)
+        builder.add_edge(DEGRADED_NODE_NAME, END)
         return builder.compile(), []
 
     log.info("loaded %d tools", len(mcp_tools))
@@ -607,7 +446,7 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
             # The model may have emitted tool calls as text (JSON in content)
             # instead of using the tool-calling protocol. Parse them.
             if isinstance(response, AIMessage) and not getattr(response, "tool_calls", None):
-                parsed = _parse_text_tool_calls(response.content)
+                parsed = parse_text_tool_calls(response.content)
                 if parsed:
                     log.info("supervisor: parsed %d tool calls from text response", len(parsed))
                     return {"messages": [AIMessage(content="", tool_calls=parsed)]}
@@ -617,7 +456,7 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
         last = state["messages"][-1]
         if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
             return "tools"
-        return "synthesis"
+        return SYNTHESIS_NODE_NAME
 
     synthesis_fn = _make_synthesis_node(synthesis_model, settings, has_tools=True)
 
@@ -661,11 +500,11 @@ async def _build_agent(settings: Settings) -> tuple[Any, list[Any]]:
     builder = StateGraph(ChatState)
     builder.add_node("supervisor", call_supervisor)
     builder.add_node("tools", DedupToolNode(mcp_tools))
-    builder.add_node("synthesis", synthesis_fn)
+    builder.add_node(SYNTHESIS_NODE_NAME, synthesis_fn)
 
     builder.add_edge(START, "supervisor")
-    builder.add_conditional_edges("supervisor", route_supervisor, ["tools", "synthesis"])
-    builder.add_edge("tools", "synthesis")
+    builder.add_conditional_edges("supervisor", route_supervisor, ["tools", SYNTHESIS_NODE_NAME])
+    builder.add_edge("tools", SYNTHESIS_NODE_NAME)
     builder.add_conditional_edges("synthesis", route_synthesis, ["supervisor", END])
 
     graph = builder.compile()
@@ -683,10 +522,12 @@ def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = Tr
 
     The synthesis node receives the full message history (including tool
     results as ToolMessages), wraps tool results in <corpus_text> delimiters,
-    and produces the final grounded answer. If citation verification is
-    enabled, it verifies and strips ungrounded citations after streaming.
+    and produces the final grounded answer. The returned AIMessage is THE
+    authoritative answer: citation verification (if enabled) runs here, once,
+    and the disclaimer is appended here when the model omitted it, so the
+    streamed-and-verified text is final.
     """
-    from .llm import SYSTEM_PROMPT
+    from .llm import DISCLAIMER, SYSTEM_PROMPT
 
     async def _synthesis(state: ChatState) -> dict[str, Any]:
         from .observability import get_langfuse_callbacks
@@ -702,6 +543,7 @@ def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = Tr
 
         # Wrap tool results in <corpus_text> delimiters (prompt-injection defense)
         if has_tools:
+            out_msgs = _prune_tool_results_for_synthesis(out_msgs)
             out_msgs = _wrap_tool_results_in_corpus_tags(out_msgs)
 
         # Stream the synthesis model
@@ -717,17 +559,28 @@ def _make_synthesis_node(model: Any, settings: Settings, *, has_tools: bool = Tr
             final = chunks[0]
             for chunk in chunks[1:]:
                 final = final + chunk
-            answer_text = final.content if isinstance(final.content, str) else str(final.content)
+            raw_text = final.content if isinstance(final.content, str) else str(final.content)
+            answer_text = raw_text
 
-            # Citation verification: strip ungrounded citations
+            # Citation verification: the ONE authoritative pass. The verified
+            # AIMessage returned here is the final answer — the SSE streamer
+            # derives the citations event from it and only compares (never
+            # re-verifies) when deciding whether to emit a correction.
             if settings.citation_verification and has_tools:
                 tool_contents = _get_tool_content_list(messages)
                 had_tools = _had_tool_calls(messages)
-                verified = _verify_and_strip(
+                answer_text = _verify_and_strip(
                     answer_text, tool_contents, had_tools=had_tools,
                 )
-                if verified != answer_text:
-                    final = AIMessage(content=verified)
+
+            # The disclaimer is part of the verified message (not appended
+            # post-stream), so the streamed text, the client's final state,
+            # and the reflection routing all see the same answer.
+            if "not legal advice" not in answer_text.lower():
+                answer_text = answer_text.rstrip() + f"\n\n*{DISCLAIMER}*"
+
+            if answer_text != raw_text:
+                final = AIMessage(content=answer_text)
 
             # Increment round counter for reflection routing
             current_round = state.get("round", 0) + 1
@@ -786,6 +639,20 @@ async def get_agent() -> tuple[Any, list[Any]]:
         settings = get_settings()
         _agent_graph, _agent_tools = await _build_agent(settings)
         return _agent_graph, _agent_tools
+
+
+def get_agent_if_ready() -> tuple[Any, list[Any]] | tuple[None, None]:
+    """Return the ALREADY-BUILT agent, or ``(None, None)`` — never builds.
+
+    The fast path for ``/chat/health``: it reports the prewarmed graph when
+    the host lifespan (or an earlier request) built one, and reports the
+    agent as still-initialising otherwise, WITHOUT triggering the seconds-long
+    build on a health probe. Building happens only in ``get_agent`` and
+    ``build_agent``.
+    """
+    if _agent_graph is not None and _agent_tools is not None:
+        return _agent_graph, _agent_tools
+    return None, None
 
 
 def reset_agent() -> None:

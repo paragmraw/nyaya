@@ -125,6 +125,68 @@ async def test_retry_on_500_error(monkeypatch):
     assert result.content == "ok"
 
 
+class _FlakyStreamModel:
+    """A streaming model that raises retryable errors at scripted points.
+
+    ``fail_before`` makes the first N stream attempts fail before yielding
+    anything; ``chunks_before_error`` makes every attempt yield those chunks
+    and then fail mid-stream.
+    """
+
+    def __init__(self, fail_before: int = 0, chunks_before_error: list[str] | None = None):
+        self.fail_before = fail_before
+        self.chunks_before_error = list(chunks_before_error or [])
+        self.stream_count = 0
+
+    async def astream(self, messages, **kw):
+        from langchain_core.messages import AIMessageChunk
+        self.stream_count += 1
+        if self.stream_count <= self.fail_before:
+            raise _RetryableError()
+        if self.chunks_before_error:
+            for c in self.chunks_before_error:
+                yield AIMessageChunk(content=c)
+            raise _RetryableError()
+        yield AIMessageChunk(content="ok")
+
+
+@pytest.mark.asyncio
+async def test_astream_retry_before_first_chunk_succeeds(monkeypatch):
+    """A retryable error BEFORE any chunk is yielded still retries and succeeds."""
+    from nyaya_chat.llm import astream_with_retry
+    model = _FlakyStreamModel(fail_before=2)
+    async def _noop_sleep(_delay):
+        pass
+    monkeypatch.setattr("asyncio.sleep", _noop_sleep)
+    chunks = [
+        c async for c in astream_with_retry(model, [], max_retries=4, base_delay=0.01)
+    ]
+    assert "".join(c.content for c in chunks) == "ok"
+    assert model.stream_count == 3
+
+
+@pytest.mark.asyncio
+async def test_astream_mid_stream_error_does_not_duplicate_output(monkeypatch):
+    """Regression: a retryable error AFTER the first chunk must propagate.
+
+    Chunks already yielded cannot be retracted, so restarting the stream
+    would duplicate the partial answer (both in the accumulated text and on
+    the SSE wire). The error must surface over the partial output instead.
+    """
+    from nyaya_chat.llm import astream_with_retry
+    model = _FlakyStreamModel(chunks_before_error=["partial answer"])
+    async def _noop_sleep(_delay):
+        pass
+    monkeypatch.setattr("asyncio.sleep", _noop_sleep)
+    chunks = []
+    with pytest.raises(_RetryableError):
+        async for c in astream_with_retry(model, [], max_retries=4, base_delay=0.01):
+            chunks.append(c)
+    text = "".join(c.content for c in chunks)
+    assert text == "partial answer"  # the pre-error chunk exactly once, not doubled
+    assert model.stream_count == 1  # no restart attempted
+
+
 def test_is_retryable_429():
     from nyaya_chat.llm import _is_retryable
     assert _is_retryable(_RetryableError(status_code=429)) is True
@@ -149,3 +211,34 @@ def test_is_retryable_rate_limit_in_message():
     from nyaya_chat.llm import _is_retryable
     assert _is_retryable(Exception("rate limit exceeded")) is True
     assert _is_retryable(Exception("server overloaded")) is True
+
+
+def test_is_retryable_timeout_exception_type():
+    """TimeoutError (asyncio.TimeoutError's alias) is transient by type."""
+    from nyaya_chat.llm import _is_retryable
+    assert _is_retryable(TimeoutError()) is True
+
+
+def test_is_retryable_response_status_code_attribute():
+    """httpx/requests-style errors carry the status on ``response``."""
+
+    class _FakeResponse:
+        status_code = 503
+
+    class _HTTPStatusError(Exception):
+        def __init__(self):
+            self.response = _FakeResponse()
+            super().__init__("server error")
+
+    from nyaya_chat.llm import _is_retryable
+    assert _is_retryable(_HTTPStatusError()) is True
+
+
+def test_is_retryable_httpx_transport_error():
+    """httpx transport failures (connect errors, read timeouts) are transient."""
+    import httpx
+
+    from nyaya_chat.llm import _is_retryable
+    request = httpx.Request("GET", "https://example.invalid")
+    assert _is_retryable(httpx.ConnectError("connection refused", request=request)) is True
+    assert _is_retryable(httpx.ReadTimeout("timed out", request=request)) is True
