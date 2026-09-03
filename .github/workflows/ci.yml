@@ -130,7 +130,7 @@ jobs:
       - name: Trivy image scan
         # Scan the just-verified image; fails the job on HIGH/CRITICAL vulns
         # with a published fix. No secrets or tokens required.
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: nyaya-ci
           format: table
