@@ -90,7 +90,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8000
 
-RUN apk add --no-cache libpq ca-certificates \
+# apk upgrade pulls security fixes published to the Alpine repos after the
+# digest-pinned base image was built (e.g. openssl CVEs) — the Trivy CI gate
+# fails on HIGH/CRITICAL findings that have a published fix, so the runtime
+# must not ship the base image's frozen package set.
+RUN apk upgrade --no-cache \
+    && apk add --no-cache libpq ca-certificates \
     && addgroup -S nyaya \
     && adduser -S -G nyaya -u 1000 nyaya
 
@@ -99,6 +104,11 @@ WORKDIR /app
 # Python packages and entrypoints from the builder
 COPY --from=py-builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=py-builder /usr/local/bin /usr/local/bin
+# uv/uvx ride along in the builder's /usr/local/bin (which also carries the
+# pip-installed console scripts the runtime needs). They are build-time-only
+# tooling — the runtime never invokes them — so drop them instead of shipping
+# their attack surface (the Trivy gate flagged quinn-proto inside uv).
+RUN rm -f /usr/local/bin/uv /usr/local/bin/uvx
 
 # Application code (server.py mounts StaticFiles at web/out/)
 COPY --chown=nyaya:nyaya mcp/nyaya/ /app/nyaya/
