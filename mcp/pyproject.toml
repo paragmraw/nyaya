@@ -32,7 +32,7 @@ dev = [
     "pytest-asyncio>=0.23,<0.25",
     "pytest-cov>=5.0,<7",
     "ruff>=0.6,<1",
-    "mypy>=1.10,<2",
+    "mypy>=1.10,<3",
 ]
 # Optional .env loading (get_settings() reads a local .env when NYAYA_DOTENV=1).
 dotenv = [
