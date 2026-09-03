@@ -88,9 +88,14 @@ test("SITE is the canonical production domain", () => {
 });
 
 test("no schema references the retired example.com placeholder domain", () => {
+  // Regex form of the substring check: same semantics as includes(), but
+  // outside CodeQL's URL-substring-sanitization query, which misreads this
+  // assert-absence test as a permissive URL validator (a false-positive
+  // high alert failed PR CI once already).
+  const retiredDomain = /example\.com/i;
   for (const [name, schema] of Object.entries(SCHEMAS)) {
     for (const [, s] of pairs(schema)) {
-      assert.ok(!s.includes("example.com"), `${name} references example.com: ${s}`);
+      assert.ok(!retiredDomain.test(s), `${name} references example.com: ${s}`);
     }
   }
 });

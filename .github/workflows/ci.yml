@@ -130,7 +130,10 @@ jobs:
       - name: Trivy image scan
         # Scan the just-verified image; fails the job on HIGH/CRITICAL vulns
         # with a published fix. No secrets or tokens required.
-        uses: aquasecurity/trivy-action@v0.28.0
+        # v0.28.0 is un-runnable: it internally pins aquasecurity/setup-trivy
+        # @v0.2.1, a tag that was deleted upstream. v0.36.0 pins setup-trivy
+        # by commit hash instead.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: nyaya-ci
           format: table
