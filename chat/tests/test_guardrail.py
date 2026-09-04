@@ -90,7 +90,28 @@ class TestTier1Thanks:
         assert classify_intent_tier1("appreciate it!") == Intent.THANKS
 
 
-class TestTier1OffTopic:
+class TestTier1RegexDoS:
+    """Trailing whitespace/punctuation runs must not trigger polynomial
+    backtracking (CodeQL py/polynomial-redos, alerts #14/#15)."""
+
+    def test_trailing_whitespace_run_greeting(self):
+        assert classify_intent_tier1("hi" + " " * 10_000) == Intent.GREETING
+
+    def test_trailing_whitespace_run_thanks(self):
+        assert classify_intent_tier1("ty" + " " * 10_000) == Intent.THANKS
+
+    def test_trailing_punctuation_whitespace_mix(self):
+        assert classify_intent_tier1("thanks" + "! " * 100) == Intent.THANKS
+
+    def test_long_whitespace_input_is_fast(self):
+        import time
+
+        message = "ty" + " " * 100_000
+        start = time.perf_counter()
+        classify_intent_tier1(message)
+        elapsed = time.perf_counter() - start
+        # Polynomial backtracking on the old pattern would take far longer.
+        assert elapsed < 0.5, f"tier 1 took {elapsed:.2f}s on whitespace run"
     def test_weather(self):
         assert classify_intent_tier1("what's the weather today?") == Intent.OFF_TOPIC
 
