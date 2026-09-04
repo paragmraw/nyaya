@@ -169,7 +169,7 @@ class DedupToolNode:
                 duplicate_calls.append(tc)
             else:
                 unique_calls.append(tc)
-                seen[key] = tc.get("id", "")
+                seen[key] = tc.get("id") or ""
 
         if not duplicate_calls:
             result = await self._tool_node.ainvoke(state)
