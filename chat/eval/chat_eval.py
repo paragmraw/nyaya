@@ -659,6 +659,13 @@ def print_final_report(results: list[StreamResult], verbose: bool = False) -> No
 
 
 def main() -> None:
+    # Windows consoles default to cp1252; the report prints box chars,
+    # narrow no-break spaces ( ) and other non-ASCII from model output.
+    # Without this, print_final_report crashes *after* the run completes and
+    # the aggregate is lost (observed on the 2026-09-05 baseline).
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Chat quality eval harness (merged)")
     parser.add_argument("--host", default="http://localhost:8001", help="Base URL of the nyaya server")
     parser.add_argument("--verbose", action="store_true", help="Print detailed per-scenario output")
