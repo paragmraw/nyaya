@@ -518,14 +518,12 @@ pre.mcp-json .n { color: var(--fg); }
   box-shadow: var(--shadow-sm);
 }
 
-/* Locked/disabled state — blurred and non-interactive */
+/* Locked/disabled state — non-interactive but readable. The composer carries
+   the explicit reason copy (ChatComposer disabledHint); blurring the whole
+   panel hid exactly the information (coverage, model) a visitor needs to
+   decide to come back. */
 .chat-shell.chat-locked {
   pointer-events: none;
-  opacity: 0.7;
-}
-.chat-shell.chat-locked .chat-body,
-.chat-shell.chat-locked .chat-foot {
-  filter: blur(8px);
 }
 .chat-shell.chat-locked .chat-head .pill {
   background: color-mix(in oklch, var(--fg) 6%, transparent);

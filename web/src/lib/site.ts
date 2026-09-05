@@ -7,6 +7,10 @@
 
 export const SITE = "https://nyaya.parag.tech";
 
+// API/server version displayed in UI copy (mirrors __version__ in
+// mcp/nyaya/__init__.py — Python is the canonical source for the backend).
+export const API_VERSION = "0.2.0";
+
 export const OG_IMAGE = "/og-default.png";
 
 /**

@@ -47,8 +47,9 @@ jobs:
       - name: Lint chat (ruff)
         run: uv run ruff check ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
 
-      - name: Test chat
-        run: uv run pytest ../chat/tests/ -v
+      - name: Test chat with coverage
+        # Coverage floor ratchets up as tests improve (same policy as MCP above).
+        run: uv run pytest ../chat/tests/ -v --cov=nyaya_chat --cov-report=term-missing --cov-fail-under=84
         env:
           NVIDIA_API_KEY: nvapi-test-key-for-ci
 
@@ -86,9 +87,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
-        # npm install (not ci) so optional native bindings like
-        # @emnapi/* resolve correctly across Linux/macOS/Windows runners.
-        run: npm install --no-audit --no-fund
+        # Prefer reproducible `npm ci`; fall back to `npm install` when the
+        # strict lockfile install fails to resolve optional native bindings
+        # (e.g. @emnapi/*) on a given runner OS.
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 
       - name: Lint
         # Next.js 16 removed `next lint`; use ESLint directly with the flat config.

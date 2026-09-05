@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nyaya-chat"
-version = "0.1.0"
+dynamic = ["version"]  # single source: __version__ in nyaya_chat/__init__.py
 description = "LangGraph + FastAPI chat backend for nyaya: retrieval-grounded Indian-law assistant backed by NVIDIA Nemotron and the nyaya MCP corpus."
 readme = "README.md"
 license = "Apache-2.0"
@@ -55,6 +55,9 @@ constraint-dependencies = [
 
 [project.urls]
 Repository = "https://github.com/your-org/nyaya"
+
+[tool.hatch.version]
+path = "nyaya_chat/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nyaya_chat"]
