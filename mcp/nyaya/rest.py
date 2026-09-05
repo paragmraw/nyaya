@@ -43,7 +43,7 @@ def _error_response(exc: Exception, request: Request | None = None) -> JSONRespo
     """
     request_id = getattr(getattr(request, "state", None), "request_id", None) if request else None
 
-    if isinstance(exc, DatabaseUnavailable) or "DatabaseUnavailable" in type(exc).__name__:
+    if isinstance(exc, DatabaseUnavailable):
         log.warning("Database unavailable (request_id=%s)", request_id, exc_info=True)
         body: dict[str, Any] = {"error": "database_unavailable"}
         if request_id:
@@ -90,10 +90,15 @@ async def corpus_stats_endpoint(_request: Request) -> JSONResponse:
 
 
 async def acts_endpoint(_request: Request) -> JSONResponse:
-    """GET /api/acts -> [{short_name, full_name, year, kind, source, as_of, ...}]"""
+    """GET /api/acts -> {items: [{short_name, full_name, year, kind, ...}], total}
+
+    Envelope matches /api/judgments and /api/tools so every collection
+    endpoint has the same {items, total} shape.
+    """
     try:
         acts = await _safe(db.list_acts)
-        return JSONResponse([a.model_dump(mode="json") for a in acts])
+        items = [a.model_dump(mode="json") for a in acts]
+        return JSONResponse({"items": items, "total": len(items)})
     except Exception as exc:
         log.warning("acts endpoint failed", exc_info=True)
         return _error_response(exc, _request)

@@ -84,7 +84,8 @@ def test_corpus_stats_shape(monkeypatch):
 
 
 def test_acts_endpoint_serializes_models(monkeypatch):
-    """GET /api/acts returns a JSON list of the Act models."""
+    """GET /api/acts returns the {items, total} envelope (same shape as
+    /api/judgments and /api/tools) with the Act models inside."""
     from nyaya import db
     from nyaya.models import Act
 
@@ -95,9 +96,10 @@ def test_acts_endpoint_serializes_models(monkeypatch):
         r = client.get("/api/acts")
     assert r.status_code == 200
     body = r.json()
-    assert isinstance(body, list) and len(body) == 1
-    assert body[0]["short_name"] == "IPC"
-    assert body[0]["kind"] == "criminal"
+    assert body["total"] == 1
+    assert isinstance(body["items"], list) and len(body["items"]) == 1
+    assert body["items"][0]["short_name"] == "IPC"
+    assert body["items"][0]["kind"] == "criminal"
 
 
 def test_health_summary_degrades_when_db_down(monkeypatch):
