@@ -1,14 +1,18 @@
-"""Shared normalisation of tool-result content.
+"""Shared normalisation of tool-result content (one pipeline, both paths).
 
-Tool results arrive from the nyaya MCP server as plain strings, as
+Tool results arrive from the nyaya data layer as plain strings, as
 stringified Python literals of LangChain content-block lists
 (``"[{'type': 'text', 'text': ...}]"``), or as the block lists themselves.
-Both the agent's dedup node (which caches cleaned results in per-request
-state before they are wrapped for the synthesis prompt) and the SSE
-streamer (which renders a UI summary from whatever the graph emits) need
-the same collapse-to-string behaviour and the same length cap, so it lives
-here once — including the ``<corpus_text>`` wrapper strip, whose single
+Both the tools node (which caches cleaned results in per-request state
+before they are wrapped for the synthesis prompt) and the SSE streamer
+(which renders a UI summary from whatever the graph emits) need the same
+collapse-to-string behaviour and the same length cap, so it lives here once
+— including the ``<corpus_text>`` wrapper strip, whose single
 implementation is :func:`strip_corpus_tags`.
+
+This module absorbed the former ``tool_content.py``; the synthesis-input
+pruning table now derives from ``tools_layer.spec`` instead of being
+duplicated here.
 """
 
 from __future__ import annotations
@@ -19,11 +23,12 @@ import re
 from collections.abc import Iterable
 from typing import Any
 
-from .config import MAX_TOOL_CHARS
+from ..config import MAX_TOOL_CHARS
+from .spec import prune_config
 
-# The <corpus_text>...</corpus_text> wrapper the agent adds around tool
-# results handed to the synthesis prompt (prompt-injection defence). The
-# agent strips it defensively when reading results back; the streamer
+# The <corpus_text>...</corpus_text> wrapper the synthesis node adds around
+# tool results handed to the synthesis prompt (prompt-injection defence).
+# The node strips it defensively when reading results back; the streamer
 # strips it so it never reaches the UI summary.
 _CORPUS_OPEN_RE = re.compile(r"^<corpus_text>\n?")
 _CORPUS_CLOSE_RE = re.compile(r"\n?</corpus_text>$")
@@ -68,6 +73,13 @@ def _stringified_blocks(stripped: str) -> str | None:
     return " ".join(_block_parts(parsed))
 
 
+def _cap(text: str) -> str:
+    """Cap at MAX_TOOL_CHARS with an explicit ellipsis (not a silent chop)."""
+    if len(text) <= MAX_TOOL_CHARS:
+        return text
+    return text[: MAX_TOOL_CHARS - 1] + "…"
+
+
 def clean_tool_content(content: Any, *, strip_corpus: bool = False) -> str:
     """Normalise a ToolMessage's content to a clean string capped at MAX_TOOL_CHARS.
 
@@ -78,49 +90,30 @@ def clean_tool_content(content: Any, *, strip_corpus: bool = False) -> str:
     The two call sites differ in exactly one way, expressed by
     ``strip_corpus``:
 
-    * The agent's dedup node (``agent.DedupToolNode``) cleans results
-      BEFORE they are wrapped for the synthesis prompt, so no wrapper can
-      be present; it passes the default and keeps the raw text.
-    * The SSE streamer's UI summary (``streaming._summarise_tool_result``)
-      may see results already wrapped in an earlier round, so it asks for
-      the wrapper to be stripped before capping.
+    * The tools node cleans results BEFORE they are wrapped for the
+      synthesis prompt, so no wrapper can be present; it passes the default
+      and keeps the raw text.
+    * The SSE streamer's UI summary may see results already wrapped in an
+      earlier round, so it asks for the wrapper to be stripped before
+      capping.
     """
     if isinstance(content, str):
         stripped = content.strip()
         joined = _stringified_blocks(stripped)
         if joined is not None:
-            return joined[:MAX_TOOL_CHARS]
+            return _cap(joined)
         if strip_corpus:
-            return strip_corpus_tags(stripped)[:MAX_TOOL_CHARS]
-        return content[:MAX_TOOL_CHARS]
+            return _cap(strip_corpus_tags(stripped))
+        return _cap(stripped)
     if isinstance(content, list):
-        return " ".join(_block_parts(content))[:MAX_TOOL_CHARS]
-    return str(content)[:MAX_TOOL_CHARS]
+        return _cap(" ".join(_block_parts(content)))
+    return _cap(str(content))
 
 
 # ---------------------------------------------------------------------------
 # Synthesis-input pruning for LIST-type tool results
 # ---------------------------------------------------------------------------
 
-# Tools whose results are LIST-shaped (a JSON object with a multi-hit array)
-# and can arrive with bulk fields that the synthesiser does not need. Entries
-# 1..N of a result array beyond the top hit are condensed to their
-# identification fields plus a truncated snippet. Single-document tools
-# (get_section / get_article / get_judgment — full text on purpose) are
-# deliberately NOT listed here: when in doubt, don't prune.
-_LIST_RESULT_TOOLS: dict[str, dict[str, Any]] = {
-    # SearchResponse: {query, total, returned, offset, limit, source, as_of,
-    # fallback_reason, results: [{act, ref, title, snippet, rank, citation,
-    # kind}, ...]}
-    "semantic_query": {
-        "list_key": "results",
-        "keep_hit_fields": ("act", "ref", "title", "kind", "rank", "citation"),
-        "keep_snippet_field": "snippet",
-        # Envelope metadata kept; everything else (query echo, source, as_of,
-        # offset, limit, fallback_reason) is dropped as redundant.
-        "keep_envelope_fields": ("total", "returned"),
-    },
-}
 _SNIPPET_CHARS = 300  # matches the ~300-char snippet convention of the corpus
 
 
@@ -131,8 +124,9 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
     case a ``semantic_query`` (up to 50 hits) can contribute to one synthesis
     round:
 
-    * Only the listed LIST-type tools (:data:`_LIST_RESULT_TOOLS`) with a
-      parseable JSON-object payload are touched.
+    * Only the LIST-type specs (:data:`tools_layer.spec.TOOL_SPECS` entries
+      with ``list_result=True``) with a parseable JSON-object payload are
+      touched.
     * The **top hit (index 0) is kept verbatim** — full snippet, all fields —
       because it is the content the answer will most likely quote and the
       citation verifier will match against.
@@ -149,7 +143,7 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
     full text is exactly what the answer quality (and citation verification)
     needs.
     """
-    config = _LIST_RESULT_TOOLS.get(tool_name or "")
+    config = prune_config().get(tool_name or "")
     if config is None or not isinstance(content, str):
         return content
     stripped = content.strip()
@@ -174,7 +168,11 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
         out = {k: hit[k] for k in keep_hit_fields if k in hit}
         snippet = hit.get(snippet_field)
         if isinstance(snippet, str):
-            out[snippet_field] = snippet[:_SNIPPET_CHARS]
+            out[snippet_field] = (
+                snippet[: _SNIPPET_CHARS - 1] + "…"
+                if len(snippet) > _SNIPPET_CHARS
+                else snippet
+            )
         return out
 
     first = results[0]
@@ -183,4 +181,4 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
         k: data[k] for k in config["keep_envelope_fields"] if k in data
     }
     pruned[config["list_key"]] = [first, *rest]
-    return json.dumps(pruned, default=str)[:MAX_TOOL_CHARS]
+    return _cap(json.dumps(pruned, default=str))

@@ -120,6 +120,25 @@ def get_langfuse_callbacks() -> list[Any]:
     return [handler] if handler else []
 
 
+def flush_langfuse() -> None:
+    """Flush pending Langfuse spans (best-effort, at turn end).
+
+    The Langfuse handler batches spans and uploads them on a background
+    thread; without an explicit flush, the final turn's spans can be lost on
+    process exit or in short-lived tasks. A no-op when Langfuse is not
+    configured, and never raises — flushing must not break a turn.
+    """
+    handler = _langfuse_handler
+    if handler is None:
+        return
+    try:
+        langfuse = getattr(handler, "langfuse", None)
+        if langfuse is not None:
+            langfuse.flush()
+    except Exception:
+        log.debug("langfuse flush failed", exc_info=True)
+
+
 def reset_observability() -> None:
     """Reset observability state (for tests)."""
     global _structlog_configured, _langfuse_handler, _langfuse_enabled

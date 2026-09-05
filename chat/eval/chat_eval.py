@@ -405,6 +405,25 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
     )
     result.checks.append(("no_tool_repr_leak", not has_repr_leak, ""))
 
+    # The model's deliberation must never surface in the answer body — the
+    # reasoning trace is where thinking belongs. High-precision markers only,
+    # so a legitimate legal phrase can't false-fail the check.
+    reasoning_leak_markers = (
+        "here's a thinking process",
+        "here is a thinking process",
+        "analyzing user input",
+        "let me think through",
+        "drafting the answer",
+    )
+    leaked_marker = next(
+        (m for m in reasoning_leak_markers if m in result.answer_text.lower()), None,
+    )
+    result.checks.append((
+        "no_reasoning_leak",
+        leaked_marker is None,
+        f"marker={leaked_marker!r}" if leaked_marker else "",
+    ))
+
     # ── Category-specific checks ──
     answer_lower = result.answer_text.lower()
     tools = [t.name for t in result.tool_calls]
@@ -660,7 +679,10 @@ def print_final_report(results: list[StreamResult], verbose: bool = False) -> No
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chat quality eval harness (merged)")
-    parser.add_argument("--host", default="http://localhost:8001", help="Base URL of the nyaya server")
+    # Default 127.0.0.1, not localhost: on Windows, urllib resolves localhost
+    # to ::1 first and the connection stall (server binds IPv4) inflated every
+    # measured latency by ~2s — enough to fail every canned-path latency check.
+    parser.add_argument("--host", default="http://127.0.0.1:8001", help="Base URL of the nyaya server")
     parser.add_argument("--verbose", action="store_true", help="Print detailed per-scenario output")
     parser.add_argument("--scenario", "--test", dest="scenario", default=None,
                         help="Run a single scenario by ID (alias: --test)")

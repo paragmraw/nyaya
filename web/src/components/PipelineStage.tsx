@@ -34,7 +34,7 @@ const STAGES: Stage[] = [
       <>
         <strong>Store:</strong> pgvector + Postgres tsvector (GIN indexes).<br />
         <strong>Search:</strong> semantic_query (embedding retrieval + reranking), get_section, get_article, get_judgment.<br />
-        <strong>Reranker:</strong> llama-nemotron-rerank-1b-v2 (cross-encoder).<br />
+        <strong>Reranker:</strong> llama-nemotron-rerank-vl-1b-v2 (cross-encoder).<br />
         <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA, IPC/CrPC/IEA/CPC, commercial statutes, SC judgments.
       </>
     ),

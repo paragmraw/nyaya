@@ -99,3 +99,64 @@ def test_verify_citations_handles_non_json_tool_content():
     result = verify_citations(answer, ["not json at all"], had_tool_calls=True)
     # Non-JSON content can't be parsed; citation is considered ungrounded
     assert "did not include verifiable" in result.lower()
+
+
+# ---------------------------------------------------------------------------
+# Strip-path robustness: whitespace-variant markers + whitespace repair
+# (formatting hardening batch)
+# ---------------------------------------------------------------------------
+
+
+def test_verify_citations_strips_whitespace_variant_marker():
+    """An ungrounded marker with non-canonical internal spacing is still
+    removed — the span matcher normalizes (act, ref), it does not require a
+    byte-identical marker."""
+    answer = "Claim one [[act:IPC,ref: s. 999]] and claim two."
+    result = verify_citations(
+        answer,
+        ['{"act": "IPC", "ref": "s. 302", "text": "..."}'],
+        had_tool_calls=True,
+    )
+    # s. 999 is ungrounded (tool only returned s. 302) → its marker is gone
+    assert "[[act:IPC,ref:" not in result
+    assert "claim two" in result
+
+
+def test_verify_citations_keeps_grounded_whitespace_variant_marker():
+    """A grounded citation with sloppy internal spacing survives verification —
+    only ungrounded spans are stripped."""
+    answer = "Murder is punished [[act: IPC , ref: s.302]] harshly."
+    result = verify_citations(
+        answer,
+        ['{"act": "IPC", "ref": "s. 302", "text": "..."}'],
+        had_tool_calls=True,
+    )
+    assert "[[act: IPC , ref: s.302]]" in result
+
+
+def test_verify_citations_strip_preserves_paragraph_breaks():
+    """Whitespace repair after stripping is horizontal-only: paragraph breaks
+    and line indentation survive (the old r'  +' regex ate them)."""
+    answer = "First para ends here [[act: Ghost, ref: 1]].\n\n  - indented bullet\n  - another"
+    result = verify_citations(
+        answer,
+        ['{"act": "IPC", "ref": "s. 302", "text": "..."}'],
+        had_tool_calls=True,
+    )
+    assert "\n\n" in result
+    assert "  - indented bullet" in result
+    assert "Ghost" not in result
+
+
+def test_verify_citations_strip_repairs_punctuation_space():
+    """A stripped marker leaves a doubled gap before punctuation or between
+    words; both are repaired without touching newlines."""
+    answer = "Ends with marker [[act: Ghost, ref: 1]]. Next sentence."
+    result = verify_citations(
+        answer,
+        ['{"act": "IPC", "ref": "s. 302", "text": "..."}'],
+        had_tool_calls=True,
+    )
+    assert "marker." in result       # gap glued before the period
+    assert ". Next" in result        # sentence spacing normalized
+    assert "  " not in result.replace("\n", "")  # no horizontal double spaces

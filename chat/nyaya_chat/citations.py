@@ -133,6 +133,28 @@ def _extract_tool_acts_refs(tool_messages_content: list[str]) -> set[str]:
     return pairs
 
 
+def _repair_whitespace_around_markers(text: str) -> str:
+    """Collapse marker-removal debris (doubled spaces, gap before punctuation)
+    in the gaps BETWEEN citation markers; markers pass through byte-identical."""
+    _PUNCT = r"[ \t]+([.,;:!?])"
+    _HORIZ = r"(?<=\S)[ \t]{2,}(?=\S)"
+
+    def _repair(gap: str) -> str:
+        gap = re.sub(_PUNCT, r"\1", gap)
+        return re.sub(_HORIZ, " ", gap)
+
+    if not CITATION_RE.search(text):
+        return _repair(text)
+    parts: list[str] = []
+    pos = 0
+    for m in CITATION_RE.finditer(text):
+        parts.append(_repair(text[pos:m.start()]))
+        parts.append(m.group(0))
+        pos = m.end()
+    parts.append(_repair(text[pos:]))
+    return "".join(parts)
+
+
 def verify_citations(
     answer_text: str,
     tool_messages_content: list[str],
@@ -196,14 +218,29 @@ def verify_citations(
             ungrounded.append(cite)
             log.info("ungrounded citation stripped: act=%s ref=%s", cite.act, cite.ref)
 
-    # Strip ungrounded citation markers from the text
-    result = answer_text
-    for cite in ungrounded:
-        marker = f"[[act: {cite.act}, ref: {cite.ref}]]"
-        result = result.replace(marker, "")
+    # Strip ungrounded citation markers from the text. The model's markers
+    # are not byte-identical to the canonical form (whitespace variants like
+    # ``[[act:X,ref:Y]]`` or extra spaces inside the braces), so match by
+    # normalized (act, ref) SPAN instead of exact-string replace — a miss
+    # here would leave the raw ``[[act: …]]`` marker in the rendered answer.
+    ungrounded_keys = {(_normalize(c.act), _normalize(c.ref)) for c in ungrounded}
 
-    # Clean up any double spaces left by removed markers
-    result = re.sub(r"  +", " ", result)
+    def _strip_ungrounded(match: re.Match[str]) -> str:
+        act_n = _normalize(match.group(1))
+        ref_n = _normalize(match.group(2))
+        if (act_n, ref_n) in ungrounded_keys:
+            return ""
+        return match.group(0)
+
+    result = CITATION_RE.sub(_strip_ungrounded, answer_text)
+
+    # Repair the gaps left by removed markers: glue punctuation that lost
+    # its preceding space, and collapse runs of horizontal whitespace —
+    # horizontal runs ONLY, never newlines or leading indentation (the old
+    # ``r"  +"`` regex ate paragraph breaks and code-block indentation).
+    # Grounded markers are masked out first: they are machine-parsed by the
+    # frontend, so their bytes must survive the repair untouched.
+    result = _repair_whitespace_around_markers(result)
 
     # If zero grounded citations remain and tools were called, add caveat
     if not grounded and had_tool_calls:

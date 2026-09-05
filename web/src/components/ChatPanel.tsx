@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BalanceIcon } from "./icons";
 import ChatComposer from "./ChatComposer";
 import ChatMessageView, { phaseLabel } from "./ChatMessage";
+import { RetryButton } from "./ErrorRow";
 import { useChat } from "@/lib";
 
 // ChatPanel: the live Nyaya assistant. Streams tokens from the FastAPI chat
@@ -15,6 +16,17 @@ const GREETING =
 // Fallback model display info (used before /chat/health responds)
 const FALLBACK_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";
 const FALLBACK_MODEL_NAME = "Nemotron-3.5 Lightning 30B";
+
+// Suggested opening questions, lifted from the eval scenario patterns
+// (chat/eval/golden.jsonl): one statute question, one constitutional, one
+// comparison (which exercises the multi-tool path). Chips are only shown on
+// the empty state — once the user has typed their own first message they're
+// noise.
+const SUGGESTED_PROMPTS = [
+  "What is the punishment for murder under IPC?",
+  "What does Article 21 of the Constitution guarantee?",
+  "Compare IPC section 302 with its BNS equivalent.",
+];
 
 interface ChatPanelProps {
   disabled?: boolean;
@@ -33,10 +45,13 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
       .then((data) => {
         if (data.model) {
           setModelId(data.model);
-          // Derive a display name from the model id
+          // Derive a display name from the model id. Only lowercase letters at
+          // a word boundary capitalize: digit-initial tokens ("30b", "3.5")
+          // keep their lowercase letter ("30b", not "30B") — \b[a-z] doesn't
+          // match inside a digit-run.
           const parts = data.model.split("/");
           const short = parts[parts.length - 1] || data.model;
-          setModelName(short.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
+          setModelName(short.replace(/-/g, " ").replace(/\b[a-z]/g, (c: string) => c.toUpperCase()));
         }
       })
       .catch(() => {
@@ -48,6 +63,10 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
   const canReset = messages.length > 0 || !!error;
   const canRetry = !!error && !isStreaming;
   const modelUrl = `https://build.nvidia.com/${modelId}`;
+  // Unavailability (5xx / agent_unavailable → humanizeError's "temporarily
+  // unavailable" copy) gets its own composer placeholder so the input signals
+  // the outage rather than inviting a submit that will likely fail again.
+  const unavailable = !!error && /temporarily unavailable/i.test(error);
 
   // The streaming tail's announcement text for screen readers. Kept in its own
   // aria-live region (below) so token-by-token updates don't re-read the whole
@@ -116,6 +135,36 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             <div className="bubble">
               {GREETING}
               <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
+              {!disabled && (
+                <div
+                  className="suggest-row"
+                  role="group"
+                  aria-label="Suggested questions"
+                  style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}
+                >
+                  {SUGGESTED_PROMPTS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="suggest-chip"
+                      onClick={() => send(p)}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: "var(--radius, 8px)",
+                        background: "var(--surface)",
+                        color: "var(--fg)",
+                        font: "inherit",
+                        fontSize: 12.5,
+                        padding: "5px 10px",
+                        cursor: "pointer",
+                        textAlign: "left",
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -139,32 +188,24 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
           onStop={cancel}
           disabled={isStreaming || disabled}
           isStreaming={isStreaming}
+          disabledHint={disabled ? "Chat is currently disabled." : undefined}
+          placeholder={
+            unavailable
+              ? "Nyaya is unavailable right now — you can still retry or send anyway."
+              : undefined
+          }
         />
         <div className="composer-hint">
           <span className="status-dot" />
           Retrieval-grounded · not legal advice · verify citations before filing
           {error ? ` · ${error}` : ""}
           {canRetry && (
-            <button
-              type="button"
-              className="retry-btn"
+            <RetryButton
               onClick={retry}
-              aria-label="Retry last message"
+              label="Retry"
               title="Retry last message"
-              style={{
-                marginLeft: 8,
-                background: "none",
-                border: "1px solid currentColor",
-                borderRadius: 4,
-                padding: "2px 8px",
-                cursor: "pointer",
-                fontSize: "inherit",
-                color: "inherit",
-                opacity: 0.8,
-              }}
-            >
-              ↻ Retry
-            </button>
+              style={{ marginLeft: 8 }}
+            />
           )}
         </div>
       </div>

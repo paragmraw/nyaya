@@ -18,7 +18,7 @@ import type {
 export const SERVICES: StackRow[] = [
   { name: "Embedding model", role: "Converts text queries and corpus passages into dense vectors for semantic search.", tool: "nvidia/nemotron-3-embed-1b" },
   { name: "Vector store", role: "Stores and retrieves passage embeddings with cosine similarity search at scale.", tool: "pgvector" },
-  { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query using a cross-encoder model.", tool: "llama-nemotron-rerank-1b-v2" },
+  { name: "Reranker", role: "Reorders top-k retrieved passages by relevance to the specific query using a cross-encoder model.", tool: "llama-nemotron-rerank-vl-1b-v2" },
   { name: "LLM", role: "Drafts the cited answer from retrieved context. Constrained to cite only from the retrieved set.", tool: "Nemotron-3.5 Lightning 30B" },
   { name: "Citation parser", role: "Parses citation strings ('IPC s.302', 'Art.21') and fetches the matching provision. Built into get_section / get_article.", tool: "nyaya/get_section + get_article" },
 ];
