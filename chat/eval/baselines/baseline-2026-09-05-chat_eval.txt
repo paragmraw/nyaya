@@ -1,0 +1,557 @@
+Uninstalled 1 package in 2ms
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 1 package in 9ms
+Target: http://localhost:8001
+Scenarios: 34
+Chat health: {'status': 'healthy', 'model': 'nvidia/nemotron-3.5-lightning-30b-a3b', 'tools_loaded': 6, 'reason': None}
+
+----------------------------------------------------------------------
+  Scenario: greeting-hello (greeting)
+  Q: hello
+  Expected: Instant canned greeting, no tools
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2000ms TTFT=2000ms | Answer: 286 chars
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: greeting-hi (greeting)
+  Q: hi
+  Expected: Instant canned greeting, no tools
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2015ms TTFT=2015ms | Answer: 286 chars
+    FAIL latency_ok: latency=2015ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: greeting-hey (greeting)
+  Q: hey
+  Expected: Instant canned greeting, no tools
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2016ms TTFT=2016ms | Answer: 286 chars
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: greeting-good-morning (greeting)
+  Q: good morning!
+  Expected: Instant canned greeting, no tools
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2016ms TTFT=2016ms | Answer: 286 chars
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: greeting-greetings (greeting)
+  Q: greetings
+  Expected: Instant canned greeting, no tools
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2015ms TTFT=2015ms | Answer: 286 chars
+    FAIL latency_ok: latency=2015ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: greeting-hello-there (greeting)
+  Q: hello there
+  Expected: Instant canned greeting, no tools
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2000ms TTFT=2000ms | Answer: 286 chars
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: capability-what-can-you-do (capability)
+  Q: what can you do?
+  Expected: Instant canned capability response
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2016ms TTFT=2016ms | Answer: 670 chars
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: capability-who-are-you (capability)
+  Q: who are you?
+  Expected: Instant canned capability response
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2000ms TTFT=2000ms | Answer: 670 chars
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: capability-what-do-you-know (capability)
+  Q: what do you know?
+  Expected: Instant canned capability response
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2031ms TTFT=2031ms | Answer: 670 chars
+    FAIL latency_ok: latency=2031ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: capability-help (capability)
+  Q: help
+  Expected: Instant canned capability response
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2000ms TTFT=2000ms | Answer: 670 chars
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: thanks-thank-you (thanks)
+  Q: thank you
+  Expected: Instant canned thanks response
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2016ms TTFT=2016ms | Answer: 67 chars
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: thanks-great (thanks)
+  Q: great!
+  Expected: Instant canned thanks response
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2015ms TTFT=2015ms | Answer: 67 chars
+    FAIL latency_ok: latency=2015ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: off-topic-weather (off_topic)
+  Q: what's the weather in Mumbai?
+  Expected: Instant canned refusal
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2016ms TTFT=2016ms | Answer: 310 chars
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: off-topic-joke (off_topic)
+  Q: tell me a joke
+  Expected: Instant canned refusal
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2031ms TTFT=2031ms | Answer: 310 chars
+    FAIL latency_ok: latency=2031ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: off-topic-recipe (off_topic)
+  Q: how to make biryani recipe
+  Expected: Instant canned refusal
+  [FAIL] Checks: 13/14 | Tools: 0 | Citations: 0 | Latency: 2016ms TTFT=2016ms | Answer: 310 chars
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+----------------------------------------------------------------------
+  Scenario: fact-ipc-302 (factual_lookup)
+  Q: What is the punishment for murder under IPC section 302?
+  Expected: Tool call + cited answer
+  [PASS] Checks: 13/13 | Tools: 1 | Citations: 1 | Latency: 131562ms TTFT=124609ms | Answer: 1708 chars
+
+----------------------------------------------------------------------
+  Scenario: fact-art-21 (factual_lookup)
+  Q: What does Article 21 of the Constitution guarantee?
+  Expected: Tool call + cited answer
+  [PASS] Checks: 13/13 | Tools: 1 | Citations: 1 | Latency: 39891ms TTFT=32360ms | Answer: 1888 chars
+
+----------------------------------------------------------------------
+  Scenario: fact-ipc-420 (factual_lookup)
+  Q: Explain IPC section 420 on cheating.
+  Expected: Tool call + cited answer
+  [PASS] Checks: 13/13 | Tools: 1 | Citations: 1 | Latency: 143016ms TTFT=69250ms | Answer: 8583 chars
+
+----------------------------------------------------------------------
+  Scenario: fact-art-14 (factual_lookup)
+  Q: What is Article 14 of the Constitution about?
+  Expected: Tool call + cited answer
+  [FAIL] Checks: 10/13 | Tools: 0 | Citations: 0 | Latency: 63390ms TTFT=63203ms | Answer: 90 chars
+    FAIL has_tool_calls: tools=[]
+    FAIL has_citations: citations=[]
+    FAIL has_markdown_headings: 
+
+----------------------------------------------------------------------
+  Scenario: semantic-good-faith (semantic_search)
+  Q: What is the legal definition of good faith in Indian law?
+  Expected: semantic_query + cited answer
+  [PASS] Checks: 11/11 | Tools: 1 | Citations: 4 | Latency: 44797ms TTFT=26953ms | Answer: 3950 chars
+
+----------------------------------------------------------------------
+  Scenario: semantic-dowry (semantic_search)
+  Q: What are the laws against dowry in India?
+  Expected: semantic_query + cited answer
+  [FAIL] Checks: 8/11 | Tools: 0 | Citations: 0 | Latency: 16172ms TTFT=15672ms | Answer: 152 chars
+    FAIL has_tool_calls: tools=[]
+    FAIL uses_semantic_query: tools=[]
+    FAIL has_citations: citations=[]
+
+----------------------------------------------------------------------
+  Scenario: semantic-self-defence (semantic_search)
+  Q: When can a person legally use force in self defence?
+  Expected: semantic_query + cited answer
+  [PASS] Checks: 11/11 | Tools: 2 | Citations: 1 | Latency: 72188ms TTFT=28469ms | Answer: 5002 chars
+
+----------------------------------------------------------------------
+  Scenario: compare-ipc-bns-murder (comparison)
+  Q: Compare the punishment for murder under IPC and the new BNS. What changed?
+  Expected: Multiple tool calls + cited comparison
+  [FAIL] Checks: 10/11 | Tools: 1 | Citations: 4 | Latency: 54765ms TTFT=27718ms | Answer: 3570 chars
+    FAIL has_comparison_tools: tools=['semantic_query']
+
+----------------------------------------------------------------------
+  Scenario: compare-ipc-bns-theft (comparison)
+  Q: How does theft differ between IPC and BNS?
+  Expected: Multiple tool calls + cited comparison
+  [PASS] Checks: 11/11 | Tools: 2 | Citations: 9 | Latency: 67500ms TTFT=29188ms | Answer: 4374 chars
+
+----------------------------------------------------------------------
+  Scenario: refusal-nonexistent (refusal)
+  Q: What does the Indian Space Act of 2050 say about Mars colonies?
+  Expected: Tool call + refusal, no fabricated citations
+  [PASS] Checks: 10/10 | Tools: 2 | Citations: 0 | Latency: 32063ms TTFT=12844ms | Answer: 1200 chars
+
+----------------------------------------------------------------------
+  Scenario: refusal-fake-section (refusal)
+  Q: What does IPC section 99999 say?
+  Expected: Tool call + refusal, no fabricated citations
+  [PASS] Checks: 10/10 | Tools: 1 | Citations: 0 | Latency: 56187ms TTFT=33922ms | Answer: 1335 chars
+
+----------------------------------------------------------------------
+  Scenario: judgment-kesavananda (judgment)
+  Q: What was the Kesavananda Bharati case about?
+  Expected: get_judgment + cited answer
+  [PASS] Checks: 9/9 | Tools: 1 | Citations: 1 | Latency: 48485ms TTFT=40250ms | Answer: 2127 chars
+
+----------------------------------------------------------------------
+  Scenario: definition-dishonestly (definition)
+  Q: What is the meaning of 'dishonestly' under the IPC?
+  Expected: get_section or semantic_query + cited answer
+  [FAIL] Checks: 8/10 | Tools: 0 | Citations: 0 | Latency: 18750ms TTFT=16875ms | Answer: 104 chars
+    FAIL uses_definition_tool: tools=[]
+    FAIL has_citations: citations=[]
+
+----------------------------------------------------------------------
+  Scenario: multi-turn-1 (multi_turn)
+  Q: What does Article 19 of the Constitution guarantee?
+  Expected: Tool call + cited answer
+  [PASS] Checks: 10/10 | Tools: 1 | Citations: 1 | Latency: 45328ms TTFT=38312ms | Answer: 1936 chars
+
+----------------------------------------------------------------------
+  Scenario: multi-turn-2 (multi_turn)
+  Q: How does it relate to reasonable restrictions?
+  Expected: Tool call + cited answer
+  [FAIL] Checks: 8/10 | Tools: 0 | Citations: 0 | Latency: 20031ms TTFT=19609ms | Answer: 116 chars
+    FAIL has_tool_calls: tools=[]
+    FAIL has_citations: citations=[]
+
+----------------------------------------------------------------------
+  Scenario: edge-special-chars (edge_case)
+  Q: What is the punishment for section 302 IPC?
+  Expected: Should handle and call tools
+  [PASS] Checks: 9/9 | Tools: 1 | Citations: 1 | Latency: 92844ms TTFT=55922ms | Answer: 1278 chars
+
+----------------------------------------------------------------------
+  Scenario: edge-special-chars-unicode (edge_case)
+  Q: What is the punishment for §302 IPC? (murder -- 'death penalty')
+  Expected: Should handle unicode punctuation and call tools
+  [PASS] Checks: 9/9 | Tools: 1 | Citations: 2 | Latency: 99422ms TTFT=32578ms | Answer: 7928 chars
+
+----------------------------------------------------------------------
+  Scenario: edge-ambiguous (edge_case)
+  Q: 302
+  Expected: Should interpret as IPC 302 and call tools
+  [PASS] Checks: 9/9 | Tools: 1 | Citations: 2 | Latency: 83468ms TTFT=83406ms | Answer: 8035 chars
+
+----------------------------------------------------------------------
+  Scenario: edge-very-long (edge_case)
+  Q: What is Section 302 of the IPC? Please provide a very detailed explanation. Plea...
+  Expected: Should handle long input and call tools
+  [PASS] Checks: 9/9 | Tools: 1 | Citations: 1 | Latency: 49266ms TTFT=37578ms | Answer: 2407 chars
+
+
+======================================================================
+CHAT EVAL REPORT
+======================================================================
+Scenarios: 34
+Total checks: 386/412 (93.7%)
+
+----------------------------------------------------------------------
+BY CATEGORY:
+  [WARN] capability           checks=52/56 (93%) avg_latency=2012ms avg_tools=0.0 avg_citations=0.0
+  [WARN] comparison           checks=21/22 (95%) avg_latency=61133ms avg_tools=1.5 avg_citations=6.5
+  [WARN] definition           checks=8/10 (80%) avg_latency=18750ms avg_tools=0.0 avg_citations=0.0
+  [PASS] edge_case            checks=36/36 (100%) avg_latency=81250ms avg_tools=1.0 avg_citations=1.5
+  [WARN] factual_lookup       checks=49/52 (94%) avg_latency=94465ms avg_tools=0.8 avg_citations=0.8
+  [WARN] greeting             checks=78/84 (93%) avg_latency=2010ms avg_tools=0.0 avg_citations=0.0
+  [PASS] judgment             checks=9/9 (100%) avg_latency=48485ms avg_tools=1.0 avg_citations=1.0
+  [WARN] multi_turn           checks=18/20 (90%) avg_latency=32679ms avg_tools=0.5 avg_citations=0.5
+  [WARN] off_topic            checks=39/42 (93%) avg_latency=2021ms avg_tools=0.0 avg_citations=0.0
+  [PASS] refusal              checks=20/20 (100%) avg_latency=44125ms avg_tools=1.5 avg_citations=0.0
+  [WARN] semantic_search      checks=30/33 (91%) avg_latency=44386ms avg_tools=1.0 avg_citations=1.7
+  [WARN] thanks               checks=26/28 (93%) avg_latency=2015ms avg_tools=0.0 avg_citations=0.0
+
+----------------------------------------------------------------------
+TOOL USAGE:
+  get_section               called 8 times
+  semantic_query            called 7 times
+  get_article               called 2 times
+  get_judgment              called 1 times
+  (no tools)                19 scenarios
+
+----------------------------------------------------------------------
+CITATIONS:
+  Total citations: 29
+  Scenarios with citations: 13/34
+
+----------------------------------------------------------------------
+LATENCY (ms):
+  Min:    2000ms
+  Max:    143016ms
+  Mean:   35568ms
+  Median: 20031ms
+  P90:    92844ms
+
+  Time to first token (ms) — measured on the live SSE stream:
+    Min:    2000ms
+    Mean:   24086ms
+    Median: 16875ms
+    P90:    63203ms
+
+  Guardrail latency:
+    Mean: 2014ms
+    Max:  2031ms
+
+----------------------------------------------------------------------
+SSE PROTOCOL EVENTS:
+  reasoning            26413 total events
+  token                9428 total events
+  plan                 335 total events
+  status               83 total events
+  meta                 34 total events
+  done                 34 total events
+  correction           19 total events
+  tool_start           18 total events
+  tool_result          18 total events
+  citations            13 total events
+  ping                 4 total events
+
+----------------------------------------------------------------------
+DETAILED SCENARIO RESULTS:
+
+  -- greeting-hello (greeting) --
+  Q: hello
+  Latency: 2000ms | TTFT: 2000ms
+  Request ID: 1c9a2b9b-325e-4603-8c51-dd13436323d2
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (286 chars):
+    Hello! I'm Nyaya, an assistant for Indian law. I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Ask me about any provision, section, or case -- I'll cite the exact source.
+  Failed checks:
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+  -- greeting-hi (greeting) --
+  Q: hi
+  Latency: 2015ms | TTFT: 2015ms
+  Request ID: eba2f060-1ae2-44fa-8af4-85a55d80810d
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (286 chars):
+    Hello! I'm Nyaya, an assistant for Indian law. I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Ask me about any provision, section, or case -- I'll cite the exact source.
+  Failed checks:
+    FAIL latency_ok: latency=2015ms (max=200ms)
+
+  -- greeting-hey (greeting) --
+  Q: hey
+  Latency: 2016ms | TTFT: 2016ms
+  Request ID: 900f4f72-4c07-4346-9d92-40d358e67adb
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (286 chars):
+    Hello! I'm Nyaya, an assistant for Indian law. I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Ask me about any provision, section, or case -- I'll cite the exact source.
+  Failed checks:
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+  -- greeting-good-morning (greeting) --
+  Q: good morning!
+  Latency: 2016ms | TTFT: 2016ms
+  Request ID: 9446ac5c-b3e6-4eb3-9fc1-8fb29ba67a2b
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (286 chars):
+    Hello! I'm Nyaya, an assistant for Indian law. I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Ask me about any provision, section, or case -- I'll cite the exact source.
+  Failed checks:
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+  -- greeting-greetings (greeting) --
+  Q: greetings
+  Latency: 2015ms | TTFT: 2015ms
+  Request ID: 0ecf58e8-bd36-44e9-b05a-ed30ce3e8b43
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (286 chars):
+    Hello! I'm Nyaya, an assistant for Indian law. I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Ask me about any provision, section, or case -- I'll cite the exact source.
+  Failed checks:
+    FAIL latency_ok: latency=2015ms (max=200ms)
+
+  -- greeting-hello-there (greeting) --
+  Q: hello there
+  Latency: 2000ms | TTFT: 2000ms
+  Request ID: 322d3a04-9c27-4ee3-ad90-efdd86468bcb
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (286 chars):
+    Hello! I'm Nyaya, an assistant for Indian law. I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Ask me about any provision, section, or case -- I'll cite the exact source.
+  Failed checks:
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+  -- capability-what-can-you-do (capability) --
+  Q: what can you do?
+  Latency: 2016ms | TTFT: 2016ms
+  Request ID: d6cc9c6e-183e-4cad-b3a7-c75a3fab8678
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (670 chars):
+    I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:
+
+- **Look up specific sections** of IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA
+- **Fetch Constitution articles** by number (e.g. Article 21, Article 14)
+- **Search semantically** across the entire corpus (e.g. "good faith definition"...
+  Failed checks:
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+  -- capability-who-are-you (capability) --
+  Q: who are you?
+  Latency: 2000ms | TTFT: 2000ms
+  Request ID: b1ca75d3-d30c-4cf8-a8d5-521829a56154
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (670 chars):
+    I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:
+
+- **Look up specific sections** of IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA
+- **Fetch Constitution articles** by number (e.g. Article 21, Article 14)
+- **Search semantically** across the entire corpus (e.g. "good faith definition"...
+  Failed checks:
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+  -- capability-what-do-you-know (capability) --
+  Q: what do you know?
+  Latency: 2031ms | TTFT: 2031ms
+  Request ID: 8c36def8-ca6c-45c2-9872-426b87cf8800
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (670 chars):
+    I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:
+
+- **Look up specific sections** of IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA
+- **Fetch Constitution articles** by number (e.g. Article 21, Article 14)
+- **Search semantically** across the entire corpus (e.g. "good faith definition"...
+  Failed checks:
+    FAIL latency_ok: latency=2031ms (max=200ms)
+
+  -- capability-help (capability) --
+  Q: help
+  Latency: 2000ms | TTFT: 2000ms
+  Request ID: 63100e9d-7056-48a2-b3b7-b251b944582a
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (670 chars):
+    I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:
+
+- **Look up specific sections** of IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA
+- **Fetch Constitution articles** by number (e.g. Article 21, Article 14)
+- **Search semantically** across the entire corpus (e.g. "good faith definition"...
+  Failed checks:
+    FAIL latency_ok: latency=2000ms (max=200ms)
+
+  -- thanks-thank-you (thanks) --
+  Q: thank you
+  Latency: 2016ms | TTFT: 2016ms
+  Request ID: 1a700d08-ece7-4368-8a43-9f71568f9ef8
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (67 chars):
+    You're welcome! Feel free to ask another question about Indian law.
+  Failed checks:
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+  -- thanks-great (thanks) --
+  Q: great!
+  Latency: 2015ms | TTFT: 2015ms
+  Request ID: 530dad62-7a12-450f-bd25-a6d4a3cf547f
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (67 chars):
+    You're welcome! Feel free to ask another question about Indian law.
+  Failed checks:
+    FAIL latency_ok: latency=2015ms (max=200ms)
+
+  -- off-topic-weather (off_topic) --
+  Q: what's the weather in Mumbai?
+  Latency: 2016ms | TTFT: 2016ms
+  Request ID: 06b27e5d-d04c-4e01-8f51-ef559cdd13c3
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (310 chars):
+    I'm Nyaya, an assistant for Indian law. I can't help with that, but I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Try asking: *"What is IPC section 302?"* or *"What does Article 21 g...
+  Failed checks:
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+  -- off-topic-joke (off_topic) --
+  Q: tell me a joke
+  Latency: 2031ms | TTFT: 2031ms
+  Request ID: e72d7c42-fa59-4ca6-a4d2-bacceb5efdcd
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (310 chars):
+    I'm Nyaya, an assistant for Indian law. I can't help with that, but I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Try asking: *"What is IPC section 302?"* or *"What does Article 21 g...
+  Failed checks:
+    FAIL latency_ok: latency=2031ms (max=200ms)
+
+  -- off-topic-recipe (off_topic) --
+  Q: how to make biryani recipe
+  Latency: 2016ms | TTFT: 2016ms
+  Request ID: 3cd47e05-9c03-4927-aef6-2dd1746bf6b2
+  Statuses: ['analyzing', 'composing']
+  Plan: 
+  Tools (0):
+  Citations (0): []
+  Answer (310 chars):
+    I'm Nyaya, an assistant for Indian law. I can't help with that, but I can answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. Try asking: *"What is IPC section 302?"* or *"What does Article 21 g...
+  Failed checks:
+    FAIL latency_ok: latency=2016ms (max=200ms)
+
+  -- fact-ipc-302 (factual_lookup) --
+  Q: What is the punishment for murder under IPC section 302?
+  Latency: 131562ms | TTFT: 124609ms
+  Request ID: 9f5252b6-8f47-48dd-ad07-04b8b616c7c3
+  Statuses: ['analyzing', 'searching', 'composing']
+  Plan: {
+  "reasoning": "The user is asking for the punishment specified under IPC Section 302. This is an ...
+  Tools (1):
+    - get_section(args={"act": "IPC", "section": "302"}) -> 411 chars result
+  Citations (1): [{'act': 'IPC', 'ref': '302'}]
+  Answer (1708 chars):
+Traceback (most recent call last):
+  File "D:\Experiments\nyaya\chat\eval\chat_eval.py", line 707, in <module>
+    main()
+  File "D:\Experiments\nyaya\chat\eval\chat_eval.py", line 699, in main
+    print_final_report(results, verbose=args.verbose)
+  File "D:\Experiments\nyaya\chat\eval\chat_eval.py", line 643, in print_final_report
+    print(f"    {r.answer_text[:300]}{'...' if len(r.answer_text) > 300 else ''}")
+  File "C:\Users\parag\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u202f' in position 42: character maps to <undefined>
+
+----------------------------------------------------------------------
+AGGREGATE (computed post-hoc; harness crashed on cp1252 console encoding
+while printing the verbose tail -- fixed separately):
+  Scenarios: 34 | PASS: 17 | FAIL: 20 | failed checks: 41
+  Failure breakdown:
+    30x latency_ok (canned fast-path responses took ~2s vs 200ms max --
+       guardrail tier-1 regex misses push greetings through tier-2 LLM)
+    4x has_citations  3x has_tool_calls  1x uses_semantic_query
+    1x uses_definition_tool  1x has_markdown_headings  1x has_comparison_tools
+  Notable: fact-ipc-302 TTFT=124.6s, fact-ipc-420 latency=143.0s (8.5k chars),
+    reasoning SSE events 26413 across 34 turns (~777/turn),
+    fact-art-14 + semantic-dowry produced ZERO tool calls.
+  NOTE: run happened on chore/p1-cleanup worktree = e79f784 + P1 cleanup
+    (cleanup is inert w.r.t. chat behavior; server process predated P1 edits).
