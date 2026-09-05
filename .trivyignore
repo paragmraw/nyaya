@@ -1,0 +1,27 @@
+# Trivy image-scan suppressions (.trivyignore format: CVE-ID per line, with
+# optional justification as a comment ABOVE the entry — Trivy attaches the
+# preceding comment block as the suppression reason in JSON/ASFF output).
+#
+# Gate policy: only suppress a CVE when its fixed version is recorded in the
+# Alpine secdb (so `ignore-unfixed: true` doesn't already skip it) but the
+# fixed package is NOT installable from the release repositories — verified
+# against dl-cdn.alpinelinux.org, not a mirror. Every entry must carry a
+# removal condition; re-run this check when the condition is met.
+
+# CVE-2026-53612 CVE-2026-53613 CVE-2026-53614 CVE-2026-76642 CVE-2026-78408
+# CVE-2026-78409 CVE-2026-78410 — util-linux / libuuid (alpine 3.24 main).
+# Secdb records fixed version 2.42.3-r0, but as of 2026-09-05 that package is
+# a 404 on dl-cdn.alpinelinux.org/alpine/v3.24/main/x86_64/ and APKINDEX only
+# ships 2.42.1-r0, so `apk upgrade` (already run in the runtime stage) cannot
+# pick it up. Exposure is minimal here: the runtime runs as the unprivileged
+# `nyaya` user, does not invoke mount(8), and never runs nsenter.
+# REMOVE WHEN: libuuid 2.42.3-r0 (or newer) appears in the v3.24 main repos —
+# delete this entry and confirm the docker job goes green on its own.
+
+CVE-2026-53612
+CVE-2026-53613
+CVE-2026-53614
+CVE-2026-76642
+CVE-2026-78408
+CVE-2026-78409
+CVE-2026-78410
