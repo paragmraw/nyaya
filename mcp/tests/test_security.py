@@ -171,10 +171,10 @@ def test_inmemory_backend_window_reset_via_time_mock(monkeypatch):
 def test_inmemory_backend_concurrent_increments_exact():
     """N concurrent is_limited calls for one key record exactly N hits.
 
-    The middleware dispatches backend calls to worker threads via
-    asyncio.to_thread, so the counter mutation must be lock-guarded; without
-    the lock concurrent read-modify-writes lose increments and the final
-    count lands below N.
+    The middleware may call the backend from worker threads (Redis path /
+    historical behaviour), so the counter mutation must be lock-guarded;
+    without the lock concurrent read-modify-writes lose increments and the
+    final count lands below N.
     """
     backend = InMemoryBackend()
     total = 400
@@ -184,6 +184,42 @@ def test_inmemory_backend_concurrent_increments_exact():
     # Every call is under the limit, and every hit was recorded.
     assert results == [False] * total
     assert backend._counts["ip1"]["count"] == total
+
+
+def test_inmemory_check_reports_window_remaining(monkeypatch):
+    """check() returns the honest time-to-window-reset for Retry-After.
+
+    The old middleware always sent ``Retry-After: 60`` even when 55 of the
+    60 window seconds had already elapsed.
+    """
+    t = [1_800_000_000.0]
+    monkeypatch.setattr(rl.time, "time", lambda: t[0])
+    backend = InMemoryBackend()
+    for _ in range(3):
+        backend.is_limited("ip1", limit=3)
+    decision = backend.check("ip1", limit=3)
+    assert decision.limited is True
+    assert decision.retry_after_s == 60.0  # window started this instant
+
+    t[0] += 25.0  # 25s into a 60s window
+    decision = backend.check("ip1", limit=3)
+    assert decision.limited is True
+    assert decision.retry_after_s == 35.0
+
+    t[0] += 40.0  # past the window: the reset path runs, key un-limited
+    decision = backend.check("ip1", limit=3)
+    assert decision.limited is False
+    assert decision.retry_after_s == 0.0
+
+
+def test_backend_thread_dispatch_flags():
+    """Only the Redis backend needs a worker thread; in-memory runs inline.
+
+    The middleware consults ``needs_thread`` to skip the asyncio.to_thread
+    hop for the in-memory backend (a pure lock + dict update).
+    """
+    assert InMemoryBackend.needs_thread is False
+    assert RedisBackend.needs_thread is True
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +319,10 @@ def test_rate_limit_blocks_after_threshold():
         # 4th request is blocked.
         r = client.post("/echo", json={"x": 1})
         assert r.status_code == 429
-        assert r.headers.get("retry-after") == "60"
+        # Retry-After derives from the window remaining (a fresh window ⇒ ~60s),
+        # not a hardcoded constant.
+        retry_after = int(r.headers["retry-after"])
+        assert 1 <= retry_after <= 60
 
 
 def test_rate_limit_returns_json_error():
