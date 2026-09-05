@@ -37,13 +37,15 @@ log = logging.getLogger("nyaya_chat.graph.synthesis")
 
 
 def _is_db_error_json(text: str) -> bool:
-    """True when a tool result is the native layer's structured error JSON.
+    """True when a tool result is the native layer's *unavailability* error JSON.
 
     The native tools report a dead corpus/DB as
     ``{"error": {"code": "database_unavailable", ...}}`` (``native.py``'s
-    ``_error_json`` shape). Feeding that into synthesis produces an answer
-    built on nothing; detecting it here lets the turn fail fast with a
-    specific, human-explainable error instead.
+    ``_error_json`` shape); a failed embed is ``embedding_unavailable``.
+    Feeding those into synthesis produces an answer built on nothing;
+    detecting them here lets the turn fail fast with a specific,
+    human-explainable error instead. Other error codes (``not_found``,
+    ``search_error``) are legitimate results and must NOT match.
     """
     if not text.strip().startswith("{"):
         return False
@@ -52,7 +54,13 @@ def _is_db_error_json(text: str) -> bool:
     except (ValueError, TypeError):
         return False
     err = payload.get("error") if isinstance(payload, dict) else None
-    return isinstance(err, dict) and bool(err.get("code"))
+    if not isinstance(err, dict):
+        return False
+    # Only *unavailability* codes mean "nothing was retrieved". A
+    # ``not_found`` error (e.g. get_section on a nonexistent section) is a
+    # legitimate result the synthesis model must turn into a refusal —
+    # short-circuiting on it would hard-fail valid refusal turns.
+    return err.get("code") in {"database_unavailable", "embedding_unavailable"}
 
 
 def _prune_tool_results_for_synthesis(messages: list[BaseMessage]) -> list[BaseMessage]:

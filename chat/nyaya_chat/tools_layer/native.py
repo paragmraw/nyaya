@@ -24,6 +24,8 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from langchain_core.tools import StructuredTool
 
@@ -174,7 +176,10 @@ async def _list_acts() -> str:
 
 
 # name -> coroutine impl. Spec order defines the exposed tool order.
-_IMPLS = {
+# Explicit value type: the impls have differing signatures, so mypy would
+# otherwise collapse the dict value type to ``function`` and reject it as the
+# StructuredTool ``coroutine`` argument.
+_IMPLS: dict[str, Callable[..., Awaitable[Any]]] = {
     "semantic_query": _semantic_query,
     "get_section": _get_section,
     "get_article": _get_article,

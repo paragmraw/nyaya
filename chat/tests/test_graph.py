@@ -1119,3 +1119,52 @@ async def test_synthesis_mixed_results_do_not_short_circuit(fake_model, settings
     }
     out = await node(state)  # no exception
     assert out["messages"][0].content.startswith("Answer")
+
+
+def test_synthesis_not_found_error_json_is_not_a_db_error():
+    """A ``not_found`` error JSON (e.g. get_section on a nonexistent section)
+    is a legitimate result synthesis must turn into a refusal — it must NOT
+    count as a database error for the short-circuit."""
+    from nyaya_chat.graph.synthesis import _is_db_error_json
+    not_found = json.dumps({"error": {
+        "code": "not_found",
+        "message": "no section 99999 in IPC",
+        "kind": "not_found",
+        "hint": "check the section number",
+    }})
+    assert not _is_db_error_json(not_found)
+    assert _is_db_error_json(_db_error_content())  # database_unavailable still matches
+    assert _is_db_error_json(json.dumps({"error": {"code": "embedding_unavailable"}}))
+
+
+@pytest.mark.asyncio
+async def test_synthesis_not_found_only_results_synthesize_refusal(fake_model, settings):
+    """All tool results being not_found errors still reaches the synthesis
+    model (regression: the short-circuit used to hard-fail such turns with
+    retrieval_unavailable, killing valid refusal answers)."""
+    fake_model.responses = [AIMessage(
+        content="I could not find IPC section 99999; no such provision exists.",
+    )]
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+    node = make_synthesis_node(settings, fake_model, has_tools=True)
+    state = {
+        "messages": [
+            HumanMessage(content="What does IPC section 99999 say?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "99999"}},
+            ]),
+            ToolMessage(
+                content=json.dumps({"error": {
+                    "code": "not_found",
+                    "message": "no section 99999 in IPC",
+                    "kind": "not_found",
+                    "hint": "check the section number",
+                }}),
+                tool_call_id="tc1", name="get_section",
+            ),
+        ],
+        "rid": "s17",
+    }
+    out = await node(state)  # no exception — synthesis composes the refusal
+    assert fake_model.calls  # the model was consulted
+    assert "99999" in out["messages"][0].content

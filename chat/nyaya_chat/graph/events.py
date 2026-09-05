@@ -23,6 +23,8 @@ import logging
 import time
 from typing import Any
 
+from .state import ChatState
+
 log = logging.getLogger("nyaya_chat.graph.events")
 
 
@@ -92,7 +94,7 @@ def usage(usage_metadata: dict[str, Any]) -> None:
 # Phase timing (observability, not SSE)
 # ---------------------------------------------------------------------------
 
-def timed_phase(state: dict[str, Any], phase: str, t0: float) -> float:
+def timed_phase(state: ChatState, phase: str, t0: float) -> float:
     """Record one phase's duration (ms) in ``state['phase_ms']``.
 
     Call at the END of a phase with the ``time.monotonic()`` value captured

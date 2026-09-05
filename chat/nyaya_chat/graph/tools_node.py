@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.prebuilt import ToolNode
@@ -76,7 +76,7 @@ class DedupToolNode:
         if unique_calls:
             modified_ai = AIMessage(content=last_ai.content, tool_calls=unique_calls)
             modified_messages = messages[:-1] + [modified_ai]
-            modified_state = {**state, "messages": modified_messages}
+            modified_state = cast(ChatState, {**state, "messages": modified_messages})
             result = await self._execute(modified_state, unique_calls)
             for m in result.get("messages", []):
                 if isinstance(m, ToolMessage):

@@ -156,7 +156,9 @@ def _as_model_message(response: Any) -> AIMessage:
 def _deadline_exceeded(state: ChatState) -> bool:
     """True when the turn's wall-clock budget (set by the streamer) is spent."""
     deadline = state.get("deadline")
-    return bool(deadline) and time.monotonic() > float(deadline)
+    if deadline is None or deadline <= 0.0:
+        return False
+    return time.monotonic() > deadline
 
 
 def make_supervisor_node(
