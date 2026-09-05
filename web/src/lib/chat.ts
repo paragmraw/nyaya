@@ -21,7 +21,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolEvent } from "./api";
 
-const CITE_RE = /\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]/g;
+// Linear-time by construction (CodeQL js/polynomial-redos): each quantified
+// class is disjoint from the literal that follows it, so a space run inside a
+// marker has exactly ONE split point instead of one per character — the old
+// `\s*([^,\]]+?)\s*,` form backtracked quadratically on uncontrolled streamed
+// text like "[[act:" + " ".repeat(n). Whitespace around act/ref is captured
+// and trimmed by the .trim() calls at the two call sites instead.
+const CITE_RE = /\[\[act:([^,\]]+),\s*ref:([^\]]+)\]\]/g;
 
 // Inline citations are rendered as normal markdown links whose href points
 // back at the corpus page. That href prefix doubles as the citation marker:

@@ -79,3 +79,26 @@ test("stripCitationMarkers handles multiple markers", () => {
   const text = stripCitationMarkers("[[act: A, ref: 1]] and [[act: B, ref: 2]]");
   assert.equal(text, "[A · 1] and [B · 2]");
 });
+// CodeQL js/polynomial-redos regression: the marker regex runs on uncontrolled
+// streamed model output. The old `\s*([^,\]]+?)\s*,` form let a space run be
+// split between the two quantifiers at every character (quadratic backtracking
+// on "[[act:" + many spaces + no comma). The fixed regex is linear — this must
+// finish in milliseconds, not seconds.
+test("citation regex stays linear-time on pathological input", () => {
+  const evil = "[[act:" + " ".repeat(50_000);
+  const t0 = Date.now();
+  const { citations } = parseCitations(evil);
+  const dt = Date.now() - t0;
+  assert.deepEqual(citations, []);
+  assert.ok(dt < 1_000, `parseCitations took ${dt}ms on pathological input`);
+  const t1 = Date.now();
+  assert.equal(stripCitationMarkers(evil), evil);
+  assert.ok(Date.now() - t1 < 1_000, "stripCitationMarkers also linear");
+});
+
+// Whitespace-tolerance is preserved: markers with padding around act/ref must
+// still parse (trimming now happens in code, not in the regex).
+test("citation markers with extra whitespace still parse", () => {
+  const { citations } = parseCitations("[[act:  IPC  ,   ref:   s. 302  ]]");
+  assert.deepEqual(citations, [{ act: "IPC", ref: "s. 302" }]);
+});
