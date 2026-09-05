@@ -42,6 +42,9 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from .errors import TurnError
+from .observability import flush_langfuse
+
 log = logging.getLogger("nyaya_chat.streaming")
 
 
@@ -56,6 +59,7 @@ async def stream_turn(
     keepalive_interval: float = 0,
     rid: str = "",
     config: dict[str, Any] | None = None,
+    budget_s: float = 0,
 ) -> AsyncIterator[bytes]:
     """Yield SSE-encoded bytes for a single agent turn.
 
@@ -72,6 +76,10 @@ async def stream_turn(
     ``config`` (e.g. ``{"callbacks": [...]}`` for observability) is passed to
     ``graph.astream`` — the single observability wiring point for the turn.
 
+    ``budget_s`` > 0 seeds a wall-clock ``deadline`` into graph state; nodes
+    check it between phases and fail the turn with a ``timeout`` error event
+    instead of grinding through retry loops until the client gives up.
+
     If ``keepalive_interval`` > 0, emits a ``ping`` event every N seconds
     to prevent proxy timeouts. The ping is emitted between graph events
     using asyncio timeout on the stream iteration.
@@ -83,7 +91,7 @@ async def stream_turn(
 
     try:
         async for payload in _stream_with_keepalive(
-            graph, messages, rid, keepalive_interval, config,
+            graph, messages, rid, keepalive_interval, config, budget_s,
         ):
             if payload is True:
                 # Keepalive signal from _stream_with_keepalive (wait expired)
@@ -107,6 +115,12 @@ async def stream_turn(
     except asyncio.CancelledError:
         log.info("stream cancelled by client")
         raise
+    except TurnError as exc:
+        # A node deliberately failed the turn (empty synthesis, dead corpus,
+        # blown deadline): the code is the stable machine key the frontend's
+        # humanizer maps, ``detail`` is the log-facing explanation.
+        log.error("turn failed (%s): %s", exc.code, exc.detail)
+        yield _sse("error", {"message": exc.code, "detail": exc.detail, "rid": rid})
     except Exception as exc:
         log.error("agent stream failed: %s", exc, exc_info=True)
         yield _sse("error", {
@@ -115,6 +129,9 @@ async def stream_turn(
             "rid": rid,
         })
     finally:
+        # Langfuse batches async; without an explicit flush the last turn's
+        # spans can be lost on process exit or short-lived container tasks.
+        flush_langfuse()
         # The per-turn usage log line (rid, duration, tokens), emitted
         # whenever the stream loop ends — clean finish, mid-stream failure,
         # or client cancellation — with tokens 0/absent when the usage
@@ -145,6 +162,7 @@ async def _stream_with_keepalive(
     rid: str,
     keepalive_interval: float,
     config: dict[str, Any] | None,
+    budget_s: float = 0,
 ) -> AsyncIterator[Any]:
     """Yield custom-stream payloads, interleaving ``True`` ping signals when idle.
 
@@ -162,7 +180,9 @@ async def _stream_with_keepalive(
     On cancellation of the outer stream, the producer is cancelled and
     awaited in ``finally`` so no tasks linger.
     """
-    stream_input = {"messages": messages, "rid": rid}
+    stream_input: dict[str, Any] = {"messages": messages, "rid": rid}
+    if budget_s > 0:
+        stream_input["deadline"] = time.monotonic() + budget_s
     stream_kwargs: dict[str, Any] = {
         "stream_mode": ["custom"],
         "config": config or None,

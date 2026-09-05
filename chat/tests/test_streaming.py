@@ -120,6 +120,45 @@ async def test_stream_turn_passes_config_to_astream():
 
 
 @pytest.mark.asyncio
+async def test_stream_turn_maps_turn_error_to_code():
+    """A TurnError from a node projects its code as ``error.message`` — the
+    stable machine key the frontend humanizer maps — instead of the generic
+    agent_error bookend."""
+    from nyaya_chat.errors import TurnError
+
+    class _TurnErrorGraph:
+        async def astream(self, *a, **kw):
+            raise TurnError("empty_response", "the synthesis model returned nothing")
+            yield  # makes the function an async generator
+
+    out = b"".join([c async for c in stream_turn(_TurnErrorGraph(), [], rid="rid-te")])
+    errors = [p for e, p in _parse_events(out) if e == "error"]
+    assert len(errors) == 1
+    assert errors[0]["message"] == "empty_response"
+    assert errors[0]["detail"] == "the synthesis model returned nothing"
+    assert errors[0]["rid"] == "rid-te"
+    assert out.endswith(b"event: done\ndata: {}\n\n")
+
+
+@pytest.mark.asyncio
+async def test_stream_turn_seeds_deadline_into_graph_state():
+    """budget_s > 0 seeds a ``deadline`` (monotonic future timestamp) into the
+    stream input so nodes can check it between phases."""
+    import time as _time
+
+    graph = _FakeGraph([])
+    b"".join([c async for c in stream_turn(graph, [], rid="dl", budget_s=120.0)])
+    deadline = graph.inputs[0]["deadline"]
+    assert deadline > _time.monotonic()  # in the future
+    assert deadline - _time.monotonic() <= 120.0
+
+    # No budget → no deadline key.
+    graph2 = _FakeGraph([])
+    b"".join([c async for c in stream_turn(graph2, [], rid="dl2")])
+    assert "deadline" not in graph2.inputs[0]
+
+
+@pytest.mark.asyncio
 async def test_stream_turn_emits_error_on_exception():
     class _Boom:
         async def astream(self, *a, **kw):

@@ -36,7 +36,35 @@ def _search_response(n_hits: int, snippet_len: int = 2000):
 
 def test_clean_tool_content_string():
     assert clean_tool_content("short") == "short"
-    assert clean_tool_content("x" * 9000) == "x" * MAX_TOOL_CHARS
+    assert clean_tool_content("x" * 9000) == "x" * (MAX_TOOL_CHARS - 1) + "…"
+
+
+def test_clean_tool_content_cap_marks_truncation():
+    """A capped result announces the cut with an ellipsis — a silent chop
+    produced malformed JSON (and prose) without any indication."""
+    result = clean_tool_content("x" * (MAX_TOOL_CHARS + 10))
+    assert result.endswith("…")
+    assert len(result) == MAX_TOOL_CHARS  # ellipsis included in the cap
+
+    # Whitespace-only padding is stripped before capping (docstring promise).
+    assert clean_tool_content("\n\n  " + "y" * (MAX_TOOL_CHARS + 10)) == "y" * (MAX_TOOL_CHARS - 1) + "…"
+
+
+def test_prune_condensed_snippet_marks_truncation():
+    """A condensed tail hit's snippet cut at 300 chars carries an ellipsis;
+    a snippet at or under the limit is untouched."""
+    payload = _search_response(3, snippet_len=400)
+    pruned = prune_list_result(payload, "semantic_query")
+    assert isinstance(pruned, str)
+    data = json.loads(pruned)
+    tail = data["results"][1]["snippet"]
+    assert tail.endswith("…")
+    assert len(tail) == 300  # truncated to 300 chars total, ellipsis included
+
+    # A short snippet (<= 300 chars) is passed through without a marker.
+    short = _search_response(2, snippet_len=100)
+    data2 = json.loads(prune_list_result(short, "semantic_query"))
+    assert not data2["results"][1]["snippet"].endswith("…")
 
 
 def test_clean_tool_content_keeps_corpus_tags_by_default():
@@ -94,6 +122,7 @@ def test_prune_keeps_top_hit_verbatim_and_condenses_rest():
     assert tail["ref"] == "s. 103"
     assert tail["rank"] == 1.0 - 3 * 0.01
     assert len(tail["snippet"]) == 300
+    assert tail["snippet"].endswith("…")  # the cut is marked, not silent
     assert len(tail["snippet"]) < len("HIT3-" + "z" * 2000)
     # Envelope metadata dropped except the counts.
     assert "total" in data and "returned" in data

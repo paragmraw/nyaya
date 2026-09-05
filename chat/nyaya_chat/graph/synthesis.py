@@ -14,6 +14,7 @@ re-derives anything.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -21,6 +22,7 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
 
 from ..citations import CITATION_RE, parse_citations, verify_citations
+from ..errors import TurnError
 from ..llm import DISCLAIMER, astream_with_retry
 from ..prompts import SYSTEM_PROMPT
 from ..tools_layer.cleaning import prune_list_result, strip_corpus_tags
@@ -32,6 +34,25 @@ from .events import token as token_event
 from .state import ChatState
 
 log = logging.getLogger("nyaya_chat.graph.synthesis")
+
+
+def _is_db_error_json(text: str) -> bool:
+    """True when a tool result is the native layer's structured error JSON.
+
+    The native tools report a dead corpus/DB as
+    ``{"error": {"code": "database_unavailable", ...}}`` (``native.py``'s
+    ``_error_json`` shape). Feeding that into synthesis produces an answer
+    built on nothing; detecting it here lets the turn fail fast with a
+    specific, human-explainable error instead.
+    """
+    if not text.strip().startswith("{"):
+        return False
+    try:
+        payload = json.loads(text)
+    except (ValueError, TypeError):
+        return False
+    err = payload.get("error") if isinstance(payload, dict) else None
+    return isinstance(err, dict) and bool(err.get("code"))
 
 
 def _prune_tool_results_for_synthesis(messages: list[BaseMessage]) -> list[BaseMessage]:
@@ -162,6 +183,20 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
         # config, not per-model-call kwargs.
         stream_kwargs: dict[str, Any] = {"max_retries": settings.llm_max_retries}
 
+        if has_tools:
+            # Fast-fail when EVERY retrieval errored structurally: tool
+            # results are all native error JSON → the corpus is unreachable,
+            # and any "answer" synthesized from it is fabrication with a
+            # disclaimer stapled on.
+            tool_texts = _get_tool_content_list(messages)
+            if tool_texts and all(_is_db_error_json(t) for t in tool_texts):
+                timed_phase(state, "synthesis_ms", t0)
+                log.error("synthesis: all %d tool result(s) are DB-error JSON", len(tool_texts))
+                raise TurnError(
+                    "retrieval_unavailable",
+                    "every retrieval tool reported a database error; nothing to synthesize from",
+                )
+
         chunks: list[Any] = []
         raw_parts: list[str] = []
         async for chunk in astream_with_retry(synthesis_model, out_msgs, **stream_kwargs):
@@ -179,8 +214,14 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
                 usage(um)
 
         if not chunks:
+            # An empty stream is NOT a silent success — the client would see
+            # "composing" forever followed by a message with no body. Fail
+            # the turn with a code the frontend humanizes into real copy.
             timed_phase(state, "synthesis_ms", t0)
-            return {"messages": [], "round": state.get("round", 0) + 1}
+            raise TurnError(
+                "empty_response",
+                "the synthesis model returned an empty stream; nothing was composed",
+            )
 
         final = chunks[0]
         for chunk in chunks[1:]:

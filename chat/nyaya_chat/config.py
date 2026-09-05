@@ -69,6 +69,13 @@ CITATION_VERIFICATION = True
 # SSE keepalive: emit a ping event every N seconds to prevent proxy timeouts.
 SSE_KEEPALIVE_INTERVAL_S = 15.0
 
+# Turn wall-clock budget: nodes check the deadline between phases and fail the
+# turn with a ``timeout`` error event instead of grinding through retry loops
+# (each LLM call is up to LLM_TIMEOUT_S x LLM_MAX_RETRIES) until the client
+# gives up. Sized above the observed P90 turn latency so it clips only
+# runaway turns, never healthy ones.
+TURN_BUDGET_S = 180.0
+
 # Guardrail: intent classification before the agent pipeline.
 # Tier 1 is regex-based (instant); Tier 2 is an LLM call (only if Tier 1
 # is uncertain). Set to False to bypass the guardrail entirely (all messages
@@ -146,6 +153,7 @@ class Settings:
     max_reflection_rounds: int = MAX_REFLECTION_ROUNDS
     citation_verification: bool = CITATION_VERIFICATION
     sse_keepalive_interval_s: float = SSE_KEEPALIVE_INTERVAL_S
+    turn_budget_s: float = TURN_BUDGET_S
     guardrail_enabled: bool = GUARDRAIL_ENABLED
     guardrail_classifier_max_tokens: int = GUARDRAIL_CLASSIFIER_MAX_TOKENS
     guardrail_classifier_timeout_s: float = GUARDRAIL_CLASSIFIER_TIMEOUT_S
@@ -180,6 +188,7 @@ class Settings:
             "max_reflection_rounds": self.max_reflection_rounds,
             "citation_verification": self.citation_verification,
             "sse_keepalive_interval_s": self.sse_keepalive_interval_s,
+            "turn_budget_s": self.turn_budget_s,
             "guardrail_enabled": self.guardrail_enabled,
             "log_level": self.log_level,
         }

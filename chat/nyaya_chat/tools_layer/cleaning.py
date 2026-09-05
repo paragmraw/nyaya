@@ -73,6 +73,13 @@ def _stringified_blocks(stripped: str) -> str | None:
     return " ".join(_block_parts(parsed))
 
 
+def _cap(text: str) -> str:
+    """Cap at MAX_TOOL_CHARS with an explicit ellipsis (not a silent chop)."""
+    if len(text) <= MAX_TOOL_CHARS:
+        return text
+    return text[: MAX_TOOL_CHARS - 1] + "…"
+
+
 def clean_tool_content(content: Any, *, strip_corpus: bool = False) -> str:
     """Normalise a ToolMessage's content to a clean string capped at MAX_TOOL_CHARS.
 
@@ -94,13 +101,13 @@ def clean_tool_content(content: Any, *, strip_corpus: bool = False) -> str:
         stripped = content.strip()
         joined = _stringified_blocks(stripped)
         if joined is not None:
-            return joined[:MAX_TOOL_CHARS]
+            return _cap(joined)
         if strip_corpus:
-            return strip_corpus_tags(stripped)[:MAX_TOOL_CHARS]
-        return content[:MAX_TOOL_CHARS]
+            return _cap(strip_corpus_tags(stripped))
+        return _cap(stripped)
     if isinstance(content, list):
-        return " ".join(_block_parts(content))[:MAX_TOOL_CHARS]
-    return str(content)[:MAX_TOOL_CHARS]
+        return _cap(" ".join(_block_parts(content)))
+    return _cap(str(content))
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +168,11 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
         out = {k: hit[k] for k in keep_hit_fields if k in hit}
         snippet = hit.get(snippet_field)
         if isinstance(snippet, str):
-            out[snippet_field] = snippet[:_SNIPPET_CHARS]
+            out[snippet_field] = (
+                snippet[: _SNIPPET_CHARS - 1] + "…"
+                if len(snippet) > _SNIPPET_CHARS
+                else snippet
+            )
         return out
 
     first = results[0]
@@ -170,4 +181,4 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
         k: data[k] for k in config["keep_envelope_fields"] if k in data
     }
     pruned[config["list_key"]] = [first, *rest]
-    return json.dumps(pruned, default=str)[:MAX_TOOL_CHARS]
+    return _cap(json.dumps(pruned, default=str))

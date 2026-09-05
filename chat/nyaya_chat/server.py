@@ -133,27 +133,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         history = [t.model_dump() for t in req.history][-s.max_history:]
         log.info("chat turn request_id=%s msg_len=%d history=%d", rid, len(req.message), len(history))
 
-        # Guardrail: classify intent before entering the agent pipeline.
-        # Non-legal messages (greetings, capability questions, off-topic) get
-        # a canned SSE response instantly -- no supervisor/tool/synthesis calls.
-        intent = await classify_intent(req.message, s)
-        if intent != Intent.LEGAL:
-            log.info("guardrail: fast-path for intent=%s (skipping agent pipeline)", intent.value)
-            canned = get_canned_response(intent)
-
-            async def fast_path() -> AsyncIterator[bytes]:
-                yield _sse("meta", {"request_id": rid})
-                yield _sse("status", {"msg": "analyzing", "rid": rid})
-                yield _sse("status", {"msg": "composing", "rid": rid})
-                yield _sse("token", {"content": canned})
-                yield _sse("done", {})
-
-            return StreamingResponse(
-                fast_path(),
-                media_type="text/event-stream",
-                headers={**_SSE_HEADERS, "X-Request-ID": rid},
-            )
-
         # Normal pipeline: legal question goes through the full graph.
         messages = build_messages(req.message, history)
         keepalive_interval = s.sse_keepalive_interval_s
@@ -165,9 +144,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async def event_source() -> AsyncIterator[bytes]:
             yield _sse("meta", {"request_id": rid})
             yield _sse("status", {"msg": "analyzing", "rid": rid})
+
+            # Guardrail classification runs INSIDE the stream (fail-open):
+            # if the classifier hangs or errors, the client is already
+            # receiving events, so the turn degrades to the normal pipeline
+            # instead of the request stalling before a single byte flows.
+            try:
+                intent = await classify_intent(req.message, s)
+            except Exception:
+                log.exception("guardrail classification failed; failing open")
+                intent = Intent.LEGAL
+
+            if intent != Intent.LEGAL:
+                log.info("guardrail: fast-path for intent=%s (skipping agent pipeline)", intent.value)
+                canned = get_canned_response(intent)
+                yield _sse("status", {"msg": "composing", "rid": rid})
+                yield _sse("token", {"content": canned})
+                yield _sse("done", {})
+                return
+
             async for chunk in stream_turn(
                 graph, messages,
                 keepalive_interval=keepalive_interval, rid=rid, config=turn_config,
+                budget_s=s.turn_budget_s,
             ):
                 yield chunk
 

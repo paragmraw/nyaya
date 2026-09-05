@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import FakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from nyaya_chat.schemas_llm import ToolCallSpec, ToolPlan
@@ -826,3 +827,295 @@ def test_route_synthesis_ends_when_no_tools_were_called(settings):
         "round": 1,
     }
     assert route_synthesis(state, settings) == "end"
+
+
+# ---------------------------------------------------------------------------
+# Recovery: ToolPlan paths, transient-vs-permanent latch, deadline, empty
+# synthesis, DB-error short-circuit (formatting/recovery hardening batch)
+# ---------------------------------------------------------------------------
+
+
+def test_is_permanent_structured_failure_classifies():
+    """400-class rejections are permanent; 429/5xx/timeouts are transient."""
+    from nyaya_chat.graph.supervisor import _is_permanent_structured_failure
+    assert _is_permanent_structured_failure(
+        RuntimeError("Error 400: guided_json is not supported by this model"))
+    assert _is_permanent_structured_failure(
+        RuntimeError("422 Unprocessable Entity: response_format invalid"))
+    assert _is_permanent_structured_failure(
+        RuntimeError("HTTP 404: model not found"))
+    assert not _is_permanent_structured_failure(
+        RuntimeError("HTTP 429: rate limit exceeded"))
+    assert not _is_permanent_structured_failure(
+        RuntimeError("HTTP 503: service unavailable"))
+    assert not _is_permanent_structured_failure(
+        TimeoutError("request timed out after 60s"))
+
+
+@pytest.mark.asyncio
+async def test_supervisor_empty_plan_routes_to_synthesis(fake_model, settings, monkeypatch):
+    """A ToolPlan with an empty tool_calls list is a LEGITIMATE 'no retrieval
+    needed' outcome (documented on the schema): the plan reasoning is
+    forwarded to synthesis instead of crashing the node or dropping the turn."""
+    captured = _captured_events(monkeypatch)
+    fake_model._structured_result = ToolPlan(
+        reasoning="This is a greeting; no retrieval is needed.",
+        tool_calls=[],
+    )
+    from nyaya_chat.graph.supervisor import make_supervisor_node
+    node = make_supervisor_node(settings, fake_model, None)
+    out = await node({"messages": [HumanMessage(content="hi")], "rid": "s6"})
+    # Single AIMessage (the plan reasoning) with no tool calls → route_synthesis.
+    assert len(out["messages"]) == 1
+    ai = out["messages"][0]
+    assert isinstance(ai, AIMessage)
+    assert ai.content == "This is a greeting; no retrieval is needed."
+    assert not ai.tool_calls
+    assert "tool_start" not in [e["type"] for e in captured]
+
+
+@pytest.mark.asyncio
+async def test_supervisor_all_dropped_calls_triggers_retry(fake_model, settings, monkeypatch):
+    """A ToolPlan whose calls are ALL non-allowlisted falls through to the ONE
+    corrective retry; a retry that still yields nothing valid routes the plan
+    reasoning to synthesis as an AIMessage."""
+    _captured_events(monkeypatch)
+    # Both the original call and the corrective retry hit the SAME fake model,
+    # which always returns the off-allowlist plan.
+    fake_model._structured_result = ToolPlan(
+        reasoning="I would like to run a shell command.",
+        tool_calls=[ToolCallSpec(name="shell_exec", args={"cmd": "ls"})],
+    )
+    from nyaya_chat.graph.supervisor import make_supervisor_node
+    node = make_supervisor_node(settings, fake_model, None)
+    out = await node({"messages": [HumanMessage(content="q")], "rid": "s7"})
+    assert len(fake_model.calls) == 2  # original + corrective retry
+    assert len(out["messages"]) == 1
+    ai = out["messages"][0]
+    assert isinstance(ai, AIMessage) and not ai.tool_calls
+    assert ai.content == "I would like to run a shell command."
+
+
+@pytest.mark.asyncio
+async def test_supervisor_retry_recovers_plan_with_allowlisted_calls(fake_model, settings, monkeypatch):
+    """The corrective retry's ToolPlan response is handled: allowlisted calls
+    are executed; the retry reasoning is NOT forwarded (it was never streamed)."""
+    _captured_events(monkeypatch)
+    bad = ToolPlan(reasoning="", tool_calls=[
+        ToolCallSpec(name="shell_exec", args={"cmd": "ls"}),
+    ])
+    good = ToolPlan(reasoning="Retrying with the right tool.", tool_calls=[
+        ToolCallSpec(name="get_section", args={"act": "IPC", "section": "302"}),
+    ])
+    fake_model._structured_result = bad
+    from nyaya_chat.graph import supervisor as supervisor_mod
+    real = supervisor_mod.ainvoke_with_retry
+
+    async def _patched(model, msgs, **kw):
+        # The corrective retry invokes the same model object again — serve
+        # the good plan on that second pass only.
+        if model is fake_model and len(fake_model.calls) >= 1:
+            fake_model._structured_result = good
+        return await real(model, msgs, **kw)
+
+    monkeypatch.setattr(supervisor_mod, "ainvoke_with_retry", _patched)
+    from nyaya_chat.graph.supervisor import make_supervisor_node
+    node = make_supervisor_node(settings, fake_model, None)
+    out = await node({"messages": [HumanMessage(content="q")], "rid": "s8"})
+    assert len(out["messages"]) == 1
+    ai = out["messages"][0]
+    assert isinstance(ai, AIMessage) and ai.tool_calls
+    assert ai.tool_calls[0]["name"] == "get_section"
+
+
+@pytest.mark.asyncio
+async def test_supervisor_transient_structured_failure_does_not_latch(
+    fake_model, settings, monkeypatch,
+):
+    """A transient structured-output failure (429/5xx) falls back for THIS
+    turn only: the next turn attempts the structured path again."""
+    _captured_events(monkeypatch)
+    fallback = FakeChatModel()
+    fake_model._structured_result = ToolPlan(
+        reasoning="",
+        tool_calls=[ToolCallSpec(name="get_section", args={"act": "IPC", "section": "302"})],
+    )
+    fallback.responses = [AIMessage(content="", tool_calls=[
+        {"id": "tc_f", "name": "get_section", "args": {"act": "IPC", "section": "302"}},
+    ])]
+    from nyaya_chat.graph import supervisor as supervisor_mod
+    real = supervisor_mod.ainvoke_with_retry
+
+    calls = {"n": 0}
+
+    async def _flaky(model, msgs, **kw):
+        calls["n"] += 1
+        if model is fake_model and calls["n"] == 1:
+            raise RuntimeError("HTTP 429: too many requests")
+        return await real(model, msgs, **kw)
+
+    monkeypatch.setattr(supervisor_mod, "ainvoke_with_retry", _flaky)
+    from nyaya_chat.graph.supervisor import make_supervisor_node
+    node = make_supervisor_node(settings, fake_model, fallback)
+
+    out1 = await node({"messages": [HumanMessage(content="q")], "rid": "s9"})
+    # Turn 1: fell back to bind_tools → the fallback model's AIMessage with calls.
+    ai1 = [m for m in out1["messages"] if getattr(m, "tool_calls", None)][0]
+    assert ai1.tool_calls[0]["name"] == "get_section"
+
+    out2 = await node({"messages": [HumanMessage(content="q")], "rid": "s10"})
+    # Turn 2: structured path RETRIED (no permanent latch) → ToolPlan result.
+    ai2 = out2["messages"][-1]
+    assert isinstance(ai2, AIMessage) and ai2.tool_calls
+    # Turn 1's structured attempt raised before the model recorded a call;
+    # turn 2's attempt is the single recorded invocation.
+    assert len(fake_model.calls) == 1  # structured attempted again
+
+
+@pytest.mark.asyncio
+async def test_supervisor_permanent_structured_failure_latches(
+    fake_model, settings, monkeypatch,
+):
+    """A 400-class structured-output rejection latches for the node lifetime:
+    the NEXT turn skips the structured attempt entirely."""
+    captured = _captured_events(monkeypatch)
+    fallback = FakeChatModel()
+    fake_model._structured_result = ToolPlan(
+        reasoning="",
+        tool_calls=[ToolCallSpec(name="get_section", args={"act": "IPC", "section": "302"})],
+    )
+    fallback.responses = [AIMessage(content="", tool_calls=[
+        {"id": "tc_f", "name": "get_section", "args": {"act": "IPC", "section": "302"}},
+    ])]
+    from nyaya_chat.graph import supervisor as supervisor_mod
+    real = supervisor_mod.ainvoke_with_retry
+
+    attempts: dict[str, int] = {"structured": 0, "fallback": 0}
+
+    async def _guided_400(model, msgs, **kw):
+        if model is fake_model:
+            attempts["structured"] += 1
+            raise RuntimeError("Error 400: guided_json is not supported")
+        attempts["fallback"] += 1
+        return await real(model, msgs, **kw)
+
+    monkeypatch.setattr(supervisor_mod, "ainvoke_with_retry", _guided_400)
+    from nyaya_chat.graph.supervisor import make_supervisor_node
+    node = make_supervisor_node(settings, fake_model, fallback)
+
+    await node({"messages": [HumanMessage(content="q")], "rid": "s11"})
+    # The doomed structured round-trip is covered by a status event so the
+    # client's phase indicator does not stall during the fallback.
+    assert any(e["type"] == "status" and e.get("msg") == "analyzing"
+               for e in captured)
+    assert attempts["structured"] == 1
+
+    # Turn 2 (latched): the structured model is never attempted again —
+    # turn 2 goes straight to bind_tools. Without the latch, turn 2 would
+    # retry fake_model first (a second doomed structured attempt).
+    await node({"messages": [HumanMessage(content="q")], "rid": "s12"})
+    assert attempts["structured"] == 1  # unchanged
+    assert attempts["fallback"] == 3    # turn 1 + turn 2 (+ corrective retry)
+
+
+@pytest.mark.asyncio
+async def test_supervisor_deadline_exceeded_raises_turn_error(fake_model, settings):
+    """A blown wall-clock budget fails the turn with a 'timeout' TurnError
+    before any model call is made."""
+    import time
+
+    from nyaya_chat.errors import TurnError
+    from nyaya_chat.graph.supervisor import make_supervisor_node
+    node = make_supervisor_node(settings, fake_model, None)
+    with pytest.raises(TurnError) as exc_info:
+        await node({
+            "messages": [HumanMessage(content="q")],
+            "rid": "s13",
+            "deadline": time.monotonic() - 1.0,  # already spent
+        })
+    assert exc_info.value.code == "timeout"
+    assert fake_model.calls == []  # no model call was attempted
+
+
+class _EmptyStreamModel:
+    """A synthesis stand-in whose astream yields NOTHING (dead stream)."""
+
+    def __init__(self):
+        self.calls: list = []
+
+    async def astream(self, messages, **kw):
+        self.calls.append(messages)
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+
+@pytest.mark.asyncio
+async def test_synthesis_empty_stream_raises_turn_error(settings):
+    """An empty synthesis stream is a failed turn, not a silent success."""
+    from nyaya_chat.errors import TurnError
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+    node = make_synthesis_node(settings, _EmptyStreamModel(), has_tools=False)
+    with pytest.raises(TurnError) as exc_info:
+        await node({"messages": [HumanMessage(content="q")], "rid": "s14"})
+    assert exc_info.value.code == "empty_response"
+
+
+def _db_error_content() -> str:
+    return json.dumps({"error": {
+        "code": "database_unavailable",
+        "message": "connection refused",
+        "kind": "db",
+        "hint": "retry later",
+    }})
+
+
+@pytest.mark.asyncio
+async def test_synthesis_all_db_error_results_short_circuits(settings):
+    """When EVERY tool result is native error JSON, synthesis fails fast with
+    'retrieval_unavailable' instead of synthesizing from nothing."""
+    from nyaya_chat.errors import TurnError
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+    model = FakeChatModel(responses=[AIMessage(content="made up answer")])
+    node = make_synthesis_node(settings, model, has_tools=True)
+    state = {
+        "messages": [
+            HumanMessage(content="q"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {}},
+                {"id": "tc2", "name": "semantic_query", "args": {}},
+            ]),
+            ToolMessage(content=_db_error_content(), tool_call_id="tc1", name="get_section"),
+            ToolMessage(content=_db_error_content(), tool_call_id="tc2", name="semantic_query"),
+        ],
+        "rid": "s15",
+    }
+    with pytest.raises(TurnError) as exc_info:
+        await node(state)
+    assert exc_info.value.code == "retrieval_unavailable"
+    assert model.calls == []  # the model was never consulted
+
+
+@pytest.mark.asyncio
+async def test_synthesis_mixed_results_do_not_short_circuit(fake_model, settings):
+    """One real result alongside an error JSON still synthesizes — the
+    short-circuit fires only when EVERY tool errored."""
+    fake_model.responses = [AIMessage(content="Answer [[act: IPC, ref: s. 302]].")]
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+    node = make_synthesis_node(settings, fake_model, has_tools=True)
+    state = {
+        "messages": [
+            HumanMessage(content="q"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+                {"id": "tc2", "name": "semantic_query", "args": {}},
+            ]),
+            ToolMessage(
+                content='{"act": "IPC", "ref": "s. 302", "text": "real text"}',
+                tool_call_id="tc1", name="get_section",
+            ),
+            ToolMessage(content=_db_error_content(), tool_call_id="tc2", name="semantic_query"),
+        ],
+        "rid": "s16",
+    }
+    out = await node(state)  # no exception
+    assert out["messages"][0].content.startswith("Answer")
