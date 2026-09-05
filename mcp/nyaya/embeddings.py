@@ -3,7 +3,7 @@
 Replaces the v0.1 fastembed/onnxruntime-based local embedder. The v0.2 pipeline
 uses the NVIDIA API Catalog (``integrate.api.nvidia.com``) for both embedding
 (``nvidia/nemotron-3-embed-1b``, 2048-d) and reranking
-(``nvidia/llama-nemotron-rerank-1b-v2``). This works on any platform — including
+(``nvidia/llama-nemotron-rerank-vl-1b-v2``). This works on any platform — including
 the Alpine Docker image — with no native wheels.
 
 Both services are CPU-only from the caller's perspective: the heavy compute
@@ -35,6 +35,14 @@ EXPECTED_DIM = 2048
 # Query embeddings: cached 1 hour, 256 entries. The NVIDIA API is stateless;
 # caching avoids re-embedding identical queries within the TTL.
 _query_cache: TTLCache = TTLCache(maxsize=256, ttl=3600)
+_query_cache_lock = threading.Lock()
+
+# Rerank logits: same TTL/maxsize policy as embeddings. Rerank is the ~1s
+# tail of every semantic_search; identical (query, candidates) pairs recur
+# across reflection rounds and repeated user questions, and paying the full
+# rerank each time dominated repeated-query latency.
+_rerank_cache: TTLCache = TTLCache(maxsize=256, ttl=3600)
+_rerank_cache_lock = threading.Lock()
 
 _NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 
@@ -119,7 +127,7 @@ def _embed_via_api(texts: list[str], input_type: str) -> list[list[float]]:
     return out
 
 
-@cached(_query_cache)
+@cached(_query_cache, lock=_query_cache_lock)
 def embed_query(text: str) -> list[float]:
     """Embed a single query string. Results are cached per query string (1h TTL).
 
@@ -150,7 +158,8 @@ def rerank_query(query: str, candidates: list[str]) -> list[float]:
     """Rerank candidate passages against a query via the NVIDIA rerank API.
 
     Returns a list of relevance logits (higher = more relevant), one per
-    candidate, in the same order as ``candidates``.
+    candidate, in the same order as ``candidates``. Results are cached per
+    (query, candidates) pair (1h TTL) — see :func:`_rerank_cached`.
 
     The whole operation runs under a total deadline of ``RERANK_DEADLINE_S``
     seconds: each attempt's HTTP timeout is clamped to the remaining budget
@@ -160,6 +169,12 @@ def rerank_query(query: str, candidates: list[str]) -> list[float]:
     """
     if not candidates:
         return []
+    return _rerank_cached(query, tuple(candidates))
+
+
+@cached(_rerank_cache, lock=_rerank_cache_lock)
+def _rerank_cached(query: str, candidates: tuple[str, ...]) -> list[float]:
+    settings = get_settings()
     settings = get_settings()
     short = settings.reranker_model.split("/", 1)[-1] if settings.reranker_model.startswith("nvidia/") else settings.reranker_model
     url = f"https://ai.api.nvidia.com/v1/retrieval/nvidia/{short}/reranking"

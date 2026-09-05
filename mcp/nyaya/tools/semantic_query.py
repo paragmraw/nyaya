@@ -2,7 +2,7 @@
 
 Replaces the v0.1 search_law / hybrid_search / search_by_kind / search_judgments
 tools, and absorbs get_definition via the ``promote_definitions`` flag. Uses the
-NVIDIA nemotron-3-embed-1b embedder + llama-nemotron-rerank-1b-v2 reranker via the
+NVIDIA nemotron-3-embed-1b embedder + llama-nemotron-rerank-vl-1b-v2 reranker via the
 NVIDIA API.
 """
 

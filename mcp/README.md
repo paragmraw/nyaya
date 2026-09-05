@@ -8,7 +8,7 @@ An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Con
 
 - **16 tools**: `semantic_query` (embedding retrieval + reranking), `get_section`, `get_article`, `get_judgment`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment`, `get_amendments_for_article`, `corpus_stats`
 - **11 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
-- **Semantic search** via pgvector + NVIDIA `nemotron-3-embed-1b` (2048-d, 32k context, 34 Indic languages) and `llama-nemotron-rerank-1b-v2` reranker — works on any platform including Alpine (API-based, no native wheels needed)
+- **Semantic search** via pgvector + NVIDIA `nemotron-3-embed-1b` (2048-d, 32k context, 34 Indic languages) and `llama-nemotron-rerank-vl-1b-v2` reranker — works on any platform including Alpine (API-based, no native wheels needed)
 - **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
 - **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
 - **Fuzzy judgment lookup**: `get_judgment` matches by exact citation, exact title, or fuzzy title substring (≥ 8 chars to avoid false matches)

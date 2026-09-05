@@ -58,7 +58,10 @@ def test_per_phase_token_caps_defaults(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
     s = config.get_settings()
     assert s.supervisor_max_tokens == 512
-    assert s.synthesis_max_tokens == 2048
+    # The synthesis cap must fit thinking + answer: reasoning tokens share the
+    # completion budget, and a thinking-heavy question truncated to nothing at
+    # 2048 (observed live).
+    assert s.synthesis_max_tokens == 6144
 
 
 def test_per_phase_model_defaults(monkeypatch):

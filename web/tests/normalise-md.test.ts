@@ -132,3 +132,31 @@ test("leaves a heading mid-sentence split intact", () => {
   const out = normaliseMd(src);
   assert.match(out, /(^|\n)### Heading$/m);
 });
+
+// Spaced dashes in legal prose ("death - or life imprisonment") must NOT be
+// promoted to list bullets — only a dash after sentence-ending punctuation
+// plausibly starts an item.
+test("does not turn a mid-sentence prose dash into a list bullet", () => {
+  const src = "Punishable with death - or life imprisonment - for the remainder.";
+  const out = normaliseMd(src);
+  assert.ok(!/(^|\n)- /.test(out), `prose dash became a bullet:\n${out}`);
+});
+
+test("still bullets a dash after sentence-ending punctuation", () => {
+  const src = "The court held murder liable. - Intent was central.";
+  const out = normaliseMd(src);
+  assert.match(out, /(^|\n)- Intent was central/);
+});
+
+test("still bullets a dash after a colon", () => {
+  const src = "Reasons: - first the intent - then the act";
+  const out = normaliseMd(src);
+  assert.match(out, /(^|\n)- first the intent/);
+});
+
+test("keeps genuine multi-line list markers on their own lines", () => {
+  const src = "Reasons:\n- first\n- second";
+  const out = normaliseMd(src);
+  assert.match(out, /(^|\n)- first/);
+  assert.match(out, /(^|\n)- second/);
+});

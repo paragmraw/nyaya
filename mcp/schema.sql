@@ -93,20 +93,42 @@ create index if not exists cross_refs_from_idx on cross_refs (from_doc);
 create index if not exists cross_refs_to_idx on cross_refs (to_doc);
 
 -- ---------------------------------------------------------------------------
--- Additive migration (idempotent): ref_num stored generated column + index.
+-- Additive migration (idempotent): apply ONLY this block to a populated DB.
 --
--- db.list_sections previously ordered/filtered on the expression
---     coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0)
--- recomputed per row on every page. The generated column below is that exact
--- expression (byte-for-byte in semantics; only the unqualified column name
--- differs, as a generated column cannot reference the table alias). The
--- nullif/coalesce wrapper keeps rows whose ref has no leading digits
--- (e.g. 'AIR 1973 SC 1461') and would otherwise fail the int cast; they get
--- ref_num = 0, matching the historic ordering.
--- This block (the two statements below) is the ONLY part of this file that is
--- safe to apply to a populated database — see the WARNING at the top: a full
+-- 1. ref_num stored generated column + index.
+--    db.list_sections previously ordered/filtered on the expression
+--        coalesce(nullif(regexp_replace(d.ref, '[^0-9].*$', ''), '')::int, 0)
+--    recomputed per row on every page. The generated column below is that
+--    exact expression (byte-for-byte in semantics; only the unqualified
+--    column name differs, as a generated column cannot reference the table
+--    alias). The nullif/coalesce wrapper keeps rows whose ref has no leading
+--    digits (e.g. 'AIR 1973 SC 1461') and would otherwise fail the int cast;
+--    they get ref_num = 0, matching the historic ordering.
+--
+-- 2. Query-shaped indexes (all `if not exists`, no data touched).
+--    * acts(lower(short_name)) — get_act() and the join filters use
+--      `lower(short_name) = lower(%s)`; the case-sensitive unique constraint
+--      on short_name cannot serve the lowered comparison.
+--    * GIN trgm on lower(title) for judgments — get_document's judgment
+--      fallback runs `lower(d.title) like '%...%'` (and `= lower(...)`)
+--      which otherwise seq-scans the table; pg_trgm accelerates LIKE, ILIKE,
+--      equality and regex on this expression. Partial (kind='judgment')
+--      since only judgments are title-searched.
+--    * GIN trgm on metadata->>'articles_affected' for amendments —
+--      get_amendments_for_article runs a word-boundary regex (`~`) over
+--      that key per article; pg_trgm's GIN operator class supports `~`.
+--      Partial (kind='amendment') to keep it tiny.
+--
+-- This block is the ONLY part of this file that is safe to apply to a
+-- populated database — see the WARNING at the top: a full
 -- `psql -f mcp/schema.sql` run's drop-table section would destroy the corpus.
 -- ---------------------------------------------------------------------------
+create extension if not exists pg_trgm;
 alter table documents add column if not exists ref_num int
     generated always as (coalesce(nullif(regexp_replace(ref, '[^0-9].*$', ''), '')::int, 0)) stored;
 create index if not exists documents_act_ref_num_idx on documents (act_id, ref_num);
+create index if not exists acts_lower_short_name_idx on acts (lower(short_name));
+create index if not exists documents_judgment_title_trgm_idx
+    on documents using gin (lower(title) gin_trgm_ops) where kind = 'judgment';
+create index if not exists documents_articles_affected_trgm_idx
+    on documents using gin ((metadata->>'articles_affected') gin_trgm_ops) where kind = 'amendment';

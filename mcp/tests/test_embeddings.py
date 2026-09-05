@@ -1,5 +1,5 @@
-"""Unit tests for embeddings.py: shared lazy API clients and the overall
-rerank deadline.
+"""Unit tests for embeddings.py: shared lazy API clients, the overall
+rerank deadline, and the rerank TTL cache.
 
 The reranker deadline test uses a fake client (in place of the module-level
 httpx singleton) that stalls past the deadline, and asserts the call gives up
@@ -16,6 +16,15 @@ import pytest
 
 from nyaya import embeddings
 from nyaya.exceptions import EmbeddingUnavailable
+
+
+@pytest.fixture(autouse=True)
+def _clear_caches():
+    """Isolate tests from the module-level TTL caches (rerank results are
+    cached per (query, candidates); without this, the first fake-client test
+    would poison later ones that reuse the same query)."""
+    embeddings._rerank_cache.clear()
+    embeddings._query_cache.clear()
 
 
 class _FakeRerankResponse:
@@ -52,7 +61,7 @@ class _FakeRerankClient:
         self._stall_s = stall_s
 
     def post(self, url: str, json: Any = None, timeout: float | None = None) -> Any:
-        self.calls.append({"url": url, "timeout": timeout})
+        self.calls.append({"url": url, "timeout": timeout, "json": json})
         if self._stall_s:
             time.sleep(self._stall_s)
         if self._failure is not None:
@@ -143,6 +152,10 @@ def test_rerank_success_uses_shared_client(monkeypatch):
     assert scores == [2.0, 0.25]
     assert fake.calls[0]["url"].startswith("https://ai.api.nvidia.com/v1/retrieval/nvidia/")
     assert fake.calls[0]["timeout"] <= embeddings.RERANK_DEADLINE_S
+    payload = fake.calls[0]["json"]
+    assert payload["model"] == embeddings.get_settings().reranker_model
+    assert payload["query"] == {"text": "murder"}
+    assert payload["passages"] == [{"text": "a"}, {"text": "b"}]
 
 
 def test_empty_candidates_short_circuits(monkeypatch):
@@ -151,3 +164,16 @@ def test_empty_candidates_short_circuits(monkeypatch):
     monkeypatch.setattr(embeddings, "_get_http_client", lambda: fake)
     assert embeddings.rerank_query("q", []) == []
     assert fake.calls == []
+
+
+def test_rerank_cache_hits_skip_http(monkeypatch):
+    """A repeated (query, candidates) pair reuses cached logits — no HTTP call."""
+    fake = _FakeRerankClient()
+    monkeypatch.setattr(embeddings, "_get_http_client", lambda: fake)
+    first = embeddings.rerank_query("murder", ["a", "b"])
+    second = embeddings.rerank_query("murder", ["a", "b"])
+    assert first == second == [1.5, 0.5]
+    assert len(fake.calls) == 1  # second call was served from the TTL cache
+    # A different candidate list is a different cache key.
+    embeddings.rerank_query("murder", ["c"])
+    assert len(fake.calls) == 2

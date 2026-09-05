@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import threading
 import time
 from collections import defaultdict
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 from starlette.requests import Request
 from starlette.responses import Response
@@ -46,11 +47,37 @@ def _get_remote_address(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+class RateLimitDecision(NamedTuple):
+    """Outcome of a rate-limit check.
+
+    ``retry_after_s`` is the time until the current fixed window resets —
+    the honest value for the ``Retry-After`` response header (the old
+    middleware always claimed 60s regardless of the remaining window).
+    """
+
+    limited: bool
+    retry_after_s: float
+
+
 class RateLimitBackend(Protocol):
-    """Abstract rate-limit counter backend."""
+    """Abstract rate-limit counter backend.
+
+    ``is_limited`` is the simple boolean API (kept for direct/test use);
+    ``check`` additionally reports when the window resets so the middleware
+    can send an accurate ``Retry-After``. ``needs_thread`` tells the
+    middleware whether the backend does blocking I/O (Redis) and must be
+    dispatched via ``asyncio.to_thread`` — the in-memory backend is a
+    lock + dict update and runs inline on the event loop.
+    """
+
+    needs_thread: bool
 
     def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
         """Return True if the key has exceeded ``limit`` in the current window."""
+        ...
+
+    def check(self, key: str, limit: int, window_seconds: float = 60.0) -> RateLimitDecision:
+        """Check the key and report (limited, retry_after_s)."""
         ...
 
 
@@ -58,10 +85,13 @@ class InMemoryBackend:
     """Per-worker in-memory fixed-window counter (default, no Redis needed).
 
     Uses wall-clock time for the window so behaviour matches
-    :class:`RedisBackend`. Mutations of ``_counts`` run under a lock because
-    the middleware dispatches backend calls to worker threads via
-    ``asyncio.to_thread``; an unguarded read-modify-write can lose increments.
+    :class:`RedisBackend`. Mutations of ``_counts`` run under a lock; the
+    middleware calls this backend inline on the event loop (``needs_thread``
+    is False — the critical section is a few dict operations, cheaper than
+    the ``asyncio.to_thread`` hop it previously paid on every request).
     """
+
+    needs_thread = False
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -69,7 +99,9 @@ class InMemoryBackend:
             lambda: {"count": 0, "window": time.time()}
         )
 
-    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+    def _check_inner(
+        self, key: str, limit: int, window_seconds: float
+    ) -> RateLimitDecision:
         now = time.time()
         with self._lock:
             entry = self._counts[key]
@@ -77,9 +109,16 @@ class InMemoryBackend:
                 entry["count"] = 0
                 entry["window"] = now
             if entry["count"] >= limit:
-                return True
+                retry_after = max(0.0, entry["window"] + window_seconds - now)
+                return RateLimitDecision(True, retry_after)
             entry["count"] += 1
-            return False
+            return RateLimitDecision(False, 0.0)
+
+    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+        return self._check_inner(key, limit, window_seconds).limited
+
+    def check(self, key: str, limit: int, window_seconds: float = 60.0) -> RateLimitDecision:
+        return self._check_inner(key, limit, window_seconds)
 
 
 class RedisBackend:
@@ -94,19 +133,32 @@ class RedisBackend:
     restarts against a persistent Redis).
     """
 
+    needs_thread = True  # synchronous redis-py network I/O
+
     def __init__(self, redis_url: str) -> None:
         import redis  # type: ignore[import-untyped]
 
         self._redis = redis.from_url(redis_url, decode_responses=True)
 
-    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+    def _check_inner(self, key: str, limit: int, window_seconds: float) -> RateLimitDecision:
         now = int(time.time())
-        window_key = f"rl:{key}:{now // int(window_seconds)}"
+        window_index = now // int(window_seconds)
+        window_start = window_index * int(window_seconds)
+        window_key = f"rl:{key}:{window_index}"
         pipe = self._redis.pipeline()
         pipe.incr(window_key)
         pipe.expire(window_key, int(window_seconds) + 1)
         count, _ = pipe.execute()
-        return count > limit
+        if count > limit:
+            retry_after = max(0.0, window_start + int(window_seconds) - now)
+            return RateLimitDecision(True, retry_after)
+        return RateLimitDecision(False, 0.0)
+
+    def is_limited(self, key: str, limit: int, window_seconds: float = 60.0) -> bool:
+        return self._check_inner(key, limit, window_seconds).limited
+
+    def check(self, key: str, limit: int, window_seconds: float = 60.0) -> RateLimitDecision:
+        return self._check_inner(key, limit, window_seconds)
 
 
 def _create_backend() -> RateLimitBackend:
@@ -146,9 +198,9 @@ class RateLimitMiddleware:
     middleware falls back to an in-memory backend (fail-open).
 
     The middleware is a pure-ASGI callable: the 429 short-circuit sends the
-    same ``{"error": "rate_limited"}`` JSON body + ``Retry-After: 60`` header
-    the previous ``BaseHTTPMiddleware`` version produced, and streaming
-    responses no longer pass through a buffering response task.
+    unified error shape ``{"message": "rate_limited", "detail": ...}`` +
+    ``Retry-After: 60`` header (matching the frontend's error humanizer),
+    and streaming responses no longer pass through a buffering response task.
     """
 
     def __init__(
@@ -220,9 +272,14 @@ class RateLimitMiddleware:
         # Use the fallback backend if Redis has already failed.
         backend = self._fallback if self._redis_failed else self._backend
         try:
-            # Dispatch sync backend I/O to a worker thread to avoid blocking
-            # the event loop (RedisBackend does synchronous network I/O).
-            limited = await asyncio.to_thread(backend.is_limited, key, limit)
+            # Only Redis does blocking network I/O and needs a worker thread;
+            # the in-memory backend is a lock + dict update and runs inline —
+            # skipping the ``asyncio.to_thread`` hop on every request.
+            decision: RateLimitDecision
+            if backend.needs_thread:
+                decision = await asyncio.to_thread(backend.check, key, limit)
+            else:
+                decision = backend.check(key, limit)
         except Exception:
             if not self._redis_failed:
                 log.warning(
@@ -230,14 +287,17 @@ class RateLimitMiddleware:
                     "Falling back to in-memory rate limiting.", exc_info=True,
                 )
                 self._redis_failed = True
-            limited = await asyncio.to_thread(self._fallback.is_limited, key, limit)
+            decision = self._fallback.check(key, limit)
 
-        if limited:
+        if decision.limited:
             response = Response(
-                content='{"error": "rate_limited"}',
+                content='{"message": "rate_limited", '
+                '"detail": "too many requests; retry after the interval in Retry-After"}',
                 status_code=429,
                 media_type="application/json",
-                headers={"Retry-After": "60"},
+                # Time until the window actually resets (min 1s); the old
+                # middleware always claimed 60s.
+                headers={"Retry-After": str(max(1, math.ceil(decision.retry_after_s)))},
             )
             await response(scope, receive, send)
             return
@@ -267,7 +327,8 @@ class BodySizeLimitMiddleware:
         )
         if content_length and int(content_length) > self.max_bytes:
             response = Response(
-                content='{"error": "request_too_large"}',
+                content='{"message": "request_too_large", '
+                '"detail": "request body exceeds the size limit"}',
                 status_code=413,
                 media_type="application/json",
             )

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from nyaya_chat.agent import (
-    _had_tool_calls,
-    _has_citations,
+from nyaya_chat.citations import CITATION_RE
+from nyaya_chat.graph.synthesis import (
     _has_refusal,
+    _has_tool_calls,
     _wrap_tool_results_in_corpus_tags,
 )
+
+
+def _has_citations(text: str) -> bool:
+    return bool(CITATION_RE.search(text))
 
 
 def test_has_citations_true():
@@ -41,7 +45,7 @@ def test_had_tool_calls_true():
         AIMessage(content="", tool_calls=[{"id": "tc1", "name": "get_section", "args": {}}]),
         ToolMessage(content="result", tool_call_id="tc1", name="get_section"),
     ]
-    assert _had_tool_calls(msgs)
+    assert _has_tool_calls(msgs)
 
 
 def test_had_tool_calls_false():
@@ -49,11 +53,11 @@ def test_had_tool_calls_false():
         HumanMessage(content="q"),
         AIMessage(content="answer"),
     ]
-    assert not _had_tool_calls(msgs)
+    assert not _has_tool_calls(msgs)
 
 
 def test_had_tool_calls_empty():
-    assert not _had_tool_calls([])
+    assert not _has_tool_calls([])
 
 
 def test_wrap_tool_results_in_corpus_tags():

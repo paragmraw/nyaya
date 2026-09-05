@@ -26,11 +26,11 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from . import __version__
-from .agent import _build_messages, get_agent, get_agent_if_ready
 from .config import Settings, get_settings
+from .graph import get_graph, get_graph_if_ready
+from .graph.supervisor import build_messages
 from .guardrail import Intent, classify_intent, get_canned_response
-from .observability import configure_structlog
+from .observability import configure_structlog, get_langfuse_callbacks
 from .schemas import ChatRequest, ChatSubHealthResponse
 from .streaming import _sse, stream_turn
 
@@ -64,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or get_settings()
     app = FastAPI(
         title="nyaya-chat",
-        version=__version__,
+        version="0.1.0",
         description="LangGraph + NVIDIA Nemotron chat backend (sub-app of nyaya).",
         lifespan=lifespan,
         docs_url="/docs",
@@ -83,9 +83,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # Report the prewarmed graph if the host lifespan (or an earlier
             # request) built one; otherwise return the degraded payload
             # immediately — the build happens on the first /turn instead.
-            # ``get_agent_if_ready`` only reads already-built module state, so
+            # ``get_graph_if_ready`` only reads already-built module state, so
             # this is O(1).
-            graph, tools = get_agent_if_ready()
+            graph, tools = get_graph_if_ready()
             if graph is not None:
                 app.state.graph = graph
                 app.state.tools = tools
@@ -120,11 +120,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tools = getattr(app.state, "tools", None) or []
         if graph is None:
             try:
-                graph, tools = await get_agent()
+                graph, tools = await get_graph()
                 app.state.graph = graph
                 app.state.tools = tools
             except Exception:
-                log.exception("failed to build chat agent for turn")
+                log.exception("failed to build chat graph for turn")
                 return _agent_unavailable(rid, "chat agent temporarily unavailable")
 
         if graph is None:
@@ -133,36 +133,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         history = [t.model_dump() for t in req.history][-s.max_history:]
         log.info("chat turn request_id=%s msg_len=%d history=%d", rid, len(req.message), len(history))
 
-        # Guardrail: classify intent before entering the agent pipeline.
-        # Non-legal messages (greetings, capability questions, off-topic) get
-        # a canned SSE response instantly -- no supervisor/tool/synthesis calls.
-        intent = await classify_intent(req.message, s)
-        if intent != Intent.LEGAL:
-            log.info("guardrail: fast-path for intent=%s (skipping agent pipeline)", intent.value)
-            canned = get_canned_response(intent)
-
-            async def fast_path() -> AsyncIterator[bytes]:
-                yield _sse("meta", {"request_id": rid})
-                yield _sse("status", {"msg": "analyzing", "rid": rid})
-                yield _sse("status", {"msg": "composing", "rid": rid})
-                yield _sse("token", {"content": canned})
-                yield _sse("done", {})
-
-            return StreamingResponse(
-                fast_path(),
-                media_type="text/event-stream",
-                headers={**_SSE_HEADERS, "X-Request-ID": rid},
-            )
-
-        # Normal pipeline: legal question goes through the full agent graph.
-        messages = _build_messages(req.message, history)
+        # Normal pipeline: legal question goes through the full graph.
+        messages = build_messages(req.message, history)
         keepalive_interval = s.sse_keepalive_interval_s
+        # Observability wiring point: ONE config on graph.astream covers every
+        # node and model call in the turn.
+        callbacks = get_langfuse_callbacks()
+        turn_config = {"callbacks": callbacks} if callbacks else None
 
         async def event_source() -> AsyncIterator[bytes]:
             yield _sse("meta", {"request_id": rid})
             yield _sse("status", {"msg": "analyzing", "rid": rid})
+
+            # Guardrail classification runs INSIDE the stream (fail-open):
+            # if the classifier hangs or errors, the client is already
+            # receiving events, so the turn degrades to the normal pipeline
+            # instead of the request stalling before a single byte flows.
+            try:
+                intent = await classify_intent(req.message, s)
+            except Exception:
+                log.exception("guardrail classification failed; failing open")
+                intent = Intent.LEGAL
+
+            if intent != Intent.LEGAL:
+                log.info("guardrail: fast-path for intent=%s (skipping agent pipeline)", intent.value)
+                canned = get_canned_response(intent)
+                yield _sse("status", {"msg": "composing", "rid": rid})
+                yield _sse("token", {"content": canned})
+                yield _sse("done", {})
+                return
+
             async for chunk in stream_turn(
-                graph, messages, keepalive_interval=keepalive_interval, rid=rid,
+                graph, messages,
+                keepalive_interval=keepalive_interval, rid=rid, config=turn_config,
+                budget_s=s.turn_budget_s,
             ):
                 yield chunk
 
@@ -174,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/")
     async def root() -> dict[str, str]:
-        return {"service": "nyaya-chat", "version": __version__, "turn": "POST /chat/turn", "health": "GET /chat/health"}
+        return {"service": "nyaya-chat", "version": "0.1.0", "turn": "POST /chat/turn", "health": "GET /chat/health"}
 
     return app
 

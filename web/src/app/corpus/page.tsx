@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import CorpusTable from "@/components/CorpusTable";
+import CorpusDeepLink from "@/components/CorpusDeepLink";
 import StatCard from "@/components/StatCard";
 import Breadcrumb from "@/components/Breadcrumb";
 import StructuredData, { corpusSchema } from "@/components/StructuredData";
@@ -79,7 +79,7 @@ export default function CorpusPage() {
               <h2>Indexed sources</h2>
               <p className="sec-desc">Click a column header to sort. Filter by status to narrow the view.</p>
             </div>
-            <CorpusTable acts={acts} />
+            <CorpusDeepLink acts={acts} />
           </section>
 
           {/* refresh cadence */}

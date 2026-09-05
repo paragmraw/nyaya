@@ -43,7 +43,7 @@ _RESPONSES: dict[Intent, str] = {
         "Hello! I'm Nyaya, an assistant for Indian law. I can answer questions "
         "about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, "
         "commercial statutes, and landmark Supreme Court judgments. "
-        "Ask me about any provision, section, or case -- I'll cite the exact source."
+        "Ask me about any provision, section, or case — I'll cite the exact source."
     ),
     Intent.CAPABILITY: (
         "I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:\n\n"
