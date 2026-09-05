@@ -1,11 +1,15 @@
-"""Tests for nyaya_chat.tool_content — the shared tool-result cleaner."""
+"""Tests for nyaya_chat.tools_layer.cleaning — the shared tool-result cleaner."""
 
 from __future__ import annotations
 
 import json
 
 from nyaya_chat.config import MAX_TOOL_CHARS
-from nyaya_chat.tool_content import clean_tool_content, prune_list_result, strip_corpus_tags
+from nyaya_chat.tools_layer.cleaning import (
+    clean_tool_content,
+    prune_list_result,
+    strip_corpus_tags,
+)
 
 
 def _search_response(n_hits: int, snippet_len: int = 2000):
@@ -36,7 +40,7 @@ def test_clean_tool_content_string():
 
 
 def test_clean_tool_content_keeps_corpus_tags_by_default():
-    """The agent's dedup node cleans results BEFORE they are wrapped for the
+    """The tools node cleans results BEFORE they are wrapped for the
     synthesis prompt, so the default must not strip a wrapper."""
     content = "<corpus_text>\nIPC s.302 punishment text\n</corpus_text>"
     assert clean_tool_content(content) == content

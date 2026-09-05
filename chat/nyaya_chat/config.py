@@ -98,20 +98,25 @@ MAX_TOOL_CHARS = 8000
 # Chat logger level.
 LOG_LEVEL = "INFO"
 
-# Curated default tool set. The nyaya MCP server exposes 16 tools; we expose
-# the 6 most useful for grounded Q&A. resolve_citation was folded into
-# get_section/get_article (they accept citation strings). corpus_stats is
-# dropped (list_acts gives the same discovery signal). hybrid_search was
-# removed in the v0.2 20->16 tool consolidation; semantic_query (embedding
-# retrieval + reranking) covers the same use case.
-DEFAULT_TOOLS: tuple[str, ...] = (
-    "semantic_query",
-    "get_section",
-    "get_article",
-    "get_judgment",
-    "cross_reference",
-    "list_acts",
-)
+
+# ---------------------------------------------------------------------------
+# Module-level attribute fallback (PEP 562)
+# ---------------------------------------------------------------------------
+
+def __getattr__(name: str):  # noqa: ANN202 - PEP 562 signature
+    """Resolve ``DEFAULT_TOOLS`` from the tool spec at access time.
+
+    The curated default tool set (the 6 most useful of the MCP server's 16
+    for grounded Q&A — resolve_citation was folded into
+    get_section/get_article, corpus_stats dropped, hybrid_search removed in
+    the v0.2 consolidation) is defined ONCE in ``tools_layer/spec.py``; it
+    cannot be imported at module level here because the ``tools_layer``
+    package imports this module. Imported lazily, both directions resolve.
+    """
+    if name == "DEFAULT_TOOLS":
+        from .tools_layer.spec import DEFAULT_TOOLS as _tools
+        return _tools
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _redact(secret: str | None) -> str | None:
@@ -147,7 +152,9 @@ class Settings:
 
     @property
     def tool_allowlist(self) -> tuple[str, ...]:
-        """The curated default tool set exposed to the agent."""
+        """The curated default tool set exposed to the agent (spec.py is the
+        single source of truth)."""
+        from .tools_layer.spec import DEFAULT_TOOLS
         return DEFAULT_TOOLS
 
     @property

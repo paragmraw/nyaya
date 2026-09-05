@@ -109,13 +109,14 @@ def _check_refusal(answer: str) -> bool:
 
 
 async def eval_e2e(cases: list[GoldenCase], timeout: float = 120) -> E2EReport:
-    from nyaya_chat.agent import _build_messages, get_agent
     from nyaya_chat.citations import CITATION_RE
+    from nyaya_chat.graph import get_graph
+    from nyaya_chat.graph.supervisor import build_messages
 
     report = E2EReport(total=len(cases))
     results: list[CaseResult] = []
 
-    graph, tools = await get_agent()
+    graph, tools = await get_graph()
 
     for case in cases:
         start = time.monotonic()
@@ -123,7 +124,7 @@ async def eval_e2e(cases: list[GoldenCase], timeout: float = 120) -> E2EReport:
         error: str | None = None
 
         try:
-            msgs = _build_messages(case.question, [])
+            msgs = build_messages(case.question, [])
             result = await asyncio.wait_for(
                 graph.ainvoke({"messages": msgs}),
                 timeout=timeout,

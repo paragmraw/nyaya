@@ -660,7 +660,10 @@ def print_final_report(results: list[StreamResult], verbose: bool = False) -> No
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chat quality eval harness (merged)")
-    parser.add_argument("--host", default="http://localhost:8001", help="Base URL of the nyaya server")
+    # Default 127.0.0.1, not localhost: on Windows, urllib resolves localhost
+    # to ::1 first and the connection stall (server binds IPv4) inflated every
+    # measured latency by ~2s — enough to fail every canned-path latency check.
+    parser.add_argument("--host", default="http://127.0.0.1:8001", help="Base URL of the nyaya server")
     parser.add_argument("--verbose", action="store_true", help="Print detailed per-scenario output")
     parser.add_argument("--scenario", "--test", dest="scenario", default=None,
                         help="Run a single scenario by ID (alias: --test)")

@@ -33,14 +33,14 @@ _ALLOWED_ORIGINS = ["https://nyaya.parag.tech"]
 
 @lifespan_decorator
 async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
-    # Pre-warm: build the chat agent at startup so the first request doesn't
+    # Pre-warm: build the chat graph at startup so the first request doesn't
     # pay the tool-loading + graph-compilation cost. The agent is built
-    # lazily by get_agent() if this fails (e.g. DB unavailable at startup).
+    # lazily by get_graph() if this fails (e.g. DB unavailable at startup).
     try:
         if os.environ.get("NVIDIA_API_KEY"):
             try:
-                from nyaya_chat.agent import get_agent as _get_chat_agent
-                await _get_chat_agent()
+                from nyaya_chat.graph import get_graph as _get_chat_graph
+                await _get_chat_graph()
                 log.info("chat agent pre-warmed at startup")
             except ImportError:
                 pass  # nyaya_chat not installed
