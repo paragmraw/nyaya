@@ -34,20 +34,26 @@ _ALLOWED_ORIGINS = ["https://nyaya.parag.tech"]
 @lifespan_decorator
 async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     # Pre-warm: build the chat graph at startup so the first request doesn't
-    # pay the tool-loading + graph-compilation cost. The agent is built
+    # pay the tool-loading + graph-compilation cost. The graph is built
     # lazily by get_graph() if this fails (e.g. DB unavailable at startup).
-    try:
-        if os.environ.get("NVIDIA_API_KEY"):
-            try:
-                from nyaya_chat.graph import get_graph as _get_chat_graph
-                await _get_chat_graph()
-                log.info("chat agent pre-warmed at startup")
-            except ImportError:
-                pass  # nyaya_chat not installed
-            except Exception as exc:
-                log.warning("chat agent pre-warm failed (will retry on first request): %s", exc)
-    except Exception:
-        pass
+    #
+    # Failure modes are distinct and deliberate:
+    #   • nyaya_chat not installed (slim MCP-only image) → info, continue
+    #   • build failed (DB down, bad key) → warning + traceback, continue;
+    #     the first /turn retries the build, so swallowing this is correct
+    # The old triple-nested try/except/pass hid genuine bugs (e.g. a typo in
+    # the import path) as a silent skip; the traceback keeps them visible.
+    if not os.environ.get("NVIDIA_API_KEY"):
+        log.info("NVIDIA_API_KEY not set; chat graph not pre-warmed")
+    else:
+        try:
+            from nyaya_chat.graph import get_graph as _get_chat_graph
+            await _get_chat_graph()
+            log.info("chat graph pre-warmed at startup")
+        except ImportError:
+            log.info("nyaya_chat package not installed; chat graph not pre-warmed")
+        except Exception:
+            log.warning("chat graph pre-warm failed (will retry on first request)", exc_info=True)
     try:
         yield {}
     finally:
