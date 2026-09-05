@@ -1,0 +1,36 @@
+
+============================================================
+Retrieval Evaluation — recall@10
+============================================================
+Cases: 25
+Mean Recall@10: 100.00%
+Mean Latency: 4628ms
+────────────────────────────────────────────────────────────
+  ✓ ipc-302              recall=100% found=[✓] 8703ms
+  ✓ ipc-375              recall=100% found=[✓] 5016ms
+  ✓ art-21               recall=100% found=[✓] 4500ms
+  ✓ art-14               recall=100% found=[✓] 4500ms
+  ✓ ipc-499              recall=100% found=[✓] 4437ms
+  ✓ bns-103              recall=100% found=[✓] 4594ms
+  ✓ ipc-302-vs-bns       recall=100% found=[✓,✓] 4500ms
+  ✓ art-32               recall=100% found=[✓] 4313ms
+  ✓ ipc-34               recall=100% found=[✓] 4281ms
+  ✓ art-19               recall=100% found=[✓] 4328ms
+  ✓ ipc-395              recall=100% found=[✓] 4594ms
+  ✓ art-44               recall=100% found=[✓] 4531ms
+  ✓ ipc-420              recall=100% found=[✓] 4437ms
+  ✓ art-15               recall=100% found=[✓] 4407ms
+  ✓ ipc-354              recall=100% found=[✓] 4437ms
+  ✓ bns-def              recall=100% found=[✓] 4516ms
+  ✓ ipc-96               recall=100% found=[✓] 4281ms
+  ✓ art-22               recall=100% found=[✓] 4391ms
+  ✓ ipc-299              recall=100% found=[✓] 4390ms
+  ✓ art-51a              recall=100% found=[✓] 4360ms
+  ✓ ipc-379              recall=100% found=[✓] 4484ms
+  ✓ nonexistent          recall=100% found=[] 0ms
+  ✓ art-25               recall=100% found=[✓] 4344ms
+  ✓ ipc-120a             recall=100% found=[✓] 4328ms
+  ✓ art-368              recall=100% found=[✓] 4406ms
+============================================================
+
+PASS: mean recall 100.00% >= 70% threshold

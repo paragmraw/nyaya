@@ -17,8 +17,8 @@ from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from . import __version__, db
 from . import config as _config
-from . import db
 from .config import get_settings
 from .exceptions import DatabaseUnavailable
 from .ratelimit import register_rate_limiting
@@ -91,7 +91,7 @@ def _build_mcp() -> FastMCP:
             {
                 "status": status,
                 "service": "nyaya",
-                "version": "0.2.0",
+                "version": __version__,
                 "counts": stats,
             }
         )

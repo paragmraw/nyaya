@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nyaya"
-version = "0.2.0"
+dynamic = ["version"]  # single source: __version__ in nyaya/__init__.py
 description = "MCP server for Indian law: Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments."
 readme = "README.md"
 license = "Apache-2.0"
@@ -16,11 +16,9 @@ dependencies = [
     "fastmcp>=2.13.0",
     "psycopg[binary]>=3.2,<4",
     "psycopg-pool>=3.2,<4",
-    "pgvector>=0.5.0,<1",
     "pydantic>=2.7,<3",
     "httpx>=0.27,<1",
     "openai>=1.0,<2",
-    "PyYAML>=6.0,<7",
     "typing-extensions>=4.12,<5",
     "cachetools>=5.5,<7",
     "redis>=5.0,<6",
@@ -45,6 +43,9 @@ Issues = "https://github.com/your-org/nyaya/issues"
 
 [project.scripts]
 nyaya = "nyaya.server:main"
+
+[tool.hatch.version]
+path = "nyaya/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nyaya"]
