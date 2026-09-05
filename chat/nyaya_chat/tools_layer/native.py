@@ -25,7 +25,7 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Literal, cast
 
 from langchain_core.tools import StructuredTool
 
@@ -155,7 +155,10 @@ async def _cross_reference(act: str, section: str, direction: str = "both") -> s
     try:
         if direction not in ("both", "from", "to"):
             raise SearchError(f"direction must be 'both', 'from', or 'to', got {direction!r}.")
-        refs = await asyncio.to_thread(db.get_cross_refs, act, section, direction)
+        refs = await asyncio.to_thread(
+            db.get_cross_refs, act, section,
+            cast(Literal["both", "from", "to"], direction),
+        )
         return json.dumps({
             "from_act": act, "from_section": section,
             "references": [r.model_dump() for r in refs], "direction": direction,

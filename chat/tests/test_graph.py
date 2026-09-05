@@ -44,6 +44,14 @@ def test_system_prompt_instructs_structuring_and_glossing():
     assert "Never use a single #" in SYSTEM_PROMPT
 
 
+def test_system_prompt_forbids_process_narration():
+    """The synthesis prompt must tell the model to keep its planning out of
+    the answer body — the answer shows the final answer only."""
+    from nyaya_chat.llm import SYSTEM_PROMPT
+    assert "final answer ONLY" in SYSTEM_PROMPT
+    assert "thinking process" in SYSTEM_PROMPT
+
+
 def test_supervisor_prompt_lists_allowlisted_tools():
     """The supervisor prompt's tool list is rendered from tools_layer.spec —
     a drift between the prompt and the allowlist is impossible by construction."""
@@ -1168,3 +1176,166 @@ async def test_synthesis_not_found_only_results_synthesize_refusal(fake_model, s
     out = await node(state)  # no exception — synthesis composes the refusal
     assert fake_model.calls  # the model was consulted
     assert "99999" in out["messages"][0].content
+
+
+# ---------------------------------------------------------------------------
+# Reasoning-leak guard + keep-better reflection (see synthesis.py)
+# ---------------------------------------------------------------------------
+
+
+class _FakeStreamingModel:
+    """astream fake that yields scripted AIMessageChunks in order.
+
+    The synthesis node only calls ``astream`` (via ``astream_with_retry``);
+    no other model methods are needed for the leak/keep-better tests.
+    """
+
+    nyaya_fake_model = True
+
+    def __init__(self, chunks: list):
+        self._chunks = chunks
+        self.calls: list = []
+
+    def with_generation_params(self, *, temperature=None, max_tokens=None):
+        return self
+
+    async def astream(self, messages, **kw):
+        self.calls.append(messages)
+        for c in self._chunks:
+            yield c
+
+
+_LEAK_REASONING = (
+    "Here's a thinking process:\n\n1.  **Analyze User Input:** The user is asking"
+    " for the difference between murder and culpable homicide under Indian law.\n"
+    "2.  **Recall the corpus:** IPC sections 299-302 define the two offences; "
+    "culpable homicide is the genus and murder the species, distinguished by "
+    "intention, knowledge, and the degree of likelihood of death.\n"
+)  # a single >200-char deliberation passage
+
+
+def _leak_state() -> dict:
+    return {
+        "messages": [
+            HumanMessage(content="What is the difference between murder and culpable homicide?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            ]),
+            ToolMessage(
+                content='{"act": "IPC", "ref": "s. 302", "kind": "section", "text": "intentional killing"}',
+                tool_call_id="tc1", name="get_section",
+            ),
+        ],
+        "rid": "leak1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_synthesis_hides_reasoning_duplicate_from_answer_stream(settings, monkeypatch):
+    """The NVIDIA API re-sent the entire accumulated reasoning_content as one
+    giant content chunk (observed live: an 8.6K-char chunk byte-identical to
+    the reasoning buffer). That deliberation must reach the reasoning trace,
+    never the answer tokens or the final message."""
+    from langchain_core.messages import AIMessageChunk
+
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+
+    captured = _captured_events(monkeypatch)
+    answer = "Murder requires intention [[act: IPC, ref: s. 302]]."
+    model = _FakeStreamingModel([
+        AIMessageChunk(content="", additional_kwargs={"reasoning_content": _LEAK_REASONING}),
+        AIMessageChunk(content=_LEAK_REASONING),  # the flush: byte-identical re-send
+        AIMessageChunk(content=answer),
+    ])
+    node = make_synthesis_node(settings, model, has_tools=True)
+    out = await node(_leak_state())
+
+    tokens = "".join(e["content"] for e in captured if e["type"] == "token")
+    assert tokens == answer  # the leak never reaches the answer body
+    reasoning_emitted = "".join(e["content"] for e in captured if e["type"] == "reasoning")
+    assert _LEAK_REASONING in reasoning_emitted  # it lands in the trace instead
+    final = out["messages"][0].content
+    assert "thinking process" not in final
+    assert "[[act: IPC, ref: s. 302]]" in final
+
+
+@pytest.mark.asyncio
+async def test_synthesis_dedupes_reasoning_buffer_flush(settings, monkeypatch):
+    """The API re-sends the accumulated reasoning buffer as one giant delta
+    (observed live: 4,021- and 7,920-char reasoning deltas byte-identical to
+    the buffer). The trace must not duplicate it, and the content stream of
+    the SAME chunk must still be processed."""
+    from langchain_core.messages import AIMessageChunk
+
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+
+    captured = _captured_events(monkeypatch)
+    answer = "Murder requires intention [[act: IPC, ref: s. 302]]."
+    model = _FakeStreamingModel([
+        AIMessageChunk(content="", additional_kwargs={"reasoning_content": _LEAK_REASONING}),
+        # flush: byte-identical re-send of the buffer, WITH content on the
+        # same chunk — the content must not be lost
+        AIMessageChunk(content=answer, additional_kwargs={"reasoning_content": _LEAK_REASONING}),
+        AIMessageChunk(content=" Section 300 defines murder."),
+    ])
+    node = make_synthesis_node(settings, model, has_tools=True)
+    out = await node(_leak_state())
+
+    reasoning_emitted = "".join(e["content"] for e in captured if e["type"] == "reasoning")
+    assert reasoning_emitted.count("Here's a thinking process") == 1  # no duplicate flush
+    tokens = "".join(e["content"] for e in captured if e["type"] == "token")
+    assert answer + " Section 300 defines murder." == tokens  # content survived
+    assert "[[act: IPC, ref: s. 302]]" in out["messages"][0].content
+    """When the flush is the ONLY content (the model never wrote an answer
+    before truncation), the turn still completes: the verified note + disclaimer
+    text is emitted as a correction and routed to reflection — no crash."""
+    from langchain_core.messages import AIMessageChunk
+
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+
+    captured = _captured_events(monkeypatch)
+    model = _FakeStreamingModel([
+        AIMessageChunk(content="", additional_kwargs={"reasoning_content": _LEAK_REASONING}),
+        AIMessageChunk(content=_LEAK_REASONING),
+    ])
+    node = make_synthesis_node(settings, model, has_tools=True)
+    out = await node(_leak_state())
+    final = out["messages"][0].content
+    assert "thinking process" not in final
+    corrections = [e["content"] for e in captured if e["type"] == "correction"]
+    assert corrections  # the frontend is told to replace the (empty) stream
+
+
+@pytest.mark.asyncio
+async def test_synthesis_keeps_cited_answer_over_uncited_resynthesis(fake_model, settings, monkeypatch):
+    """Keep-better across reflection rounds: when round 2 re-synthesizes on the
+    SAME tool results (the supervisor found nothing new to retrieve) and its
+    answer has no citations while the previous round's answer did, the previous
+    answer is kept and a correction restores it — the observed regression was a
+    degenerate 63-char round-2 answer replacing a good round-1 answer."""
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+
+    captured = _captured_events(monkeypatch)
+    prev = "Culpable homicide is the genus; murder the species [[act: IPC, ref: s. 300]]."
+    fake_model.responses = ["I could not find anything about that."]
+    node = make_synthesis_node(settings, fake_model, has_tools=True)
+    state = {
+        "messages": [
+            HumanMessage(content="difference between murder and culpable homicide?"),
+            AIMessage(content=prev),  # round-1 final answer
+            AIMessage(content="", tool_calls=[
+                {"id": "tc2", "name": "semantic_query", "args": {"query": "murder vs culpable homicide"}},
+            ]),
+            ToolMessage(content=json.dumps({"results": []}), tool_call_id="tc2", name="semantic_query"),
+        ],
+        "round": 1,
+        "last_answer": prev,
+        "last_answer_cited": True,
+        "rid": "keep1",
+    }
+    out = await node(state)
+    assert out["messages"] == []  # the junk answer is NOT added to history
+    assert out["round"] == 2
+    assert out["last_answer"] == prev  # the kept answer stays authoritative
+    corrections = [e["content"] for e in captured if e["type"] == "correction"]
+    assert corrections[-1] == prev  # the frontend is restored to the good answer

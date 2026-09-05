@@ -601,6 +601,16 @@ export function useChat(): UseChat {
               });
               break;
             case "status":
+              // A second synthesis round ("composing") starts a FRESH answer:
+              // the earlier round's text was already replaced by its verified
+              // correction (or superseded). Without this reset the new round's
+              // tokens append to the old round's text and the answer body
+              // shows both glued together.
+              if ((payload.msg as string) === "composing" && accContent) {
+                accContent = "";
+                contentDirty = true;
+                batcher.schedule();
+              }
               updateAssistant({ status: (payload.msg as string) || "" });
               break;
             case "ping":

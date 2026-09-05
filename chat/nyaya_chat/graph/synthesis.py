@@ -35,6 +35,30 @@ from .state import ChatState
 
 log = logging.getLogger("nyaya_chat.graph.synthesis")
 
+# A single content delta at or above this size whose opening matches the
+# already-streamed reasoning is treated as a reasoning duplicate (see
+# ``_is_reasoning_leak``). Real answer deltas are word-sized.
+REASONING_LEAK_MIN_CHARS = 200
+
+
+def _is_reasoning_leak(text: str, reasoning_buffer: str) -> bool:
+    """Detect a content delta that duplicates already-streamed reasoning.
+
+    The NVIDIA API has been observed to re-send the entire accumulated
+    ``reasoning_content`` as ONE giant content delta (a server-side flush of
+    an unclosed think block — seen live as an 8.6K-char chunk byte-identical
+    to the reasoning buffer, right as the synthesis stream was truncated).
+    Streaming that to the user leaks the model's deliberation into the
+    answer body. Such a chunk is routed to the reasoning trace instead.
+
+    A legitimate answer delta that verbatim-repeats 200+ consecutive chars
+    of the model's reasoning would be a degenerate echo — hiding it is
+    correct either way, so the heuristic errs toward suppression.
+    """
+    if not reasoning_buffer or len(text) < REASONING_LEAK_MIN_CHARS:
+        return False
+    return text[:REASONING_LEAK_MIN_CHARS] in reasoning_buffer
+
 
 def _is_db_error_json(text: str) -> bool:
     """True when a tool result is the native layer's *unavailability* error JSON.
@@ -207,14 +231,39 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
 
         chunks: list[Any] = []
         raw_parts: list[str] = []
+        leaked_parts: list[str] = []
+        reasoning_buf = ""
         async for chunk in astream_with_retry(synthesis_model, out_msgs, **stream_kwargs):
             chunks.append(chunk)
             ak = getattr(chunk, "additional_kwargs", None) or {}
             reasoning = ak.get("reasoning_content")
-            if isinstance(reasoning, str) and reasoning:
+            if isinstance(reasoning, str) and reasoning and not (
+                # The API sometimes re-sends the accumulated reasoning buffer
+                # as one giant delta (observed live: 4,021- and 7,920-char
+                # deltas byte-identical to the buffer, the last right before
+                # truncation). Emitting it again would duplicate the trace.
+                len(reasoning) >= REASONING_LEAK_MIN_CHARS
+                and reasoning_buf.endswith(reasoning)
+            ):
+                reasoning_buf += reasoning
                 reasoning_event(reasoning)
+            elif isinstance(reasoning, str) and reasoning:
+                log.warning(
+                    "synthesis: suppressed duplicate reasoning flush (%d chars)",
+                    len(reasoning),
+                )
             text = _chunk_text(getattr(chunk, "content", None))
             if text:
+                if _is_reasoning_leak(text, reasoning_buf):
+                    # The API re-sent its buffered thinking as content: show
+                    # it in the reasoning trace, never in the answer body.
+                    log.warning(
+                        "synthesis: suppressed reasoning-leak content chunk "
+                        "(%d chars) — routed to the reasoning trace", len(text),
+                    )
+                    leaked_parts.append(text)
+                    reasoning_event(text)
+                    continue
                 token_event(text)
                 raw_parts.append(text)
             um = getattr(chunk, "usage_metadata", None)
@@ -231,10 +280,16 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
                 "the synthesis model returned an empty stream; nothing was composed",
             )
 
+        # The accepted token stream is the answer text — leak-suppressed
+        # chunks are excluded here AND from the returned message, so the
+        # verified answer, the reflection routing, and the frontend all see
+        # the same leak-free text.
+        raw_text = "".join(raw_parts)
         final = chunks[0]
         for chunk in chunks[1:]:
             final = final + chunk
-        raw_text = _chunk_text(final.content)
+        if leaked_parts and _chunk_text(final.content) != raw_text:
+            final = AIMessage(content=raw_text)
         answer_text = raw_text
 
         # Citation verification: the ONE authoritative pass. The verified
@@ -254,6 +309,31 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
         # and the reflection routing all see the same answer.
         if "not legal advice" not in answer_text.lower():
             answer_text = answer_text.rstrip() + f"\n\n*{DISCLAIMER}*"
+
+        # Keep-better across reflection rounds. A reflection round re-runs on
+        # the SAME tool results when the supervisor finds nothing new to
+        # retrieve, and its re-synthesis can degenerate (observed live: a
+        # 63-char tool-call echo). Such an answer must not replace a previous
+        # round's answer that already cites the corpus — keep the previous
+        # one and let a ``correction`` event restore the client's view.
+        prev_answer = state.get("last_answer", "")
+        prev_cited = state.get("last_answer_cited", False)
+        new_cited = bool(CITATION_RE.search(answer_text))
+        if prev_answer and prev_cited and not new_cited:
+            log.info(
+                "synthesis: keeping previous cited answer over uncited "
+                "re-synthesis (round %d)", state.get("round", 0) + 1,
+            )
+            # This round's (worse) tokens already streamed to the client;
+            # the correction replaces them with the kept answer.
+            correction_event(prev_answer)
+            timed_phase(state, "synthesis_ms", t0)
+            return {
+                "messages": [],
+                "round": state.get("round", 0) + 1,
+                "last_answer": prev_answer,
+                "last_answer_cited": True,
+            }
 
         if answer_text != raw_text:
             final = AIMessage(content=answer_text)
@@ -277,8 +357,14 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
             synthesis_ms, len(raw_text), len(answer_text),
         )
 
-        # Increment round counter for reflection routing
-        return {"messages": [final], "round": state.get("round", 0) + 1}
+        # Increment round counter for reflection routing; record this round's
+        # answer so a following reflection round can keep it if it is better.
+        return {
+            "messages": [final],
+            "round": state.get("round", 0) + 1,
+            "last_answer": answer_text,
+            "last_answer_cited": new_cited,
+        }
 
     return _synthesis
 

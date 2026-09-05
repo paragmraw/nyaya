@@ -53,7 +53,7 @@ LLM_MAX_RETRIES = 4               # retries on 429/5xx with exponential backoff
 
 # Per-phase token caps.
 SUPERVISOR_MAX_TOKENS = 512       # supervisor plans and delegates; short output
-SYNTHESIS_MAX_TOKENS = 2048       # synthesis composes the final answer (capped to prevent runaway verbosity)
+SYNTHESIS_MAX_TOKENS = 6144       # synthesis composes the final answer; the cap must leave room for the model's thinking tokens too (they share the completion budget — observed live: thinking-heavy questions spent ~3k+ tokens reasoning before writing a word, truncating answers to nothing at 2048)
 
 # Reflection loop: when the synthesis answer appears ungrounded (no citations
 # and tools were called), the agent can do one more retrieval round. This cap

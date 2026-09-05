@@ -22,6 +22,12 @@ class ChatState(TypedDict, total=False):
     # drives the reflection routing cap (settings.max_reflection_rounds) and
     # tells the supervisor it is on a reflection round (round >= 1).
     round: int
+    # The previous synthesis round's verified answer text and whether it
+    # carried corpus citations. The keep-better rule (synthesis node) refuses
+    # to replace a cited answer with an uncited re-synthesis from a later
+    # reflection round that ran on the same tool results.
+    last_answer: str
+    last_answer_cited: bool
     # Per-request tool-call dedup state used by the tools node (see
     # graph/tools_node.py).
     dedup_seen: dict[str, str]
