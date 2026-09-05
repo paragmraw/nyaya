@@ -53,7 +53,7 @@ LLM_MAX_RETRIES = 4               # retries on 429/5xx with exponential backoff
 
 # Per-phase token caps.
 SUPERVISOR_MAX_TOKENS = 512       # supervisor plans and delegates; short output
-SYNTHESIS_MAX_TOKENS = 2048       # synthesis composes the final answer (capped to prevent runaway verbosity)
+SYNTHESIS_MAX_TOKENS = 6144       # synthesis composes the final answer; the cap must leave room for the model's thinking tokens too (they share the completion budget — observed live: thinking-heavy questions spent ~3k+ tokens reasoning before writing a word, truncating answers to nothing at 2048)
 
 # Reflection loop: when the synthesis answer appears ungrounded (no citations
 # and tools were called), the agent can do one more retrieval round. This cap
@@ -68,6 +68,13 @@ CITATION_VERIFICATION = True
 
 # SSE keepalive: emit a ping event every N seconds to prevent proxy timeouts.
 SSE_KEEPALIVE_INTERVAL_S = 15.0
+
+# Turn wall-clock budget: nodes check the deadline between phases and fail the
+# turn with a ``timeout`` error event instead of grinding through retry loops
+# (each LLM call is up to LLM_TIMEOUT_S x LLM_MAX_RETRIES) until the client
+# gives up. Sized above the observed P90 turn latency so it clips only
+# runaway turns, never healthy ones.
+TURN_BUDGET_S = 180.0
 
 # Guardrail: intent classification before the agent pipeline.
 # Tier 1 is regex-based (instant); Tier 2 is an LLM call (only if Tier 1
@@ -98,20 +105,25 @@ MAX_TOOL_CHARS = 8000
 # Chat logger level.
 LOG_LEVEL = "INFO"
 
-# Curated default tool set. The nyaya MCP server exposes 16 tools; we expose
-# the 6 most useful for grounded Q&A. resolve_citation was folded into
-# get_section/get_article (they accept citation strings). corpus_stats is
-# dropped (list_acts gives the same discovery signal). hybrid_search was
-# removed in the v0.2 20->16 tool consolidation; semantic_query (embedding
-# retrieval + reranking) covers the same use case.
-DEFAULT_TOOLS: tuple[str, ...] = (
-    "semantic_query",
-    "get_section",
-    "get_article",
-    "get_judgment",
-    "cross_reference",
-    "list_acts",
-)
+
+# ---------------------------------------------------------------------------
+# Module-level attribute fallback (PEP 562)
+# ---------------------------------------------------------------------------
+
+def __getattr__(name: str):  # noqa: ANN202 - PEP 562 signature
+    """Resolve ``DEFAULT_TOOLS`` from the tool spec at access time.
+
+    The curated default tool set (the 6 most useful of the MCP server's 16
+    for grounded Q&A — resolve_citation was folded into
+    get_section/get_article, corpus_stats dropped, hybrid_search removed in
+    the v0.2 consolidation) is defined ONCE in ``tools_layer/spec.py``; it
+    cannot be imported at module level here because the ``tools_layer``
+    package imports this module. Imported lazily, both directions resolve.
+    """
+    if name == "DEFAULT_TOOLS":
+        from .tools_layer.spec import DEFAULT_TOOLS as _tools
+        return _tools
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _redact(secret: str | None) -> str | None:
@@ -141,13 +153,16 @@ class Settings:
     max_reflection_rounds: int = MAX_REFLECTION_ROUNDS
     citation_verification: bool = CITATION_VERIFICATION
     sse_keepalive_interval_s: float = SSE_KEEPALIVE_INTERVAL_S
+    turn_budget_s: float = TURN_BUDGET_S
     guardrail_enabled: bool = GUARDRAIL_ENABLED
     guardrail_classifier_max_tokens: int = GUARDRAIL_CLASSIFIER_MAX_TOKENS
     guardrail_classifier_timeout_s: float = GUARDRAIL_CLASSIFIER_TIMEOUT_S
 
     @property
     def tool_allowlist(self) -> tuple[str, ...]:
-        """The curated default tool set exposed to the agent."""
+        """The curated default tool set exposed to the agent (spec.py is the
+        single source of truth)."""
+        from .tools_layer.spec import DEFAULT_TOOLS
         return DEFAULT_TOOLS
 
     @property
@@ -173,6 +188,7 @@ class Settings:
             "max_reflection_rounds": self.max_reflection_rounds,
             "citation_verification": self.citation_verification,
             "sse_keepalive_interval_s": self.sse_keepalive_interval_s,
+            "turn_budget_s": self.turn_budget_s,
             "guardrail_enabled": self.guardrail_enabled,
             "log_level": self.log_level,
         }

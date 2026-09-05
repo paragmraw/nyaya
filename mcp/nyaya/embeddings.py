@@ -3,7 +3,7 @@
 Replaces the v0.1 fastembed/onnxruntime-based local embedder. The v0.2 pipeline
 uses the NVIDIA API Catalog (``integrate.api.nvidia.com``) for both embedding
 (``nvidia/nemotron-3-embed-1b``, 2048-d) and reranking
-(``nvidia/llama-nemotron-rerank-1b-v2``). This works on any platform — including
+(``nvidia/llama-nemotron-rerank-vl-1b-v2``). This works on any platform — including
 the Alpine Docker image — with no native wheels.
 
 Both services are CPU-only from the caller's perspective: the heavy compute

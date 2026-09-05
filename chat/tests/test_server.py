@@ -37,21 +37,21 @@ def _make_test_app(monkeypatch, graph=None, tools=None, intent=None):
     ``intent`` (LEGAL by default) so tests can script either the agent
     pipeline or the canned fast path.
 
-    Health no longer builds the agent, so a scripted graph is seeded directly
+    Health no longer builds the graph, so a scripted graph is seeded directly
     on ``app.state`` (as a prior request or the host pre-warm would)."""
-    from nyaya_chat import agent as agent_mod
+    from nyaya_chat import graph as graph_mod
     from nyaya_chat import guardrail as guard_mod
     from nyaya_chat import server as srv
 
-    async def _fake_get_agent():
+    async def _fake_get_graph():
         return graph, tools or []
 
     async def _fake_classify(message, settings):
         from nyaya_chat.guardrail import Intent
         return intent or Intent.LEGAL
 
-    monkeypatch.setattr(agent_mod, "get_agent", _fake_get_agent)
-    monkeypatch.setattr(srv, "get_agent", _fake_get_agent, raising=False)
+    monkeypatch.setattr(graph_mod, "get_graph", _fake_get_graph)
+    monkeypatch.setattr(srv, "get_graph", _fake_get_graph, raising=False)
     monkeypatch.setattr(guard_mod, "classify_intent", _fake_classify)
     monkeypatch.setattr(srv, "classify_intent", _fake_classify, raising=False)
 
@@ -98,14 +98,14 @@ def test_health_degraded_without_building_agent(monkeypatch):
     the builder is never called (a cold health probe must not pay the
     seconds-long agent build). The model field is still present for the
     frontend badge."""
-    from nyaya_chat import agent as agent_mod
+    from nyaya_chat import graph as graph_mod
     from nyaya_chat import server as srv
 
     async def _must_not_build():
-        raise AssertionError("health must not trigger agent construction")
+        raise AssertionError("health must not trigger graph construction")
 
-    monkeypatch.setattr(agent_mod, "get_agent", _must_not_build)
-    monkeypatch.setattr(srv, "get_agent", _must_not_build, raising=False)
+    monkeypatch.setattr(graph_mod, "get_graph", _must_not_build)
+    monkeypatch.setattr(srv, "get_graph", _must_not_build, raising=False)
 
     app = srv.create_app()
     with TestClient(app) as c:
@@ -188,11 +188,12 @@ def test_turn_guardrail_fast_path_unified_shapes(monkeypatch):
 
 
 def test_turn_streams_sse(monkeypatch):
-    """A scripted graph yields tokens + done; the endpoint returns text/event-stream."""
+    """A scripted graph yields custom-stream event payloads; the endpoint
+    returns text/event-stream."""
     class _G:
-        async def astream(self, _input, stream_mode=None, version=None):
-            yield {"type": "messages", "data": (_Chunk("Hello "), {})}
-            yield {"type": "messages", "data": (_Chunk("world"), {})}
+        async def astream(self, _input, **kw):
+            yield {"type": "token", "content": "Hello "}
+            yield {"type": "token", "content": "world"}
 
     app = _make_test_app(monkeypatch, graph=_G(), tools=["t"])
     with TestClient(app) as c:
@@ -211,8 +212,8 @@ def test_turn_streams_sse(monkeypatch):
 def test_turn_history_capped(monkeypatch):
     """History longer than max_history is accepted (server caps), doesn't error."""
     class _G:
-        async def astream(self, _input, stream_mode=None, version=None):
-            yield {"type": "messages", "data": (_Chunk("ok"), {})}
+        async def astream(self, _input, **kw):
+            yield {"type": "token", "content": "ok"}
 
     app = _make_test_app(monkeypatch, graph=_G(), tools=["t"])
     with TestClient(app) as c:

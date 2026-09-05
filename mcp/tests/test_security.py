@@ -326,7 +326,7 @@ def test_rate_limit_blocks_after_threshold():
 
 
 def test_rate_limit_returns_json_error():
-    """The 429 response body is JSON with an 'error' field."""
+    """The 429 response body is JSON in the unified error shape."""
     backend = InMemoryBackend()
     app = _make_app(RateLimitMiddleware, read_per_min=1, embedding_per_min=1, backend=backend)
     with TestClient(app) as client:
@@ -334,7 +334,8 @@ def test_rate_limit_returns_json_error():
         r = client.post("/echo", json={})
         assert r.status_code == 429
         body = r.json()
-        assert "error" in body
+        assert body["message"] == "rate_limited"
+        assert body["detail"]
 
 
 def test_chat_rate_limit_tighter_than_reads():
@@ -488,12 +489,12 @@ def test_body_size_allows_under_cap():
 
 
 def test_body_size_429_is_413():
-    """The 413 response body is JSON."""
+    """The 413 response body is JSON in the unified error shape."""
     app = _make_app(BodySizeLimitMiddleware, max_bytes=10)
     with TestClient(app) as client:
         r = client.post("/echo", content="x" * 100)
         assert r.status_code == 413
-        assert "error" in r.json()
+        assert r.json()["message"] == "request_too_large"
 
 
 def test_body_size_boundary_exact():

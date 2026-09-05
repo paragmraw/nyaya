@@ -71,14 +71,18 @@ function normaliseMdUncached(src: string): string {
   // This runs BEFORE the line-based blank-line insertion below.
   //
   // Patterns to split (insert \n before the marker):
-  //  1. "text ### Heading"  /  "text - item"  /  "text > quote"  (whitespace before marker)
-  //     NOTE: Only - and * as list markers after whitespace, NOT + (which
-  //     appears in regular text like "imprisonment + fine").
+  //  1. "text ### Heading"  /  "text > quote"  (whitespace before marker)
   //  2. "word- Capital"  /  "word.- Capital"  /  "word.- **Bold"  (list marker jammed after word/punct)
   //  3. "**bold**| table"  /  "text)| table"  /  "**bold**- list"  /  "**bold**1. ordered"
   //  4. "text.> quote"  /  "text)> quote"  (blockquote jammed after punctuation, no space)
   //  5. "text.---"  /  "text ---"  (horizontal rule jammed after text)
-  s = s.replace(/(\s)(#{1,6}\s|>\s?|[-*]\s)/g, "$1\n$2");
+  s = s.replace(/(\s)(#{1,6}\s|>\s?)/g, "$1\n$2");
+  // Unordered list markers (-/*) split ONLY after sentence-ending punctuation:
+  // a mid-sentence "word - word" is a prose dash (common in legal text:
+  // "death - or life imprisonment"), not a jammed list item. After punctuation
+  // ("end. - note", "Reasons: - item") a bullet is plausible. Line starts need
+  // no split; the letter-jammed cases below handle "word- Capital".
+  s = s.replace(/([.:!?;\)\]])(\s)([-*]\s)/g, "$1\n$3");
   s = s.replace(/([a-zA-Z.,\)])(- (?:[A-Z*]|\*\*))/g, "$1\n$2");
   s = s.replace(/(\*\*)(\|)/g, "$1\n$2");
   s = s.replace(/(\*\*)(- (?:[A-Z*]|\*\*))/g, "$1\n$2");

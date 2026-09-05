@@ -26,7 +26,7 @@ snippet post-processing). See the security review for details.
 | civictech-India (GitHub) | https://github.com/civictech-India/Indian-Law-Penal-Code-Json | IPC, IEA (Evidence Act), CPC JSON | Public domain | Manual review; no automated checksum |
 | mratanusarkar/Indian-Laws (HuggingFace) | https://huggingface.co/datasets/mratanusarkar/Indian-Laws | CrPC + commercial statutes (Companies, GST, IT Act, Arbitration, Consumer Protection) bare acts JSON | Public domain | Manual review; no automated checksum |
 | Vikhram-S/IndianConstitution (PyPI) | https://pypi.org/project/indianconstitution | Constitution articles | Apache-2.0 | Manual review; no automated checksum |
-| NVIDIA API | https://build.nvidia.com | nemotron-3-embed-1b (embeddings), llama-nemotron-rerank-1b-v2 (reranking) | NVIDIA API Terms | API key secured; responses trusted |
+| NVIDIA API | https://build.nvidia.com | nemotron-3-embed-1b (embeddings), llama-nemotron-rerank-vl-1b-v2 (reranking) | NVIDIA API Terms | API key secured; responses trusted |
 
 ## Recommended Hardening (Future Work)
 

@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.native_tools — direct-import LangChain tools."""
+"""Tests for nyaya_chat.tools_layer.native — direct-import LangChain tools."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def test_load_native_tools_returns_tools(monkeypatch):
     config.reset_settings_cache()
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
 
-    from nyaya_chat.native_tools import load_native_tools
+    from nyaya_chat.tools_layer.native import load_native_tools
     tools = asyncio.run(load_native_tools())
     assert len(tools) > 0
     names = {t.name for t in tools}
@@ -26,17 +26,28 @@ def test_load_native_tools_respects_allowlist(monkeypatch):
     from nyaya_chat import config
     config.reset_settings_cache()
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
-    # Override the allowlist to only include one tool
-    monkeypatch.setattr(config, "DEFAULT_TOOLS", ("semantic_query",))
+    # Override the allowlist (spec.py is the single source of truth; the
+    # Settings.tool_allowlist property reads it lazily, at call time).
+    monkeypatch.setattr("nyaya_chat.tools_layer.spec.DEFAULT_TOOLS", ("semantic_query",))
 
-    from nyaya_chat.native_tools import load_native_tools
+    from nyaya_chat.tools_layer.native import load_native_tools
     tools = asyncio.run(load_native_tools())
     assert len(tools) == 1
     assert tools[0].name == "semantic_query"
 
 
+def test_native_tools_use_spec_descriptions():
+    """Tool descriptions come from the spec table — no drift between the
+    description the model sees and the allowlist spec."""
+    from nyaya_chat.tools_layer import native
+    from nyaya_chat.tools_layer.spec import tool_specs_by_name
+    specs = tool_specs_by_name()
+    for t in native._IMPLS:
+        assert t in specs
+
+
 def test_error_json_format():
-    from nyaya_chat.native_tools import _error_json
+    from nyaya_chat.tools_layer.native import _error_json
     class FakeError(Exception):
         code = "not_found"
         message = "Section 999 not found"
@@ -49,7 +60,7 @@ def test_error_json_format():
 
 
 def test_citation_re_parses_combined():
-    from nyaya_chat.native_tools import _CITATION_RE
+    from nyaya_chat.tools_layer.native import _CITATION_RE
     m = _CITATION_RE.search("IPC s.302")
     assert m is not None
     # Should parse act and num
@@ -60,7 +71,7 @@ def test_citation_re_parses_combined():
 
 
 def test_art_citation_re_parses():
-    from nyaya_chat.native_tools import _ART_CITATION_RE
+    from nyaya_chat.tools_layer.native import _ART_CITATION_RE
     m = _ART_CITATION_RE.match("Art.21")
     assert m is not None
     assert m.group("num") == "21"

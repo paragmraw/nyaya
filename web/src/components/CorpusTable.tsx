@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { CURATED } from "@/lib";
+import {
+  getUrlQuery,
+  getUrlQueryServer,
+  parseViewParams,
+  subscribeUrlQuery,
+  writeUrlQuery,
+} from "@/lib/url-query";
 
 // Curated metadata for the corpus table. The design ships these rows with
 // status chips and coverage descriptions; we map live rows from /api/acts
@@ -16,6 +23,7 @@ type ActLike = {
 
 type Row = {
   key: string;
+  short_name: string;
   name: string;
   type: string;
   coverage: string;
@@ -26,11 +34,26 @@ type Row = {
 const STATUS_FILTERS = ["all", "live", "beta", "coming"] as const;
 type StatusFilter = (typeof STATUS_FILTERS)[number];
 
-export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
-  // -1 means "unsorted" (curated order); clicking a header sets sortCol.
-  const [sortCol, setSortCol] = useState<number>(-1);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [filter, setFilter] = useState<StatusFilter>("all");
+// highlightAct: short_name (case-insensitive) of a row to highlight and scroll
+// into view — driven by citation deep-links (/corpus/?act=IPC&ref=s.302).
+export default function CorpusTable({
+  acts,
+  highlightAct,
+}: {
+  acts: ActLike[] | undefined;
+  highlightAct?: string;
+}) {
+  // Sort/filter live in the URL (history.replaceState) so a configured view is
+  // shareable and survives back/forward. The URL is the source of truth — the
+  // view is DERIVED from the query snapshot rather than synced in an effect;
+  // clicks write a patch and the store notifies, re-rendering.
+  const query = useSyncExternalStore(subscribeUrlQuery, getUrlQuery, getUrlQueryServer);
+  const view = useMemo(() => parseViewParams(query), [query]);
+  const sortCol = view.sort;
+  const sortDir = view.dir;
+  const filter = (STATUS_FILTERS as readonly string[]).includes(view.status)
+    ? (view.status as StatusFilter)
+    : "all";
 
   const actsByShort = useMemo(() => {
     const m = new Map<string, ActLike>();
@@ -42,7 +65,7 @@ export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
     return CURATED.map((c, i) => {
       const act = c.short_name ? actsByShort.get(c.short_name) : undefined;
       const date = (act?.as_of ?? c.fallback_date) || "N/A";
-      return { key: `${i}-${c.name}`, name: c.name, type: c.type, coverage: c.coverage, date, status: c.status };
+      return { key: `${i}-${c.name}`, short_name: c.short_name ?? "", name: c.name, type: c.type, coverage: c.coverage, date, status: c.status };
     });
   }, [actsByShort]);
 
@@ -66,12 +89,30 @@ export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
 
   const onHeaderClick = (col: number) => {
     if (sortCol === col) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
+      writeUrlQuery({ dir: sortDir === "asc" ? "desc" : "asc" });
     } else {
-      setSortCol(col);
-      setSortDir("asc");
+      writeUrlQuery({ sort: col, dir: "asc" });
     }
   };
+
+  // Deep-link highlight: resolve the act's row key, then scroll it into view
+  // once. Instant scroll under prefers-reduced-motion (smooth otherwise).
+  const highlightKey = useMemo(() => {
+    if (!highlightAct) return null;
+    const needle = highlightAct.toLowerCase();
+    return rows.find((r) => r.short_name.toLowerCase() === needle)?.key ?? null;
+  }, [rows, highlightAct]);
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null);
+  useEffect(() => {
+    if (!highlightKey) return;
+    highlightRowRef.current?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+      block: "center",
+    });
+    // Rows are static (only sort/filter reorder them); run on highlight change.
+  }, [highlightKey]);
 
   const headers = ["Source", "Type", "Coverage", "Last refreshed", "Status"];
 
@@ -85,7 +126,7 @@ export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
             key={f}
             type="button"
             className={`filter-chip${filter === f ? " active" : ""}`}
-            onClick={() => setFilter(f)}
+            onClick={() => writeUrlQuery({ status: f })}
             aria-pressed={filter === f}
           >
             {f}
@@ -120,7 +161,18 @@ export default function CorpusTable({ acts }: { acts: ActLike[] | undefined }) {
           </thead>
           <tbody>
             {sorted.map((r) => (
-              <tr key={r.key}>
+              <tr
+                key={r.key}
+                ref={r.key === highlightKey ? highlightRowRef : undefined}
+                style={
+                  r.key === highlightKey
+                    ? {
+                        background: "color-mix(in oklch, var(--accent) 12%, transparent)",
+                        scrollMarginTop: "5rem",
+                      }
+                    : undefined
+                }
+              >
                 <td><span className="ct-name">{r.name}</span></td>
                 <td>{r.type}</td>
                 <td><span className="ct-cov">{r.coverage}</span></td>

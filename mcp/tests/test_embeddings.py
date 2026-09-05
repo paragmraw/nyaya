@@ -61,7 +61,7 @@ class _FakeRerankClient:
         self._stall_s = stall_s
 
     def post(self, url: str, json: Any = None, timeout: float | None = None) -> Any:
-        self.calls.append({"url": url, "timeout": timeout})
+        self.calls.append({"url": url, "timeout": timeout, "json": json})
         if self._stall_s:
             time.sleep(self._stall_s)
         if self._failure is not None:
@@ -152,6 +152,10 @@ def test_rerank_success_uses_shared_client(monkeypatch):
     assert scores == [2.0, 0.25]
     assert fake.calls[0]["url"].startswith("https://ai.api.nvidia.com/v1/retrieval/nvidia/")
     assert fake.calls[0]["timeout"] <= embeddings.RERANK_DEADLINE_S
+    payload = fake.calls[0]["json"]
+    assert payload["model"] == embeddings.get_settings().reranker_model
+    assert payload["query"] == {"text": "murder"}
+    assert payload["passages"] == [{"text": "a"}, {"text": "b"}]
 
 
 def test_empty_candidates_short_circuits(monkeypatch):

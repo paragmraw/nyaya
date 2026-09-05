@@ -198,9 +198,9 @@ class RateLimitMiddleware:
     middleware falls back to an in-memory backend (fail-open).
 
     The middleware is a pure-ASGI callable: the 429 short-circuit sends the
-    same ``{"error": "rate_limited"}`` JSON body + ``Retry-After: 60`` header
-    the previous ``BaseHTTPMiddleware`` version produced, and streaming
-    responses no longer pass through a buffering response task.
+    unified error shape ``{"message": "rate_limited", "detail": ...}`` +
+    ``Retry-After: 60`` header (matching the frontend's error humanizer),
+    and streaming responses no longer pass through a buffering response task.
     """
 
     def __init__(
@@ -291,7 +291,8 @@ class RateLimitMiddleware:
 
         if decision.limited:
             response = Response(
-                content='{"error": "rate_limited"}',
+                content='{"message": "rate_limited", '
+                '"detail": "too many requests; retry after the interval in Retry-After"}',
                 status_code=429,
                 media_type="application/json",
                 # Time until the window actually resets (min 1s); the old
@@ -326,7 +327,8 @@ class BodySizeLimitMiddleware:
         )
         if content_length and int(content_length) > self.max_bytes:
             response = Response(
-                content='{"error": "request_too_large"}',
+                content='{"message": "request_too_large", '
+                '"detail": "request body exceeds the size limit"}',
                 status_code=413,
                 media_type="application/json",
             )
