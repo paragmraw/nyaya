@@ -26,6 +26,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from . import __version__
 from .agent import _build_messages, get_agent, get_agent_if_ready
 from .config import Settings, get_settings
 from .guardrail import Intent, classify_intent, get_canned_response
@@ -63,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or get_settings()
     app = FastAPI(
         title="nyaya-chat",
-        version="0.1.0",
+        version=__version__,
         description="LangGraph + NVIDIA Nemotron chat backend (sub-app of nyaya).",
         lifespan=lifespan,
         docs_url="/docs",
@@ -173,7 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/")
     async def root() -> dict[str, str]:
-        return {"service": "nyaya-chat", "version": "0.1.0", "turn": "POST /chat/turn", "health": "GET /chat/health"}
+        return {"service": "nyaya-chat", "version": __version__, "turn": "POST /chat/turn", "health": "GET /chat/health"}
 
     return app
 

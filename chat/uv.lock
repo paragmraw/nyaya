@@ -1463,7 +1463,6 @@ wheels = [
 
 [[package]]
 name = "nyaya-chat"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
@@ -1505,7 +1504,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6,<1" },
     { name = "structlog", specifier = ">=24.1,<26" },
 ]
-provides-extras = ["langfuse", "dev"]
+provides-extras = ["dev", "langfuse"]
 
 [[package]]
 name = "openai"
