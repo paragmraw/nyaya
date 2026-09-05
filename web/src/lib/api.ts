@@ -74,6 +74,10 @@ export type ChatMessage = {
   reasoning?: string;
   plan?: string;
   requestId?: string;
+  // True once the content is the authoritative verified text (correction
+  // received or stream finished). While false during an active stream the
+  // bubble renders streaming-plain text (no per-frame markdown parse).
+  contentFinal?: boolean;
 };
 
 // ─── Fetch helpers ────────────────────────────────────────────────

@@ -7,7 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CITE_HREF_PREFIX, isCitationHref, parseCitations } from "../src/lib/chat";
+import { CITE_HREF_PREFIX, isCitationHref, parseCitations, stripCitationMarkers } from "../src/lib/chat";
 
 test("parseCitations converts [[act, ref]] markers into corpus hrefs", () => {
   const { text, citations } = parseCitations("Offence under [[act: IPC, ref: s.302]].");
@@ -38,4 +38,24 @@ test("isCitationHref recognises exactly the produced hrefs", () => {
 test("act/ref values containing spaces are URL-encoded but keep the prefix marker", () => {
   const { text } = parseCitations("[[act: IPC, ref: s. 302 proviso]]");
   assert.ok(text.includes(`${CITE_HREF_PREFIX}IPC&ref=s.%20302%20proviso`));
+});
+
+// stripCitationMarkers is the streaming-plain path: markers become compact
+// plain-text chips without the markdown conversion parseCitations does. The
+// full parseCitations pass runs once on the final text.
+test("stripCitationMarkers emits plain chips, no markdown links", () => {
+  const text = stripCitationMarkers("Offence under [[act: IPC, ref: s.302]] punished.");
+  assert.equal(text, "Offence under [IPC · s.302] punished.");
+  assert.ok(!text.includes("]("), "no markdown link in streaming-plain output");
+  assert.ok(!text.includes("[["), "no raw markers left");
+});
+
+test("stripCitationMarkers leaves non-citation text untouched", () => {
+  assert.equal(stripCitationMarkers("Plain answer, no markers."), "Plain answer, no markers.");
+  assert.equal(stripCitationMarkers(""), "");
+});
+
+test("stripCitationMarkers handles multiple markers", () => {
+  const text = stripCitationMarkers("[[act: A, ref: 1]] and [[act: B, ref: 2]]");
+  assert.equal(text, "[A · 1] and [B · 2]");
 });

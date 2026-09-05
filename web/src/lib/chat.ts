@@ -61,6 +61,17 @@ export function parseCitations(text: string): { text: string; citations: ChatCit
   return { text: cleaned, citations };
 }
 
+// Streaming-plain display: convert [[act: X, ref: Y]] markers to a compact
+// plain-text chip ([X · Y]) — no markdown link conversion, no citations list,
+// no whitespace collapse. The full parseCitations pass runs ONCE on the
+// authoritative final text (the correction event or the post-done flush), so
+// the per-frame streaming cost stays linear in what arrived this frame's
+// worth of accumulated text without re-parsing markdown links per frame.
+// Exported for unit testing.
+export function stripCitationMarkers(text: string): string {
+  return text.replace(CITE_RE, (_, act: string, ref: string) => `[${act.trim()} · ${ref.trim()}]`);
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -422,8 +433,12 @@ export function useChat(): UseChat {
     const batcher = createFrameBatcher(() => {
       if (contentDirty) {
         contentDirty = false;
-        const { text: cleaned, citations } = parseCitations(accContent);
-        updateAssistant({ content: cleaned, citations });
+        // Streaming-plain path (O(n²) render fix): strip citation markers
+        // only — the full parseCitations pass (markdown links, citations
+        // list, whitespace collapse) runs once on the final text below, and
+        // the bubble renders this as plain pre-wrap text (no markdown parse
+        // per frame). The citations event supplies the chip list.
+        updateAssistant({ content: stripCitationMarkers(accContent) });
       }
       if (reasoningDirty) {
         reasoningDirty = false;
@@ -550,7 +565,10 @@ export function useChat(): UseChat {
                 contentDirty = false;
                 accContent = correctedText;
                 const { text: cleaned, citations } = parseCitations(correctedText);
-                updateAssistant({ content: cleaned, citations, status: undefined });
+                // The corrected text is authoritative — final markdown render
+                // starts here even though the stream is still open (done
+                // follows immediately).
+                updateAssistant({ content: cleaned, citations, status: undefined, contentFinal: true });
               }
               break;
             }
@@ -577,9 +595,11 @@ export function useChat(): UseChat {
         }
       }
       // Stream complete: flush the final accumulated text authoritatively.
+      // ONE full parseCitations pass (markdown links + citations list) — the
+      // bubble switches from streaming-plain to markdown render.
       batcher.cancel();
       const { text: cleaned, citations } = parseCitations(accContent);
-      updateAssistant({ content: cleaned, citations, status: undefined });
+      updateAssistant({ content: cleaned, citations, status: undefined, contentFinal: true });
     } catch (err) {
       // Humanize the failure for both the footer note and the failed assistant
       // bubble: stream timeouts (the deliberate abort must keep the timeout
