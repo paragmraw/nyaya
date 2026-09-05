@@ -45,10 +45,13 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
       .then((data) => {
         if (data.model) {
           setModelId(data.model);
-          // Derive a display name from the model id
+          // Derive a display name from the model id. Only lowercase letters at
+          // a word boundary capitalize: digit-initial tokens ("30b", "3.5")
+          // keep their lowercase letter ("30b", not "30B") — \b[a-z] doesn't
+          // match inside a digit-run.
           const parts = data.model.split("/");
           const short = parts[parts.length - 1] || data.model;
-          setModelName(short.replace(/-/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
+          setModelName(short.replace(/-/g, " ").replace(/\b[a-z]/g, (c: string) => c.toUpperCase()));
         }
       })
       .catch(() => {

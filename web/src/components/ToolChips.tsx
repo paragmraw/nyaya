@@ -16,7 +16,13 @@ function toolArgsLabel(name: string, args?: Record<string, unknown>): string {
   const section = args.section_number || args.article_number || args.section;
   const query = args.query;
   if (act && section) return `${name}(${act} §${section})`;
-  if (query) return `${name}("${String(query).slice(0, 30)}…")`;
+  if (query) {
+    // Cap at 30 chars, but avoid cutting mid-word: when truncating, drop the
+    // trailing partial word so the label reads cleanly with the ellipsis.
+    const q = String(query);
+    const shown = q.length > 30 ? `${q.slice(0, 30).replace(/\s+\S*$/, "")}…` : q;
+    return `${name}("${shown}")`;
+  }
   if (act) return `${name}(${act})`;
   if (section) return `${name}(§${section})`;
   return name;

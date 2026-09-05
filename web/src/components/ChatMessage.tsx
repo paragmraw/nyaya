@@ -40,8 +40,11 @@ function ChatMessageViewImpl({ msg, isStreaming = false, onRetry }: { msg: ChatM
   // is not yet the authoritative verified text, render raw pre-wrap text —
   // react-markdown re-parsing growing content per animation frame is O(n²).
   // The plan/reasoning traces (which grow for hundreds of deltas before the
-  // answer starts) get the same treatment.
-  const streamingPlain = isBot && isStreaming && !msg.contentFinal;
+  // answer starts) get the same treatment. A failed run whose text never
+  // became authoritative (no final parse: stream interrupted/errored
+  // mid-answer) also stays plain — a truncated answer can contain half-finished
+  // markdown (unclosed **bold**, a torn table) that would render as artifacts.
+  const streamingPlain = isBot && !msg.contentFinal && (isStreaming || !!msg.error);
   // Memoize normaliseMd — it's O(n) and the full content can be long.
   // Skipped entirely during streaming-plain (raw display needs no markdown
   // normalisation); recomputed once when the final text lands.

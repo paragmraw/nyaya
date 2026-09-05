@@ -57,7 +57,16 @@ export function parseCitations(text: string): { text: string; citations: ChatCit
       citations.push({ act, ref });
     }
   }
-  const cleaned = text.replace(re, (_, act: string, ref: string) => citeToMarkdown(act.trim(), ref.trim())).replace(/\s{2,}/g, " ").trim();
+  // The whitespace collapse is horizontal-only and never touches line-leading
+  // indentation: `\s{2,}` would destroy `\n\n` paragraph breaks, and a plain
+  // `[ \t]{2,}` would still eat the leading 2+ spaces of a nested list item —
+  // both mangle the markdown the bubble is about to render. Anchoring the run
+  // to a preceding non-newline char collapses runs between words but keeps
+  // line-leading indentation (the char before it is `\n` or start-of-text).
+  const cleaned = text
+    .replace(re, (_, act: string, ref: string) => citeToMarkdown(act.trim(), ref.trim()))
+    .replace(/([^\n])[ \t]{2,}/g, "$1 ")
+    .trim();
   return { text: cleaned, citations };
 }
 
@@ -70,6 +79,38 @@ export function parseCitations(text: string): { text: string; citations: ChatCit
 // Exported for unit testing.
 export function stripCitationMarkers(text: string): string {
   return text.replace(CITE_RE, (_, act: string, ref: string) => `[${act.trim()} · ${ref.trim()}]`);
+}
+
+// Final assistant-message patch when the reader loop exits. With `done` seen
+// (a `correction` counts — it already rebased the accumulator onto the
+// authoritative text) the tokens become the verified answer: one full
+// parseCitations pass, contentFinal flips the bubble to the markdown render.
+// Without `done` the connection dropped before the stream was bookended, so
+// the text must NOT be finalized (a truncated answer can contain half-finished
+// constructs like an unclosed **bold** or a torn table): the partial text is
+// kept in streaming-plain form, and when no `error` event arrived either the
+// run is marked interrupted so the retry affordance appears. Exported for
+// unit testing.
+export function finalizeAssistantPatch(
+  accContent: string,
+  sawDone: boolean,
+  sawError: boolean,
+): { patch: Partial<ChatMessage>; interrupted: boolean } {
+  if (sawDone) {
+    const { text, citations } = parseCitations(accContent);
+    return {
+      patch: { content: text, citations, status: undefined, contentFinal: true },
+      interrupted: false,
+    };
+  }
+  return {
+    patch: {
+      content: stripCitationMarkers(accContent),
+      status: undefined,
+      ...(sawError ? {} : { error: humanizeError("interrupted") }),
+    },
+    interrupted: !sawError,
+  };
 }
 
 function uid(): string {
@@ -316,6 +357,12 @@ export function useChat(): UseChat {
   // strict mode may invoke updaters more than once, so they must stay pure).
   const messagesRef = useRef<ChatMessage[]>(messages);
   const isStreamingRef = useRef(false);
+  // Monotonic run id: each send claims the next value; a run's cleanup only
+  // resets the shared refs if it is still the current run. Without this, the
+  // cancel-then-send sequence breaks — the old run's finally (its reader
+  // rejection lands asynchronously) would null the NEW run's abortRef and
+  // unlock the composer mid-stream.
+  const runIdRef = useRef(0);
 
   // Persist on every message change so a mid-conversation refresh preserves
   // the thread (streaming messages included — the deserializer marks
@@ -373,6 +420,7 @@ export function useChat(): UseChat {
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isStreamingRef.current) return;
+    const runId = ++runIdRef.current;
     isStreamingRef.current = true;
     timedOutRef.current = false;
     setError(null);
@@ -386,7 +434,10 @@ export function useChat(): UseChat {
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
     const history: ChatHistoryTurn[] = messages
-      .filter((m) => m.content && (m.role === "user" || m.role === "assistant"))
+      // Failed runs' partial assistant text is excluded: the model never saw
+      // its own truncated output as context, and a half-answer can mislead
+      // the next turn.
+      .filter((m) => m.content && !m.error && (m.role === "user" || m.role === "assistant"))
       .slice(-8)
       .map((m) => ({ role: m.role, content: m.content }));
 
@@ -419,6 +470,14 @@ export function useChat(): UseChat {
     let accContent = "";
     let accReasoning = "";
     let accPlan = "";
+    // Bookend detection: the final flush below must only trust the text as
+    // the verified answer when the stream was properly bookended. `done`
+    // marks a complete stream; an `error` event means the failure was
+    // reported (the catch path / error row handles it); a `correction`
+    // already rebased the accumulator onto authoritative text.
+    let sawDone = false;
+    let sawError = false;
+    let sawCorrection = false;
 
     // Token/reasoning/plan deltas accumulate in the strings above and are
     // flushed to React state at most once per animation frame (rAF batching,
@@ -563,6 +622,7 @@ export function useChat(): UseChat {
                 // pre-correction tokens and win over the verified answer.
                 batcher.cancel();
                 contentDirty = false;
+                sawCorrection = true;
                 accContent = correctedText;
                 const { text: cleaned, citations } = parseCitations(correctedText);
                 // The corrected text is authoritative — final markdown render
@@ -573,6 +633,7 @@ export function useChat(): UseChat {
               break;
             }
             case "error": {
+              sawError = true;
               // Unified error shape: {message, detail, rid}.
               const code = (payload.message as string) || "agent_error";
               const detail = (payload.detail as string) || "";
@@ -588,6 +649,7 @@ export function useChat(): UseChat {
               break;
             }
             case "done":
+              sawDone = true;
               break;
             default:
               break;
@@ -595,11 +657,17 @@ export function useChat(): UseChat {
         }
       }
       // Stream complete: flush the final accumulated text authoritatively.
-      // ONE full parseCitations pass (markdown links + citations list) — the
-      // bubble switches from streaming-plain to markdown render.
+      // With `done` seen, ONE full parseCitations pass (markdown links +
+      // citations list) — the bubble switches from streaming-plain to markdown
+      // render. Without `done` the connection dropped before the bookend:
+      // finalizeAssistantPatch keeps the partial text plain and marks the run
+      // interrupted (retryable) instead of rendering truncated markdown.
       batcher.cancel();
-      const { text: cleaned, citations } = parseCitations(accContent);
-      updateAssistant({ content: cleaned, citations, status: undefined, contentFinal: true });
+      const { patch, interrupted } = finalizeAssistantPatch(accContent, sawDone || sawCorrection, sawError);
+      if (interrupted) {
+        setError(patch.error as string);
+      }
+      updateAssistant(patch);
     } catch (err) {
       // Humanize the failure for both the footer note and the failed assistant
       // bubble: stream timeouts (the deliberate abort must keep the timeout
@@ -622,14 +690,23 @@ export function useChat(): UseChat {
     } finally {
       // No pending frame may fire after abort/error/timeout: a late flush would
       // write partial accumulated text into the aborted assistant bubble.
+      // (batcher + accumulators are this run's own closure — safe to reset
+      // unconditionally.)
       batcher.cancel();
       contentDirty = false;
       reasoningDirty = false;
       planDirty = false;
-      clearStreamTimeout();
-      isStreamingRef.current = false;
-      setIsStreaming(false);
-      abortRef.current = null;
+      // Shared refs (timeout, abort controller, streaming state) only reset
+      // while this is still the current run: in the cancel-then-send sequence
+      // this finally fires after a new send has claimed them, and resetting
+      // would orphan the new stream's controller and unlock the composer
+      // mid-stream.
+      if (runId === runIdRef.current) {
+        clearStreamTimeout();
+        isStreamingRef.current = false;
+        setIsStreaming(false);
+        abortRef.current = null;
+      }
     }
   }, [messages, resetStreamTimeout, clearStreamTimeout]);
 

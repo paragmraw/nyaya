@@ -40,6 +40,26 @@ test("act/ref values containing spaces are URL-encoded but keep the prefix marke
   assert.ok(text.includes(`${CITE_HREF_PREFIX}IPC&ref=s.%20302%20proviso`));
 });
 
+// The final-text whitespace collapse must be horizontal-only: collapsing
+// `\s{2,}` used to destroy `\n\n` paragraph breaks and list indentation
+// before the bubble's markdown render.
+test("parseCitations preserves paragraph breaks and blank lines in final text", () => {
+  const src = "Murder is culpable homicide.\n\nPunishment may extend to life imprisonment.";
+  const { text } = parseCitations(src);
+  assert.ok(text.includes("homicide.\n\nPunishment"), `paragraph break lost:\n${text}`);
+});
+
+test("parseCitations preserves list indentation in final text", () => {
+  const src = "Exceptions:\n- top level\n  - nested sub-item\n  - another";
+  const { text } = parseCitations(src);
+  assert.ok(text.includes("\n  - nested"), `sub-list indentation lost:\n${text}`);
+});
+
+test("parseCitations still collapses runs of spaces and tabs", () => {
+  const { text } = parseCitations("A   B\t\tC");
+  assert.equal(text, "A B C");
+});
+
 // stripCitationMarkers is the streaming-plain path: markers become compact
 // plain-text chips without the markdown conversion parseCitations does. The
 // full parseCitations pass runs once on the final text.
