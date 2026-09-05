@@ -41,7 +41,7 @@ LOG_LEVEL = "INFO"
 
 # NVIDIA API embedding + reranker model ids (used by embeddings.py).
 EMBEDDING_MODEL = "nvidia/nemotron-3-embed-1b"
-RERANKER_MODEL = "nvidia/llama-nemotron-rerank-1b-v2"
+RERANKER_MODEL = "nvidia/llama-nemotron-rerank-vl-1b-v2"
 EMBEDDING_DIM = 2048
 
 # Total wall-clock budget for one rerank call (attempts + backoff + HTTP).
