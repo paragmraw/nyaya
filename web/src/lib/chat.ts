@@ -21,13 +21,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChatCitation, ChatHistoryTurn, ChatMessage, ChatRequest, ChatToolEvent } from "./api";
 
-// Linear-time by construction (CodeQL js/polynomial-redos): each quantified
-// class is disjoint from the literal that follows it, so a space run inside a
-// marker has exactly ONE split point instead of one per character — the old
-// `\s*([^,\]]+?)\s*,` form backtracked quadratically on uncontrolled streamed
-// text like "[[act:" + " ".repeat(n). Whitespace around act/ref is captured
-// and trimmed by the .trim() calls at the two call sites instead.
-const CITE_RE = /\[\[act:([^,\]]+),\s*ref:([^\]]+)\]\]/g;
+// Linear-time by construction (CodeQL js/polynomial-redos): every quantifier
+// is BOUNDED, so no unbounded repetition exists for CodeQL's superlinear
+// backtracking analysis to pump, and per-start-position cost is capped —
+// total cost is O(bound × length). Two independent quadratic shapes are
+// covered:
+//   1. intra-marker: whitespace runs split across adjacent quantifiers
+//      (fixed by disjoint classes; whitespace tolerance moved to .trim()).
+//   2. inter-position (pump): the marker prefix "[[act:" recurs inside a
+//      comma-free stream, and each occurrence re-ran the unbounded act class
+//      to the end of the string before failing — quadratic even with (1)
+//      fixed. Bounding the classes caps each failed attempt.
+// Bounds are generous vs real markers (~30–60 chars): act ≤ 512, ref ≤ 2048,
+// ≤ 16 whitespace chars between "," and "ref:".
+const CITE_RE = /\[\[act:([^,\]]{1,512}),\s{0,16}ref:([^\]]{1,2048})\]\]/g;
 
 // Inline citations are rendered as normal markdown links whose href points
 // back at the corpus page. That href prefix doubles as the citation marker:
