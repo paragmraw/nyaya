@@ -102,3 +102,26 @@ test("citation markers with extra whitespace still parse", () => {
   const { citations } = parseCitations("[[act:  IPC  ,   ref:   s. 302  ]]");
   assert.deepEqual(citations, [{ act: "IPC", ref: "s. 302" }]);
 });
+
+// Second-order ReDoS regression: the FIRST fix (linear per-attempt, 8701129)
+// still left quadratic inter-position cost — CodeQL pump semantics put the
+// marker prefix `[[act:` at many positions inside a comma-free stream, and
+// each occurrence re-ran the act class to the end of the string before
+// failing. Measured quadratic on the old regex (n=1k -> 3ms, n=4k -> 38ms,
+// n=16k -> 600ms). All quantifiers in CITE_RE are now bounded, so
+// per-position cost is capped and the whole scan is linear. n=50k must
+// finish fast; the old regex takes ~6s+ per call at this size.
+test("citation regex stays linear when the marker prefix recurs (pump)", () => {
+  const pump1 = "[[act:" + "[[act:+".repeat(50_000);
+  const pump2 = "[[act:+,ref:" + "[[act:+,ref:".repeat(50_000) + "\\".repeat(50_000);
+  for (const evil of [pump1, pump2]) {
+    const t0 = Date.now();
+    const { citations } = parseCitations(evil);
+    const dt = Date.now() - t0;
+    assert.deepEqual(citations, []);
+    assert.ok(dt < 2_000, `parseCitations took ${dt}ms on recurring-prefix input`);
+    const t1 = Date.now();
+    stripCitationMarkers(evil);
+    assert.ok(Date.now() - t1 < 2_000, "stripCitationMarkers also stays linear");
+  }
+});

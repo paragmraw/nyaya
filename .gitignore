@@ -229,6 +229,10 @@ data/cache/
 # Scratch / experimental work
 scratch/
 
+# Superpowers session artifacts (plans, SDD workspaces — session-local working docs)
+.superpowers/
+docs/superpowers/
+
 # IDE
 .vscode/
 .idea/
