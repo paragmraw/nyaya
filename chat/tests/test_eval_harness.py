@@ -37,19 +37,21 @@ def _result(mod, *, latency_ms=1000.0, ttft_ms=500.0, error=None):
     return r, scenario
 
 
-def test_scenario_has_ttft_budget_defaulting_to_phase0_soft_cap():
+def test_scenario_has_hard_ttft_budget():
+    """Phase 4: the plan's TTFT target (<4s) is the hard default."""
     mod = _load()
     s = mod.Scenario("x", "q", "factual_lookup")
-    assert s.max_ttft_ms == 60000.0
+    assert s.max_ttft_ms == 4000.0
+    assert s.max_latency_ms == 20000.0
 
 
-def test_legal_scenario_latency_caps_are_softened_for_phase0():
+def test_legal_scenario_latency_caps_meet_the_plan_budget():
     mod = _load()
     legal = [s for s in mod.SCENARIOS if s.category not in
              ("greeting", "capability", "thanks", "off_topic")]
     assert legal, "expected legal scenarios"
-    assert all(s.max_latency_ms <= 60000.0 for s in legal), \
-        [(s.id, s.max_latency_ms) for s in legal if s.max_latency_ms > 60000]
+    assert all(s.max_latency_ms <= 20000.0 for s in legal), \
+        [(s.id, s.max_latency_ms) for s in legal if s.max_latency_ms > 20000]
     # Guardrail fast paths keep their strict 200ms budget.
     canned = [s for s in mod.SCENARIOS if s.category in
               ("greeting", "capability", "thanks", "off_topic")]
@@ -70,13 +72,19 @@ def test_ttft_check_fails_over_budget():
     assert check[1] is False, check
 
 
-def test_latency_and_ttft_are_soft_in_phase0():
-    """Phase 0 records the baseline without red-gating latency: over-budget
-    latency/TTFT must be reportable warnings, NOT gating failures."""
+def test_latency_and_ttft_softness_flag_tracks_the_soft_set():
+    """The SOFT_CHECKS mechanism still exists: over-budget latency/TTFT are
+    warnings, not gating failures, while a scenario is listed there. Phase 4
+    removes both from the set, so the check asserts the gating behavior of the
+    CURRENT set: nothing is soft, so both ARE gating failures."""
     mod = _load()
     r, _ = _result(mod, latency_ms=120000.0, ttft_ms=120000.0)
     gating = mod.gating_failures(r)
-    assert [f for f in gating if f[0] in ("latency_ok", "ttft_ok")] == []
+    if not mod.SOFT_CHECKS:
+        assert [f[0] for f in gating if f[0] in ("latency_ok", "ttft_ok")] == \
+            ["latency_ok", "ttft_ok"]
+    else:
+        assert [f for f in gating if f[0] in ("latency_ok", "ttft_ok")] == []
     # But they are still recorded as checks so the report can warn.
     assert any(name == "latency_ok" and not ok for name, ok, _ in r.checks)
     assert any(name == "ttft_ok" and not ok for name, ok, _ in r.checks)
