@@ -79,3 +79,54 @@ def test_art_citation_re_parses():
     m = _ART_CITATION_RE.match("Article 14")
     assert m is not None
     assert m.group("num") == "14"
+
+
+def test_semantic_query_runs_search_and_corpus_as_of_concurrently(monkeypatch):
+    """rerank_search and corpus_as_of are independent queries — they must run
+    concurrently, not serially (the serial pair cost an extra full DB round
+    trip per semantic_query on the turn's critical path)."""
+    import sys
+    import time as _time
+    import types
+
+    class FakeResult:
+        def model_dump(self):
+            return {"act": "IPC", "ref": "s. 302", "text": "intentional killing"}
+
+    search_finished_at: list[float] = []
+    corpus_started_at: list[float] = []
+
+    def fake_rerank_search(query, kind=None, act=None, limit=10, offset=0,
+                           promote_definitions=False):
+        _time.sleep(0.25)  # the embed+ANN+rerank work
+        search_finished_at.append(_time.monotonic())
+        return [FakeResult()], 1, None
+
+    def fake_corpus_as_of():
+        corpus_started_at.append(_time.monotonic())
+        return None
+
+    fake_db = types.SimpleNamespace(
+        rerank_search=fake_rerank_search, corpus_as_of=fake_corpus_as_of,
+    )
+    fake_nyaya = types.SimpleNamespace(db=fake_db)
+    fake_exceptions = types.SimpleNamespace(
+        SearchError=type("SearchError", (Exception,), {}),
+        NotFound=type("NotFound", (Exception,), {}),
+    )
+    monkeypatch.setitem(sys.modules, "nyaya", fake_nyaya)
+    monkeypatch.setitem(sys.modules, "nyaya.exceptions", fake_exceptions)
+
+    from nyaya_chat.tools_layer.native import _semantic_query
+    result = asyncio.run(_semantic_query("murder punishment"))
+    data = json.loads(result)
+
+    # Correctness: the output is unchanged either way.
+    assert data["total"] == 1
+    assert data["results"] == [{"act": "IPC", "ref": "s. 302", "text": "intentional killing"}]
+    assert data["fallback_reason"] is None
+    # Concurrency: corpus_as_of must have started before rerank_search finished.
+    assert corpus_started_at and search_finished_at, "both calls must run"
+    assert corpus_started_at[0] < search_finished_at[0], (
+        "corpus_as_of started after rerank_search finished — the calls ran serially"
+    )

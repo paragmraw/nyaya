@@ -81,11 +81,15 @@ async def _semantic_query(query: str, kind: str | None = None, act: str | None =
             raise SearchError(f"Query too long ({len(query)} chars); maximum is 4096.")
         kind = _clean_optional(kind)
         act = _clean_optional(act)
-        results, total, fallback_reason = await asyncio.to_thread(
-            db.rerank_search, query, kind=kind, act=act, limit=limit, offset=offset,
-            promote_definitions=promote_definitions,
+        # Independent queries: run concurrently instead of paying a second
+        # serial DB round trip on the turn's critical path.
+        (results, total, fallback_reason), as_of = await asyncio.gather(
+            asyncio.to_thread(
+                db.rerank_search, query, kind=kind, act=act, limit=limit, offset=offset,
+                promote_definitions=promote_definitions,
+            ),
+            asyncio.to_thread(db.corpus_as_of),
         )
-        as_of = await asyncio.to_thread(db.corpus_as_of)
         return json.dumps({
             "query": query, "total": total, "returned": len(results), "offset": offset,
             "results": [r.model_dump() for r in results],

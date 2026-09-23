@@ -48,7 +48,9 @@ EMBEDDING_DIM = 2048
 # Without a deadline, 3 attempts x 120s httpx timeout + exponential backoff
 # can hang ~6 minutes worst case; beyond this deadline the reranker is
 # abandoned and search falls back to raw ANN scores (reranker_unavailable).
-RERANK_DEADLINE_S = 15.0
+# 5s: a healthy rerank call takes ~1s, so the deadline only ever bites on
+# the failure path — 15s of retries there was pure waste before fallback.
+RERANK_DEADLINE_S = 5.0
 
 # Default text-snippet length for list-style responses (matches the
 # historical ``left(d.text, 300)`` used by semantic search).
