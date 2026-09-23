@@ -95,7 +95,10 @@ GUARDRAIL_ENABLED = True
 # Tier 2 classifier: uses with_structured_output(Intent enum) for reliable
 # classification. These settings control the dedicated classifier model.
 GUARDRAIL_CLASSIFIER_MAX_TOKENS = 32
-GUARDRAIL_CLASSIFIER_TIMEOUT_S = 10.0
+# 5s: the classifier normally answers in well under a second; 10s of waiting
+# before the keyword fallback is dead air on the TTFT path. If the classifier
+# is slow enough to need >5s, the answer is degraded anyway.
+GUARDRAIL_CLASSIFIER_TIMEOUT_S = 5.0
 
 # Message constraints.
 MAX_HISTORY = 8                   # max prior (role, content) turns the client may send

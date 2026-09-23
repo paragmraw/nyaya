@@ -277,8 +277,9 @@ class Scenario:
     category: str
     expected_behavior: str = ""
     history: list[dict[str, str]] | None = None
-    max_latency_ms: float = 60000  # soft in Phase 0; hard 20000 lands with the overhaul
-    max_ttft_ms: float = 60000  # soft in Phase 0; hard 4000 for legal scenarios lands with the overhaul
+    # Hard budgets post-overhaul (plan target: TTFT <4s, full answer <20s).
+    max_latency_ms: float = 20000
+    max_ttft_ms: float = 4000
 
 
 SCENARIOS: list[Scenario] = [
@@ -307,9 +308,9 @@ SCENARIOS: list[Scenario] = [
 
     # ── Factual lookups (agent + tools + answer leg) ──
     Scenario("fact-ipc-302", "What is the punishment for murder under IPC section 302?", "factual_lookup", "Tool call + cited answer"),
-    Scenario("fact-art-21", "What does Article 21 of the Constitution guarantee?", "factual_lookup", "Tool call + cited answer", max_latency_ms=60000),
+    Scenario("fact-art-21", "What does Article 21 of the Constitution guarantee?", "factual_lookup", "Tool call + cited answer"),
     Scenario("fact-ipc-420", "Explain IPC section 420 on cheating.", "factual_lookup", "Tool call + cited answer"),
-    Scenario("fact-art-14", "What is Article 14 of the Constitution about?", "factual_lookup", "Tool call + cited answer", max_latency_ms=60000),
+    Scenario("fact-art-14", "What is Article 14 of the Constitution about?", "factual_lookup", "Tool call + cited answer"),
 
     # ── Semantic search (topical queries) ──
     Scenario("semantic-good-faith", "What is the legal definition of good faith in Indian law?", "semantic_search", "semantic_query + cited answer"),
@@ -318,14 +319,14 @@ SCENARIOS: list[Scenario] = [
 
     # ── Cross-act comparisons ──
     Scenario("compare-ipc-bns-murder", "Compare the punishment for murder under IPC and the new BNS. What changed?", "comparison", "Multiple tool calls + cited comparison"),
-    Scenario("compare-ipc-bns-theft", "How does theft differ between IPC and BNS?", "comparison", "Multiple tool calls + cited comparison", max_latency_ms=60000),
+    Scenario("compare-ipc-bns-theft", "How does theft differ between IPC and BNS?", "comparison", "Multiple tool calls + cited comparison"),
 
     # ── Refusal (out-of-corpus) ──
     Scenario("refusal-nonexistent", "What does the Indian Space Act of 2050 say about Mars colonies?", "refusal", "Tool call + refusal, no fabricated citations"),
     Scenario("refusal-fake-section", "What does IPC section 99999 say?", "refusal", "Tool call + refusal, no fabricated citations"),
 
     # ── Judgment lookup ──
-    Scenario("judgment-kesavananda", "What was the Kesavananda Bharati case about?", "judgment", "get_judgment + cited answer", max_latency_ms=60000),
+    Scenario("judgment-kesavananda", "What was the Kesavananda Bharati case about?", "judgment", "get_judgment + cited answer"),
 
     # ── Definition lookup ──
     Scenario("definition-dishonestly", "What is the meaning of 'dishonestly' under the IPC?", "definition", "get_section or semantic_query + cited answer"),
@@ -402,15 +403,15 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
         )
         result.checks.append(("error_shape", error_shape_ok, json.dumps(d)[:120]))
 
-    # Latency budget (per-scenario: guardrails 200ms, legal up to 3-5 min)
+    # Latency budget (per-scenario: guardrails 200ms, legal 20s / TTFT 4s)
     result.checks.append((
         "latency_ok", result.latency_ms <= scenario.max_latency_ms,
         f"latency={result.latency_ms:.0f}ms (max={scenario.max_latency_ms:.0f}ms)",
     ))
 
-    # Time-to-first-token budget (Phase 0: soft/warning-only while the
-    # overhaul's latency work lands; the harness measures it already, this
-    # just makes the budget visible per scenario).
+    # Time-to-first-token budget (hard since the overhaul: the plan target is
+    # TTFT <4s for legal scenarios; guardrail scenarios are canned so ttft is
+    # 0 by the time the response body is fully read in one chunk).
     result.checks.append((
         "ttft_ok",
         result.time_to_first_token_ms == 0 or result.time_to_first_token_ms <= scenario.max_ttft_ms,
