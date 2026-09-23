@@ -5,6 +5,7 @@ import { BalanceIcon } from "./icons";
 import ChatComposer from "./ChatComposer";
 import ChatMessageView, { phaseLabel } from "./ChatMessage";
 import { RetryButton } from "./ErrorRow";
+import { createAutoScroller, type AutoScroller } from "@/lib/chat/auto-scroll";
 import { useChat } from "@/lib";
 
 // ChatPanel: the live Nyaya assistant. Streams tokens from the FastAPI chat
@@ -79,13 +80,22 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
       ? "Response complete."
       : "";
 
-  // Auto-scroll to the latest message as tokens stream in
+  // Auto-scroll as the answer streams. A passive scroll listener maintains the
+  // near-bottom flag once (no layout reads per flush); onContentChanged only
+  // WRITES scrollTop when the user is at the bottom — the old per-flush
+  // effect read scrollHeight on every message patch, forcing synchronous
+  // layout each animation frame.
+  const scrollerRef = useRef<AutoScroller | null>(null);
   useEffect(() => {
     const el = bodyRef.current;
     if (!el) return;
-    const nearBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-    if (nearBottom) el.scrollTop = el.scrollHeight;
+    const scroller = createAutoScroller();
+    scrollerRef.current = scroller;
+    scroller.attach(el);
+    return () => scroller.detach();
+  }, []);
+  useEffect(() => {
+    scrollerRef.current?.onContentChanged();
   }, [messages, isStreaming]);
 
   return (
