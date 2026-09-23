@@ -111,7 +111,7 @@ def _check_refusal(answer: str) -> bool:
 async def eval_e2e(cases: list[GoldenCase], timeout: float = 120) -> E2EReport:
     from nyaya_chat.citations import CITATION_RE
     from nyaya_chat.graph import get_graph
-    from nyaya_chat.graph.supervisor import build_messages
+    from nyaya_chat.graph.agent import build_messages
 
     report = E2EReport(total=len(cases))
     results: list[CaseResult] = []

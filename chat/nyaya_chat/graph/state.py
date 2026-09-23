@@ -1,4 +1,4 @@
-"""Graph state for the supervisor → parallel-tools → synthesis chat graph.
+"""Graph state for the agent → parallel-tools → agent chat graph.
 
 The compiled graph is built once and shared across all requests, so any
 per-request memory (tool-call dedup, round counters, phase timings) must
@@ -18,14 +18,14 @@ class ChatState(TypedDict, total=False):
     # Request id, echoed on status/error SSE events. Carried in state so
     # every node's emitters share the caller's rid.
     rid: str
-    # 1-based synthesis-round counter (incremented by the synthesis node);
+    # Answer-leg counter (incremented by the agent node on answer legs only);
     # drives the reflection routing cap (settings.max_reflection_rounds) and
-    # tells the supervisor it is on a reflection round (round >= 1).
+    # tells the agent it is on a reflection round (round >= 1).
     round: int
-    # The previous synthesis round's verified answer text and whether it
-    # carried corpus citations. The keep-better rule (synthesis node) refuses
-    # to replace a cited answer with an uncited re-synthesis from a later
-    # reflection round that ran on the same tool results.
+    # The previous answer leg's verified answer text and whether it carried
+    # corpus citations. The keep-better rule (agent node) refuses to replace
+    # a cited answer with an uncited re-answer from a later reflection leg
+    # that ran on the same tool results.
     last_answer: str
     last_answer_cited: bool
     # Per-request tool-call dedup state used by the tools node (see

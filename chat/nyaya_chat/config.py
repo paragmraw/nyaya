@@ -42,7 +42,6 @@ _LIGHTNING = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 # LLM model ids.
 LLM_MODEL = _LIGHTNING            # fallback for degraded mode (no tools)
-SUPERVISOR_MODEL = _LIGHTNING     # plans tool calls, short output
 SYNTHESIS_MODEL = _LIGHTNING      # composes the final grounded answer
 
 # LLM tuning.
@@ -51,14 +50,26 @@ LLM_MAX_TOKENS = 2048             # cap per turn in degraded mode
 LLM_TIMEOUT_S = 60.0              # per-invoke timeout for the NVIDIA API
 LLM_MAX_RETRIES = 4               # retries on 429/5xx with exponential backoff
 
-# Per-phase token caps.
-SUPERVISOR_MAX_TOKENS = 512       # supervisor plans and delegates; short output
-SYNTHESIS_MAX_TOKENS = 6144       # synthesis composes the final answer; the cap must leave room for the model's thinking tokens too (they share the completion budget — observed live: thinking-heavy questions spent ~3k+ tokens reasoning before writing a word, truncating answers to nothing at 2048)
+# The agent's single completion cap (thinking is off, so the budget belongs
+# entirely to the answer).
+SYNTHESIS_MAX_TOKENS = 6144
 
-# Reflection loop: when the synthesis answer appears ungrounded (no citations
-# and tools were called), the agent can do one more retrieval round. This cap
-# limits the total number of supervisor-synthesis rounds.
-MAX_REFLECTION_ROUNDS = 2        # 1 initial round + 1 reflection round
+# Thinking mode for the agent model. Off by default: reasoning tokens share
+# the completion budget with the answer and delay the first answer word by
+# thousands of tokens (observed live: ~3k+ thinking tokens before the first
+# answer word). Flip to True only if citation quality regresses in eval.
+SYNTHESIS_THINKING = False
+
+# Reflection loop: when the agent's answer is ungrounded (no citations and
+# tools were called) and the turn budget allows, the agent may run one more
+# retrieval round. This cap counts reflection rounds; total answer legs per
+# turn = value + 1.
+MAX_REFLECTION_ROUNDS = 1
+
+# A reflection round is only started when at least this many seconds remain
+# before the turn deadline — a reflection that could not finish inside the
+# budget is worse than an uncited answer.
+REFLECTION_DEADLINE_S = 12.0
 
 # Citation verification: after synthesis, the agent programatically parses
 # [[act: X, ref: Y]] markers and checks each against the tool results. Ungrounded
@@ -71,26 +82,20 @@ SSE_KEEPALIVE_INTERVAL_S = 15.0
 
 # Turn wall-clock budget: nodes check the deadline between phases and fail the
 # turn with a ``timeout`` error event instead of grinding through retry loops
-# (each LLM call is up to LLM_TIMEOUT_S x LLM_MAX_RETRIES) until the client
-# gives up. Sized above the observed P90 turn latency so it clips only
-# runaway turns, never healthy ones.
-TURN_BUDGET_S = 180.0
+# (each LLM call is up to LLM_TIMEOUT_S x LLM_MAX_RETRIES). Sized for the
+# TTFT <4s / total <20s targets with headroom for one gated reflection.
+TURN_BUDGET_S = 60.0
 
 # Guardrail: intent classification before the agent pipeline.
 # Tier 1 is regex-based (instant); Tier 2 is an LLM call (only if Tier 1
 # is uncertain). Set to False to bypass the guardrail entirely (all messages
-# go through the normal supervisor -> tools -> synthesis pipeline).
+# go through the normal agent -> tools -> agent pipeline).
 GUARDRAIL_ENABLED = True
 
 # Tier 2 classifier: uses with_structured_output(Intent enum) for reliable
 # classification. These settings control the dedicated classifier model.
 GUARDRAIL_CLASSIFIER_MAX_TOKENS = 32
 GUARDRAIL_CLASSIFIER_TIMEOUT_S = 10.0
-
-# Supervisor: uses with_structured_output(ToolPlan) for structured tool
-# planning. The supervisor model temperature should be low for deterministic
-# tool selection.
-SUPERVISOR_TEMPERATURE = 0.1
 
 # Message constraints.
 MAX_HISTORY = 8                   # max prior (role, content) turns the client may send
@@ -139,7 +144,6 @@ class Settings:
     nvidia_api_key: SecretStr
     mcp_url: str = MCP_URL
     llm_model: str = LLM_MODEL
-    supervisor_model: str = SUPERVISOR_MODEL
     synthesis_model: str = SYNTHESIS_MODEL
     llm_temperature: float = LLM_TEMPERATURE
     llm_max_tokens: int = LLM_MAX_TOKENS
@@ -147,10 +151,10 @@ class Settings:
     llm_max_retries: int = LLM_MAX_RETRIES
     max_history: int = MAX_HISTORY
     log_level: str = LOG_LEVEL
-    supervisor_max_tokens: int = SUPERVISOR_MAX_TOKENS
     synthesis_max_tokens: int = SYNTHESIS_MAX_TOKENS
-    supervisor_temperature: float = SUPERVISOR_TEMPERATURE
+    synthesis_thinking: bool = SYNTHESIS_THINKING
     max_reflection_rounds: int = MAX_REFLECTION_ROUNDS
+    reflection_deadline_s: float = REFLECTION_DEADLINE_S
     citation_verification: bool = CITATION_VERIFICATION
     sse_keepalive_interval_s: float = SSE_KEEPALIVE_INTERVAL_S
     turn_budget_s: float = TURN_BUDGET_S
@@ -174,7 +178,6 @@ class Settings:
         return {
             "mcp_url": self.mcp_url,
             "llm_model": self.llm_model,
-            "supervisor_model": self.supervisor_model,
             "synthesis_model": self.synthesis_model,
             "llm_temperature": self.llm_temperature,
             "llm_max_tokens": self.llm_max_tokens,
@@ -183,9 +186,10 @@ class Settings:
             "max_history": self.max_history,
             "nvidia_api_key": _redact(self.nvidia_api_key.get_secret_value()),
             "tools": list(self.tool_allowlist),
-            "supervisor_max_tokens": self.supervisor_max_tokens,
             "synthesis_max_tokens": self.synthesis_max_tokens,
+            "synthesis_thinking": self.synthesis_thinking,
             "max_reflection_rounds": self.max_reflection_rounds,
+            "reflection_deadline_s": self.reflection_deadline_s,
             "citation_verification": self.citation_verification,
             "sse_keepalive_interval_s": self.sse_keepalive_interval_s,
             "turn_budget_s": self.turn_budget_s,

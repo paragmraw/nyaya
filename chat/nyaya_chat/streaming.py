@@ -9,8 +9,8 @@ interleaves keepalive pings, and wraps the whole turn in the ``error`` /
 
   event: meta        data: {"request_id": "..."}   — request id (server.py)
   event: status      data: {"msg": "...", "rid": "..."} — phase transition (nodes)
-  event: plan        data: {"content": "..."}       — supervisor plan text
-  event: token       data: {"content": "..."}       — synthesis LLM token deltas
+  event: plan        data: {"content": "..."}       — agent leg-1 preamble text
+  event: token       data: {"content": "..."}       — agent answer token deltas
   event: reasoning   data: {"content": "..."}       — reasoning_content deltas
   event: tool_start  data: {"name","args","id"}     — the model called a tool
   event: tool_result data: {"name","summary","id"}  — a tool finished
@@ -21,7 +21,7 @@ interleaves keepalive pings, and wraps the whole turn in the ``error`` /
   event: error       data: {"message","detail","rid"} — a node threw (unified shape)
   event: done        data: {}                       — stream complete
 
-Citation verification runs ONCE, inside the synthesis node; the ``citations``
+Citation verification runs ONCE, inside the agent node; the ``citations``
 and ``correction`` events arrive already computed from the node. Nothing here
 re-derives semantics from node names or message chunks — the old
 ``["messages", "updates"]`` dual-mode inference (and its node-name string
@@ -116,7 +116,7 @@ async def stream_turn(
         log.info("stream cancelled by client")
         raise
     except TurnError as exc:
-        # A node deliberately failed the turn (empty synthesis, dead corpus,
+        # A node deliberately failed the turn (empty answer stream, dead corpus,
         # blown deadline): the code is the stable machine key the frontend's
         # humanizer maps, ``detail`` is the log-facing explanation.
         log.error("turn failed (%s): %s", exc.code, exc.detail)

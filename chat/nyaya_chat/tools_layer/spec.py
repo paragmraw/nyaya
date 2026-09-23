@@ -6,7 +6,7 @@ Every consumer derives from this module:
   description, args schema) straight from :data:`TOOL_SPECS`.
 * ``mcp_fallback.py`` filters the MCP-over-HTTP tools by
   :data:`TOOL_SPECS` names, so both paths expose the SAME interface.
-* ``prompts.py`` renders the supervisor's tool list from the specs, killing
+* ``prompts.py`` renders the agent prompt's tool list from the specs, killing
   the hand-maintained duplicate that used to live in the prompt text.
 
 The descriptions must stay consistent with what the MCP server advertises

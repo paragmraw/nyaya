@@ -26,9 +26,9 @@ _model_instance: Any = None
 _model_initialised = False
 
 # Prompt constants moved to ``prompts.py`` (single source of truth: the
-# supervisor prompt's tool list is rendered from ``tools_layer.spec`` there).
+# agent prompt's tool list is rendered from ``tools_layer.spec`` there).
 # Re-exported here for backward compatibility with existing importers.
-from .prompts import DISCLAIMER, SUPERVISOR_PROMPT, SYSTEM_PROMPT  # noqa: E402,F401
+from .prompts import AGENT_PROMPT, DISCLAIMER, SYSTEM_PROMPT  # noqa: E402,F401
 
 
 def _is_retryable(exc: BaseException) -> bool:

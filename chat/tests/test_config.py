@@ -23,6 +23,40 @@ def test_defaults(monkeypatch):
     assert s.nvidia_api_key.get_secret_value() == "nvapi-abcdef1234567890"
 
 
+def test_agent_pipeline_defaults(monkeypatch):
+    """The overhaul's pipeline-collapse defaults: one agent model with thinking
+    off, a single gated reflection round, and a 60s turn budget (TTFT <4s /
+    total <20s targets)."""
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    s = config.get_settings()
+    # Thinking off: reasoning tokens share the completion budget and delayed
+    # the first answer word by 3k+ tokens (observed live).
+    assert s.synthesis_thinking is False
+    # One reflection round (total answer legs = value + 1).
+    assert s.max_reflection_rounds == 1
+    # A reflection round may only start when this much budget remains.
+    assert s.reflection_deadline_s == 12.0
+    assert s.turn_budget_s == 60.0
+
+
+def test_supervisor_constants_dropped(monkeypatch):
+    """The separate supervisor phase is gone — its config surface is too."""
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    s = config.get_settings()
+    assert not hasattr(s, "supervisor_model")
+    assert not hasattr(s, "supervisor_max_tokens")
+    assert not hasattr(s, "supervisor_temperature")
+    d = s.as_log_dict()
+    assert "supervisor_model" not in d
+    assert "supervisor_max_tokens" not in d
+    assert "synthesis_thinking" in d
+    assert "reflection_deadline_s" in d
+
+
 def test_required_nvidia_key(monkeypatch):
     from nyaya_chat import config
     config.reset_settings_cache()
@@ -57,10 +91,8 @@ def test_per_phase_token_caps_defaults(monkeypatch):
     config.reset_settings_cache()
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
     s = config.get_settings()
-    assert s.supervisor_max_tokens == 512
-    # The synthesis cap must fit thinking + answer: reasoning tokens share the
-    # completion budget, and a thinking-heavy question truncated to nothing at
-    # 2048 (observed live).
+    # The agent's single cap for the whole answer (thinking is off, so the
+    # completion budget belongs entirely to the answer).
     assert s.synthesis_max_tokens == 6144
 
 
@@ -69,7 +101,6 @@ def test_per_phase_model_defaults(monkeypatch):
     config.reset_settings_cache()
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
     s = config.get_settings()
-    assert s.supervisor_model == _LIGHTNING
     assert s.synthesis_model == _LIGHTNING
 
 
@@ -79,9 +110,6 @@ def test_per_phase_model_in_log_dict(monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
     s = config.get_settings()
     d = s.as_log_dict()
-    assert "supervisor_model" in d
-    assert "synthesis_model" in d
-    assert d["supervisor_model"] == _LIGHTNING
     assert d["synthesis_model"] == _LIGHTNING
 
 

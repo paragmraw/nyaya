@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .config import Settings, get_settings
 from .graph import get_graph, get_graph_if_ready
-from .graph.supervisor import build_messages
+from .graph.agent import build_messages
 from .guardrail import Intent, classify_intent, get_canned_response
 from .observability import configure_structlog, get_langfuse_callbacks
 from .schemas import ChatRequest, ChatSubHealthResponse

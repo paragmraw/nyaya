@@ -1,8 +1,8 @@
 # nyaya-chat
 
 LangGraph + FastAPI chat backend for [nyaya](../README.md). A retrieval-grounded
-Indian-law assistant: a supervisor-synthesis agent over the nyaya MCP corpus,
-powered by an NVIDIA Nemotron chat model, streamed to clients over
+Indian-law assistant: a single tool-bound streaming agent over the nyaya MCP
+corpus, powered by an NVIDIA Nemotron chat model, streamed to clients over
 Server-Sent Events.
 
 ## Architecture
@@ -10,7 +10,7 @@ Server-Sent Events.
 ```
 SPA  ──POST /chat/turn (SSE)──►  nyaya Starlette app :8000  ──streamable HTTP──►  /mcp (same process)
                                  └─ /chat sub-app (FastAPI)
-                                     LangGraph supervisor-synthesis agent
+                                     LangGraph agent -> tools -> agent graph
                                      ChatNVIDIA Nemotron
 ```
 
@@ -21,16 +21,18 @@ Railway service. The sub-app owns only chat-specific concerns (the agent,
 the LLM, the SSE encoder); cross-cutting middleware (CORS, security headers,
 request-id, rate limiting, body-size cap) is provided by the host.
 
-- **Agent**: a two-phase LangGraph supervisor-synthesis graph (see
-  `agent.py`). The **supervisor** node receives the user question, briefly
-  reasons about which MCP tools to call, and emits ALL tool calls in a
-  single `AIMessage` for parallel execution — it does not answer the
-  question itself. The **tools** node (`DedupToolNode`) runs all tool calls
-  concurrently and deduplicates repeated (name+args) calls. The **synthesis**
-  node receives all tool results as `ToolMessage`s and composes the final
-  grounded answer with inline `[[act: X, ref: Y]]` citation markers, which
-  the frontend parses into chips. No checkpointer is used — conversation
-  state is per-request only; we do not persist anything.
+- **Agent**: a single tool-bound agent in a 2-node LangGraph graph —
+  `START -> agent -> (tools -> agent | END)` (see `graph/agent.py`).
+  The **agent** node plans and answers in one streaming model call: on its
+  first leg it buffers tokens, emits any preamble as a `plan` event plus the
+  tool calls (`tool_start` events), and routes to the **tools** node
+  (`DedupToolNode` runs all tool calls concurrently, deduplicating repeated
+  (name+args) calls). With tool results back in state as `ToolMessage`s, the
+  agent streams the final grounded answer live as `token` events, with
+  inline `[[act: X, ref: Y]]` citation markers the frontend parses into
+  chips. One gated reflection round re-runs the agent when the answer is
+  uncited and the time budget allows. No checkpointer is used —
+  conversation state is per-request only; we do not persist anything.
 - **Tools**: the agent calls the nyaya MCP server over streamable HTTP via
   `langchain-mcp-adapters`' `MultiServerMCPClient`. In the same-process
   deploy, `MCP_URL` in `chat/nyaya_chat/config.py` points at the same
@@ -39,18 +41,17 @@ request-id, rate limiting, body-size cap) is provided by the host.
   available to direct MCP clients.
 - **LLM**: `ChatNVIDIA`, reads `NVIDIA_API_KEY` from the environment. The
   default model is `nvidia/nemotron-3.5-lightning-30b-a3b` (see `config.py`).
-  The supervisor and synthesis phases each get their own model instance with
-  distinct token caps (`SUPERVISOR_MAX_TOKENS=512`, `SYNTHESIS_MAX_TOKENS=2048`).
-- **Streaming**: LangGraph v2 dual stream mode (`["messages", "updates"]`)
-  -> typed SSE events (`status`, `plan`, `token`, `reasoning`, `tool_start`,
-  `tool_result`, `citations`, `correction`, `ping`, `error`, `done`).
-  Supervisor node content is routed to
-  `plan` events so it doesn't mix with the synthesis answer (`token` events).
-  Phase transitions emit `status` events (`analyzing` -> `searching` ->
-  `composing`).
-- **Retry**: model invocations (supervisor `ainvoke`, synthesis `astream`)
-  wrap with exponential backoff + full jitter on HTTP 429 and 5xx errors
-  (`LLM_MAX_RETRIES=4`).
+  The agent model runs with thinking disabled (`SYNTHESIS_THINKING=False`)
+  and a single token cap (`SYNTHESIS_MAX_TOKENS=6144`); the degraded
+  no-tools fallback reuses the base model on `SYSTEM_PROMPT`.
+- **Streaming**: LangGraph custom stream mode (`["custom"]`) — nodes emit
+  typed event dicts directly (see `graph/events.py`) -> SSE events
+  (`status`, `plan`, `token`, `reasoning`, `tool_start`, `tool_result`,
+  `citations`, `correction`, `ping`, `error`, `done`). `streaming.py` is a
+  pure projection layer. Phase transitions emit `status` events
+  (`analyzing` -> `searching` -> `composing`).
+- **Retry**: model invocations (`astream_with_retry`) wrap with exponential
+  backoff + full jitter on HTTP 429 and 5xx errors (`LLM_MAX_RETRIES=4`).
 - **Protection**: a tighter per-IP rate limit on `POST /chat/*`
   (`RATE_CHAT_PER_MIN`, default 15/min, hardcoded in `mcp/nyaya/config.py`)
   applied by the host's `RateLimitMiddleware`. No auth (same model as the
@@ -99,13 +100,13 @@ shape as the SSE `error` event: `{"message": "...", "detail": "...", "rid": "...
 | event | data | meaning |
 |---|---|---|
 | `meta` | `{"request_id": "..."}` | request id (first event) |
-| `status` | `{"msg": "analyzing"\|"searching"\|"composing", "rid": "..."}` | phase transition (supervisor -> tools -> synthesis); every status event echoes the request id |
-| `plan` | `{"content": "..."}` | supervisor plan text (routed separately from the answer) |
-| `token` | `{"content": "..."}` | synthesis LLM token delta (the final answer) |
+| `status` | `{"msg": "analyzing"\|"searching"\|"composing", "rid": "..."}` | phase transition (agent -> tools -> answer); every status event echoes the request id |
+| `plan` | `{"content": "..."}` | agent leg-1 preamble text (routed separately from the answer) |
+| `token` | `{"content": "..."}` | agent answer token delta (the final answer) |
 | `reasoning` | `{"content": "..."}` | reasoning_content delta (forward-compat for reasoning-capable models) |
 | `tool_start` | `{"id","name","args"}` | the model called a tool |
 | `tool_result` | `{"id","name","summary"}` | a tool returned |
-| `citations` | `{"citations": [{"act": "...", "ref": "..."}]}` | citations parsed from the synthesis node's VERIFIED answer (no re-verification stream-side) |
+| `citations` | `{"citations": [{"act": "...", "ref": "..."}]}` | citations parsed from the agent's VERIFIED answer (no re-verification stream-side) |
 | `correction` | `{"content": "..."}` | the verified answer, emitted ONLY when it differs from the raw streamed tokens; absent when they match |
 | `ping` | `{"ts": 123}` | keepalive (every ~15s) |
 | `error` | `{"message", "detail", "rid"}` | a node failed (unified error shape) |

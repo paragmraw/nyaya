@@ -1,14 +1,19 @@
-"""Graph assembly: supervisor → parallel tools → synthesis, with reflection.
+"""Graph assembly: agent → parallel tools → agent, with gated reflection.
+
+Phase 1 pipeline collapse: ONE streaming, tool-bound agent node replaces the
+old supervisor (structured ToolPlan planner + corrective retry) and synthesis
+nodes — ``START → agent → (tools → agent | END)``. One LLM round trip on the
+answer path replaces up to three.
 
 This module builds the compiled ``StateGraph`` and holds its module-level
 lifecycle state (:func:`get_graph` / :func:`get_graph_if_ready` /
-:func:`reset_graph`), replacing ``agent.py``.
+:func:`reset_graph`).
 
 **No checkpointer.** The client supplies the conversation history on every
 turn (``ChatRequest.history``) and each turn is a bounded run of at most
-``MAX_REFLECTION_ROUNDS`` supervisor/synthesis cycles; persisting state
-across turns would buy server-side memory we have not productized while
-adding an AsyncPostgresSaver dependency to every request. Revisit only if
+``MAX_REFLECTION_ROUNDS + 1`` answer legs; persisting state across turns
+would buy server-side memory we have not productized while adding an
+AsyncPostgresSaver dependency to every request. Revisit only if
 resume-from-checkpoint or server-side memory becomes a requirement.
 
 **Event flow:** nodes emit every semantic SSE event (tokens included) via
@@ -28,17 +33,24 @@ from langgraph.graph import END, START, StateGraph
 
 from ..config import Settings, get_settings
 from ..llm import get_model
-from ..schemas_llm import ToolPlan
 from ..tools_layer import load_tools
+from .agent import build_messages, make_agent_node, route_agent
 from .state import ChatState
-from .supervisor import (
-    make_supervisor_node,
-    route_supervisor,  # re-exported for tests
-)
-from .synthesis import make_synthesis_node, route_synthesis
 from .tools_node import DedupToolNode
 
 log = logging.getLogger("nyaya_chat.graph")
+
+# Re-exported for tests and the server (the agent owns message assembly now).
+__all__ = [
+    "build_graph",
+    "build_graph_for",
+    "build_messages",
+    "get_graph",
+    "get_graph_if_ready",
+    "reset_graph",
+]
+
+_DEGRADED_NODE_NAME = "degraded_synthesis"
 
 
 def _make_model(settings: Settings, *, model_name: str, max_tokens: int, temperature: float | None = None) -> Any:
@@ -79,7 +91,7 @@ def _make_model(settings: Settings, *, model_name: str, max_tokens: int, tempera
 
 
 async def build_graph(settings: Settings) -> tuple[Any, list[Any]]:
-    """Connect to tools and compile the supervisor-tools-synthesis graph.
+    """Connect to tools and compile the agent-tools graph.
 
     Returns ``(compiled_graph, tools)``. With zero tools loaded, a degraded
     single-node graph is returned (streams an answer directly, no retrieval,
@@ -90,94 +102,60 @@ async def build_graph(settings: Settings) -> tuple[Any, list[Any]]:
         log.warning("no tools loaded, building degraded graph")
         model = get_model(settings)
         builder: StateGraph = StateGraph(ChatState)
-        builder.add_node(_DEGRADED_NODE_NAME, make_synthesis_node(settings, model, has_tools=False))
+        builder.add_node(_DEGRADED_NODE_NAME, make_agent_node(settings, model, has_tools=False))
         builder.add_edge(START, _DEGRADED_NODE_NAME)
         builder.add_edge(_DEGRADED_NODE_NAME, END)
         return builder.compile(), []
 
     log.info("loaded %d tools", len(tools))
 
-    # Supervisor model: try with_structured_output(ToolPlan) first; if the
-    # API doesn't support it at invoke time, the supervisor node falls back
-    # to the bind_tools model on its first failure (pre-built here so the
-    # fallback is instant).
-    supervisor_base = _make_model(
-        settings,
-        model_name=settings.supervisor_model,
-        max_tokens=settings.supervisor_max_tokens,
-        temperature=settings.supervisor_temperature,
-    )
-
-    # Disable thinking mode so the model focuses on tool calling instead of
-    # reasoning.
-    if hasattr(supervisor_base, "with_thinking_mode"):
-        try:
-            supervisor_base = supervisor_base.with_thinking_mode(enabled=False)
-            log.info("supervisor: thinking mode disabled")
-        except Exception:
-            log.warning("could not disable thinking mode for supervisor")
-
-    supervisor_structured = None
-    supervisor_bind_tools = None
-    if hasattr(supervisor_base, "with_structured_output"):
-        try:
-            supervisor_structured = supervisor_base.with_structured_output(ToolPlan)
-            log.info("supervisor: with_structured_output(ToolPlan) available")
-        except Exception:
-            pass
-    if hasattr(supervisor_base, "bind_tools"):
-        supervisor_bind_tools = supervisor_base.bind_tools(tools)
-        log.info("supervisor: bind_tools available as fallback")
-
-    supervisor_model = supervisor_structured or supervisor_bind_tools or supervisor_base
-
-    synthesis_model = _make_model(
+    # The agent model: thinking off (reasoning tokens share the completion
+    # budget and delayed the first answer word by 3k+ tokens — see
+    # SYNTHESIS_THINKING in config), tool-bound so it can call the retrieval
+    # tools directly.
+    agent_base = _make_model(
         settings,
         model_name=settings.synthesis_model,
         max_tokens=settings.synthesis_max_tokens,
     )
+    if not settings.synthesis_thinking and hasattr(agent_base, "with_thinking_mode"):
+        try:
+            agent_base = agent_base.with_thinking_mode(enabled=False)
+            log.info("agent: thinking mode disabled")
+        except Exception:
+            log.warning("could not disable thinking mode for the agent model")
 
-    supervisor_node = make_supervisor_node(settings, supervisor_model, supervisor_bind_tools)
-    synthesis_node = make_synthesis_node(settings, synthesis_model, has_tools=True)
+    if hasattr(agent_base, "bind_tools"):
+        agent_model = agent_base.bind_tools(tools)
+        log.info("agent: bind_tools available")
+    else:
+        # A model without bind_tools cannot call tools; the graph degrades
+        # to direct answers (route_agent's has-tool checks keep it honest).
+        log.warning("agent model does not support bind_tools; tool calls unavailable")
+        agent_model = agent_base
+
+    agent_node = make_agent_node(settings, agent_model, has_tools=True)
+
+    def _route(state: ChatState) -> Any:
+        dest = route_agent(state, settings)
+        return END if dest == "end" else dest
 
     builder = StateGraph(ChatState)
-    builder.add_node("supervisor", supervisor_node)
+    builder.add_node("agent", agent_node)
     builder.add_node("tools", DedupToolNode(tools))
-    builder.add_node(_SYNTHESIS_NODE_NAME, synthesis_node)
 
-    builder.add_edge(START, "supervisor")
-    builder.add_conditional_edges(
-        "supervisor", route_supervisor, ["tools", _SYNTHESIS_NODE_NAME],
-    )
-    builder.add_edge("tools", _SYNTHESIS_NODE_NAME)
-    builder.add_conditional_edges(
-        _SYNTHESIS_NODE_NAME,
-        # route_synthesis speaks "end"/"supervisor"; LangGraph's end sentinel
-        # is the END constant, so translate here.
-        lambda state: (
-            "supervisor" if route_synthesis(state, settings) == "supervisor" else END
-        ),
-        ["supervisor", END],
-    )
+    builder.add_edge(START, "agent")
+    builder.add_conditional_edges("agent", _route, ["tools", "agent", END])
+    builder.add_edge("tools", "agent")
 
     graph = builder.compile()
     log.info(
-        "compiled LangGraph supervisor-tools-synthesis graph with reflection "
-        "(supervisor=%s, synthesis=%s, tools=%d, max_rounds=%d, citation_verification=%s)",
-        settings.supervisor_model, settings.synthesis_model, len(tools),
+        "compiled LangGraph agent pipeline (agent=%s, thinking=%s, tools=%d, "
+        "max_reflection_rounds=%d, citation_verification=%s)",
+        settings.synthesis_model, settings.synthesis_thinking, len(tools),
         settings.max_reflection_rounds, settings.citation_verification,
     )
     return graph, tools
-
-
-# Node-name constants. The streamer no longer keys on them (nodes emit their
-# own events); they remain for tests, logging, and the degraded-graph wiring.
-_SYNTHESIS_NODE_NAME = "synthesis"
-_DEGRADED_NODE_NAME = "degraded_synthesis"
-
-# Public aliases (kept for tests that import the constants).
-SYNTHESIS_NODE_NAME = _SYNTHESIS_NODE_NAME
-DEGRADED_NODE_NAME = _DEGRADED_NODE_NAME
 
 
 # ---------------------------------------------------------------------------
@@ -235,8 +213,5 @@ def reset_graph() -> None:
 
 
 async def build_graph_for(settings: Settings) -> tuple[Any, list[Any]]:
-    """Build a fresh graph for the given settings (bypassing the cache).
-
-    Backward-compatible entry point mirroring the old ``build_agent``.
-    """
+    """Build a fresh graph for the given settings (bypassing the cache)."""
     return await build_graph(settings)

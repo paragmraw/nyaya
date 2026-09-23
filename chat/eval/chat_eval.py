@@ -305,7 +305,7 @@ SCENARIOS: list[Scenario] = [
     Scenario("off-topic-joke", "tell me a joke", "off_topic", "Instant canned refusal", max_latency_ms=200),
     Scenario("off-topic-recipe", "how to make biryani recipe", "off_topic", "Instant canned refusal", max_latency_ms=200),
 
-    # ── Factual lookups (supervisor + tools + synthesis) ──
+    # ── Factual lookups (agent + tools + answer leg) ──
     Scenario("fact-ipc-302", "What is the punishment for murder under IPC section 302?", "factual_lookup", "Tool call + cited answer"),
     Scenario("fact-art-21", "What does Article 21 of the Constitution guarantee?", "factual_lookup", "Tool call + cited answer", max_latency_ms=60000),
     Scenario("fact-ipc-420", "Explain IPC section 420 on cheating.", "factual_lookup", "Tool call + cited answer"),

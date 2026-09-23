@@ -102,7 +102,7 @@ def timed_phase(state: ChatState, phase: str, t0: float) -> float:
 
         t0 = time.monotonic()
         ... work ...
-        timed_phase(state, "supervisor_ms", t0)
+        timed_phase(state, "agent_ms", t0)
 
     Rounds accumulate (summed per key); the streamer includes the totals in
     the per-turn completion log line. Returns the elapsed ms.

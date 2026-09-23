@@ -1,7 +1,7 @@
 """Two-tier intent classification guardrail for the chat agent.
 
 Prevents non-legal messages (greetings, capability questions, off-topic
-chitchat) from entering the full supervisor -> tools -> synthesis pipeline.
+chitchat) from entering the full agent -> tools -> agent pipeline.
 This eliminates 10-30s of wasted latency and produces appropriate responses
 instead of the default "could not find a basis in the corpus" refusal.
 
@@ -13,7 +13,7 @@ Uses the already-loaded Nemotron model with a short classification prompt
 and max_tokens=32. Fails open to LEGAL on timeout or error.
 
 When the intent is not LEGAL, the server emits a canned SSE response
-directly -- no supervisor call, no tool calls, no synthesis call.
+directly -- no agent call, no tool calls, no answer stream.
 """
 
 from __future__ import annotations

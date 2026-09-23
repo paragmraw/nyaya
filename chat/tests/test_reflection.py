@@ -5,8 +5,7 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from nyaya_chat.citations import CITATION_RE
-from nyaya_chat.graph.synthesis import (
-    _has_refusal,
+from nyaya_chat.graph.agent import (
     _has_tool_calls,
     _wrap_tool_results_in_corpus_tags,
 )
@@ -26,17 +25,6 @@ def test_has_citations_false():
 
 def test_has_citations_empty():
     assert not _has_citations("")
-
-
-def test_has_refusal_true():
-    assert _has_refusal("I could not find a basis in the corpus.")
-    assert _has_refusal("No tool result covers this question.")
-    assert _has_refusal("This provision is not in the corpus.")
-
-
-def test_has_refusal_false():
-    assert not _has_refusal("The punishment for murder is death.")
-    assert not _has_refusal("")
 
 
 def test_had_tool_calls_true():
@@ -109,6 +97,6 @@ def test_system_prompt_rule_numbering_fixed():
     assert 6 not in nums
 
 
-def test_supervisor_prompt_has_followup_rule():
-    from nyaya_chat.llm import SUPERVISOR_PROMPT
-    assert "follow-up" in SUPERVISOR_PROMPT.lower() or "different query" in SUPERVISOR_PROMPT.lower()
+def test_agent_prompt_has_followup_rule():
+    from nyaya_chat.llm import AGENT_PROMPT
+    assert "follow-up" in AGENT_PROMPT.lower() or "DIFFERENT query" in AGENT_PROMPT

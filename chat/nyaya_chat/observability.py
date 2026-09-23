@@ -5,8 +5,8 @@ lines with ``request_id``, ``turn_id``, ``phase``, ``latency_ms``,
 ``tool_name``, and ``token_count`` fields.
 
 Langfuse integration (optional, enabled when ``LANGFUSE_PUBLIC_KEY`` +
-``LANGFUSE_SECRET_KEY`` + ``LANGFUSE_HOST`` are set) traces every
-supervisor/synthesis call with input/output/tokens/latency. The Langfuse
+``LANGFUSE_SECRET_KEY`` + ``LANGFUSE_HOST`` are set) traces every model
+call with input/output/tokens/latency. The Langfuse
 CallbackHandler integrates with LangChain automatically. When Langfuse is
 not configured, tracing is a no-op.
 """
