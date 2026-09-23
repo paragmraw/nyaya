@@ -34,8 +34,18 @@ function mightBecomeMarker(s: string): boolean {
   if (refIdx !== -1) {
     const ws = after.slice(0, refIdx);
     if (ws.length > 16 || /\S/.test(ws)) return false;
-    const ref = after.slice(refIdx + 4);
-    if (ref.includes("]")) return false;
+    let ref = after.slice(refIdx + 4);
+    // A trailing "]" may be the marker's OWN first closing bracket with the
+    // second one still in flight (a feed boundary can fall between the two
+    // "]"s of "]]") — that is holdable. Any "]" BEFORE the trailing one is a
+    // real bracket inside the ref text: dead.
+    if (ref.endsWith("]")) {
+      const body = ref.slice(0, -1);
+      if (body.includes("]")) return false;
+      // With the closing bracket accounted for, the ref body must still be
+      // within bounds and non-empty ([^\]]{1,2048}).
+      return body.length >= 1 && body.length <= 2048;
+    }
     return ref.length <= 2048; // ref may still be empty — holdable
   }
   // No "ref:" yet: allow whitespace run (≤16) plus a prefix of "ref:".

@@ -72,22 +72,41 @@ def test_ttft_check_fails_over_budget():
     assert check[1] is False, check
 
 
-def test_latency_and_ttft_softness_flag_tracks_the_soft_set():
-    """The SOFT_CHECKS mechanism still exists: over-budget latency/TTFT are
-    warnings, not gating failures, while a scenario is listed there. Phase 4
-    removes both from the set, so the check asserts the gating behavior of the
-    CURRENT set: nothing is soft, so both ARE gating failures."""
+def test_no_checks_are_soft():
+    """Phase 4: nothing is soft — over-budget latency/TTFT ARE gating
+    failures (the live acceptance run gates on them)."""
     mod = _load()
+    assert mod.SOFT_CHECKS == frozenset()
     r, _ = _result(mod, latency_ms=120000.0, ttft_ms=120000.0)
     gating = mod.gating_failures(r)
-    if not mod.SOFT_CHECKS:
-        assert [f[0] for f in gating if f[0] in ("latency_ok", "ttft_ok")] == \
-            ["latency_ok", "ttft_ok"]
-    else:
-        assert [f for f in gating if f[0] in ("latency_ok", "ttft_ok")] == []
-    # But they are still recorded as checks so the report can warn.
-    assert any(name == "latency_ok" and not ok for name, ok, _ in r.checks)
-    assert any(name == "ttft_ok" and not ok for name, ok, _ in r.checks)
+    assert [f[0] for f in gating if f[0] in ("latency_ok", "ttft_ok")] == \
+        ["latency_ok", "ttft_ok"]
+
+
+def test_canned_caps_relaxed_for_remote_host_only():
+    """The 200ms canned cap is server compute; a remote host adds network RTT
+    (the Phase 0 baseline saw up to 1.1s canned from network alone), so live
+    acceptance must relax canned caps — local runs keep 200ms strict."""
+    mod = _load()
+    canned_ids = [s.id for s in mod.SCENARIOS if s.category in mod.CANNED_CATEGORIES]
+    assert canned_ids, "expected canned scenarios"
+
+    remote = mod.apply_host_latency_overrides(mod.SCENARIOS, "https://nyaya.parag.tech")
+    for s in remote:
+        if s.category in mod.CANNED_CATEGORIES:
+            assert s.max_latency_ms == mod.CANNED_LIVE_LATENCY_MS, s.id
+        else:
+            assert s.max_latency_ms <= 20000.0, s.id
+    # Original SCENARIOS untouched (pure function).
+    for s in mod.SCENARIOS:
+        if s.category in mod.CANNED_CATEGORIES:
+            assert s.max_latency_ms == 200, s.id
+
+    local = mod.apply_host_latency_overrides(mod.SCENARIOS, "http://127.0.0.1:8001")
+    assert local is mod.SCENARIOS
+    for s in local:
+        if s.category in mod.CANNED_CATEGORIES:
+            assert s.max_latency_ms == 200, s.id
 
 
 def test_quality_failures_still_gate():

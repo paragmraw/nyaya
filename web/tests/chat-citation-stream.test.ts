@@ -86,6 +86,31 @@ test("chunked feeding equals the one-shot strip", () => {
   assert.equal(streamed, stripCitationMarkers(text));
 });
 
+// Review finding: when a feed boundary falls BETWEEN the two "]"s of a
+// marker's close, the held candidate ends with exactly one "]" — that may be
+// the marker's own first closing bracket, not a bracket inside the ref. The
+// streamed display must still end up as a chip, equal to the one-shot strip.
+test("a marker straddling the ']]' across deltas still converts", () => {
+  const { streamed } = feedAll(["Murder [[act: IPC, ref: s. 302]", "] under IPC."]);
+  assert.equal(streamed, "Murder [IPC · s. 302] under IPC.");
+});
+
+test("chunk sizes 1 and 2 equal the one-shot strip (fuzz-found boundary class)", () => {
+  const text = "Answer [[act: IPC, ref: s. 302]]. More [[act: BNS, ref: s. 103(a)]].";
+  for (const size of [1, 2, 3]) {
+    const s = new StreamingCitationStripper();
+    let streamed = "";
+    for (let i = 0; i < text.length; i += size) streamed += s.feed(text.slice(i, i + size));
+    streamed += s.flush();
+    assert.equal(streamed, stripCitationMarkers(text), `chunk size ${size}`);
+  }
+});
+
+test("a ref whose interior contains a real ']' is dead even with a trailing one", () => {
+  const { streamed } = feedAll(["x [[act: IPC, ref: s] 302]", " more"]);
+  assert.equal(streamed, "x [[act: IPC, ref: s] 302] more");
+});
+
 test("restart rebases the stripper onto corrected text", () => {
   const s = new StreamingCitationStripper();
   s.feed("raw [[act: IPC, ref: s. 302]]");

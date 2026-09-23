@@ -83,3 +83,26 @@ test("cancel drops the pending write without flushing", () => {
   t.fireAll();
   assert.equal(writes.length, 0);
 });
+
+// Review finding: the debounced write must also defer SERIALIZATION — the old
+// code stringified the whole transcript on every schedule() call, so streaming
+// still paid one full JSON.stringify per frame patch even though the write
+// itself was debounced.
+test("schedule does not serialize until the timer fires", () => {
+  const t = manualTimers();
+  let serializes = 0;
+  const w = createPersistWriter({
+    delayMs: 500,
+    ...t,
+    write: () => {},
+    serialize: (messages) => {
+      serializes += 1;
+      return JSON.stringify({ v: 1, messages });
+    },
+  });
+  w.schedule([msg("a")]);
+  w.schedule([msg("a"), msg("b")]);
+  assert.equal(serializes, 0, "no serialization before the timer fires");
+  t.fireAll();
+  assert.equal(serializes, 1, "exactly one serialization at fire time");
+});

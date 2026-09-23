@@ -40,7 +40,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -355,10 +355,30 @@ SCENARIOS: list[Scenario] = [
 # ---------------------------------------------------------------------------
 
 # Soft checks: recorded and reported as warnings, but excluded from the
-# gating pass/fail arithmetic. Phase 0 of the chat overhaul softens the
-# latency budgets so the pre-change baseline can be recorded without
-# red-gating; the hard flip (and tighter caps) lands with the overhaul.
-SOFT_CHECKS: frozenset[str] = frozenset({"latency_ok", "ttft_ok"})
+# gating pass/fail arithmetic. Phase 0 used this to record the pre-change
+# baseline without red-gating latency/TTFT; Phase 4 emptied the set — every
+# check, including the hard 20000ms latency / 4000ms TTFT budgets, gates.
+SOFT_CHECKS: frozenset[str] = frozenset()
+
+# Canned-path latency budgets are 200ms of SERVER compute; the harness measures
+# end-to-end from the runner, so a live host (DNS + TLS + RTT to Railway — the
+# Phase 0 baseline recorded canned latencies up to 1.1s from network alone)
+# fails healthy runs on jitter. When the target is not local, canned scenarios
+# get a network-tolerant cap instead. Local runs keep the strict 200ms.
+CANNED_LIVE_LATENCY_MS = 1500.0
+LOCAL_HOST_MARKERS = ("localhost", "127.0.0.1", "[::1]", "0.0.0.0")
+CANNED_CATEGORIES = frozenset({"greeting", "capability", "thanks", "off_topic"})
+
+
+def apply_host_latency_overrides(scenarios: list[Scenario], host: str) -> list[Scenario]:
+    """Return the scenarios with canned-path caps relaxed for a remote host."""
+    if any(marker in host for marker in LOCAL_HOST_MARKERS):
+        return scenarios
+    return [
+        s if s.category not in CANNED_CATEGORIES
+        else replace(s, max_latency_ms=max(s.max_latency_ms, CANNED_LIVE_LATENCY_MS))
+        for s in scenarios
+    ]
 
 
 def gating_failures(result: StreamResult) -> list[tuple[str, str]]:
@@ -748,7 +768,10 @@ def main() -> None:
         print(f"ERROR: Cannot reach server at {args.host}: {e}")
         sys.exit(1)
 
-    scenarios_to_run = SCENARIOS if not args.scenario else [s for s in SCENARIOS if s.id == args.scenario]
+    scenarios_to_run = apply_host_latency_overrides(
+        SCENARIOS if not args.scenario else [s for s in SCENARIOS if s.id == args.scenario],
+        args.host,
+    )
     if not scenarios_to_run:
         print(f"ERROR: no scenario matching {args.scenario!r}. Use --list to see IDs.")
         sys.exit(1)

@@ -82,20 +82,28 @@ export function createPersistWriter(options?: {
   write?: (raw: string | null) => void;
   setTimeoutFn?: (cb: () => void, ms: number) => unknown;
   clearTimeoutFn?: (handle: unknown) => void;
+  serialize?: (messages: ChatMessage[]) => string;
 }): PersistWriter {
   const delayMs = options?.delayMs ?? 500;
   const write = options?.write ?? writeStore;
   const setT = options?.setTimeoutFn ?? ((cb: () => void, ms: number) => globalThis.setTimeout(cb, ms));
   const clearT = options?.clearTimeoutFn ?? ((h: unknown) => globalThis.clearTimeout(h as ReturnType<typeof setTimeout>));
+  const serialize = options?.serialize ?? serializeMessages;
   let handle: unknown = null;
-  let lastRaw: string | null = null;
+  // The PENDING LIST is kept, not its serialization: schedule() fires once per
+  // frame patch during a stream, and stringifying the whole transcript per
+  // call re-introduces the per-frame O(n) cost the debouncing was meant to
+  // remove. The list is serialized exactly once, inside the timer callback.
+  let pendingList: ChatMessage[] | null = null;
+  const toRaw = (messages: ChatMessage[]): string | null =>
+    messages.length > 0 ? serialize(messages) : null;
   return {
     schedule(messages) {
-      lastRaw = messages.length > 0 ? serializeMessages(messages) : null;
+      pendingList = messages;
       if (handle !== null) return; // a trailing write is already pending
       handle = setT(() => {
         handle = null;
-        write(lastRaw);
+        write(toRaw(pendingList!));
       }, delayMs);
     },
     flushNow(messages) {
@@ -103,14 +111,15 @@ export function createPersistWriter(options?: {
         clearT(handle);
         handle = null;
       }
-      lastRaw = messages.length > 0 ? serializeMessages(messages) : null;
-      write(lastRaw);
+      pendingList = null;
+      write(toRaw(messages));
     },
     cancel() {
       if (handle !== null) {
         clearT(handle);
         handle = null;
       }
+      pendingList = null;
     },
   };
 }
