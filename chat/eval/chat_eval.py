@@ -277,7 +277,8 @@ class Scenario:
     category: str
     expected_behavior: str = ""
     history: list[dict[str, str]] | None = None
-    max_latency_ms: float = 180000  # 3 min default
+    max_latency_ms: float = 60000  # soft in Phase 0; hard 20000 lands with the overhaul
+    max_ttft_ms: float = 60000  # soft in Phase 0; hard 4000 for legal scenarios lands with the overhaul
 
 
 SCENARIOS: list[Scenario] = [
@@ -306,9 +307,9 @@ SCENARIOS: list[Scenario] = [
 
     # ── Factual lookups (supervisor + tools + synthesis) ──
     Scenario("fact-ipc-302", "What is the punishment for murder under IPC section 302?", "factual_lookup", "Tool call + cited answer"),
-    Scenario("fact-art-21", "What does Article 21 of the Constitution guarantee?", "factual_lookup", "Tool call + cited answer", max_latency_ms=300000),
+    Scenario("fact-art-21", "What does Article 21 of the Constitution guarantee?", "factual_lookup", "Tool call + cited answer", max_latency_ms=60000),
     Scenario("fact-ipc-420", "Explain IPC section 420 on cheating.", "factual_lookup", "Tool call + cited answer"),
-    Scenario("fact-art-14", "What is Article 14 of the Constitution about?", "factual_lookup", "Tool call + cited answer", max_latency_ms=300000),
+    Scenario("fact-art-14", "What is Article 14 of the Constitution about?", "factual_lookup", "Tool call + cited answer", max_latency_ms=60000),
 
     # ── Semantic search (topical queries) ──
     Scenario("semantic-good-faith", "What is the legal definition of good faith in Indian law?", "semantic_search", "semantic_query + cited answer"),
@@ -317,14 +318,14 @@ SCENARIOS: list[Scenario] = [
 
     # ── Cross-act comparisons ──
     Scenario("compare-ipc-bns-murder", "Compare the punishment for murder under IPC and the new BNS. What changed?", "comparison", "Multiple tool calls + cited comparison"),
-    Scenario("compare-ipc-bns-theft", "How does theft differ between IPC and BNS?", "comparison", "Multiple tool calls + cited comparison", max_latency_ms=300000),
+    Scenario("compare-ipc-bns-theft", "How does theft differ between IPC and BNS?", "comparison", "Multiple tool calls + cited comparison", max_latency_ms=60000),
 
     # ── Refusal (out-of-corpus) ──
     Scenario("refusal-nonexistent", "What does the Indian Space Act of 2050 say about Mars colonies?", "refusal", "Tool call + refusal, no fabricated citations"),
     Scenario("refusal-fake-section", "What does IPC section 99999 say?", "refusal", "Tool call + refusal, no fabricated citations"),
 
     # ── Judgment lookup ──
-    Scenario("judgment-kesavananda", "What was the Kesavananda Bharati case about?", "judgment", "get_judgment + cited answer", max_latency_ms=300000),
+    Scenario("judgment-kesavananda", "What was the Kesavananda Bharati case about?", "judgment", "get_judgment + cited answer", max_latency_ms=60000),
 
     # ── Definition lookup ──
     Scenario("definition-dishonestly", "What is the meaning of 'dishonestly' under the IPC?", "definition", "get_section or semantic_query + cited answer"),
@@ -351,6 +352,18 @@ SCENARIOS: list[Scenario] = [
 # ---------------------------------------------------------------------------
 # Quality checks — union of both old suites
 # ---------------------------------------------------------------------------
+
+# Soft checks: recorded and reported as warnings, but excluded from the
+# gating pass/fail arithmetic. Phase 0 of the chat overhaul softens the
+# latency budgets so the pre-change baseline can be recorded without
+# red-gating; the hard flip (and tighter caps) lands with the overhaul.
+SOFT_CHECKS: frozenset[str] = frozenset({"latency_ok", "ttft_ok"})
+
+
+def gating_failures(result: StreamResult) -> list[tuple[str, str]]:
+    """The failed checks that gate PASS/FAIL (soft checks excluded)."""
+    return [(name, detail) for name, ok, detail in result.checks if not ok and name not in SOFT_CHECKS]
+
 
 def run_checks(result: StreamResult, scenario: Scenario) -> None:
     """Run quality checks on the result and populate result.checks."""
@@ -393,6 +406,15 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
     result.checks.append((
         "latency_ok", result.latency_ms <= scenario.max_latency_ms,
         f"latency={result.latency_ms:.0f}ms (max={scenario.max_latency_ms:.0f}ms)",
+    ))
+
+    # Time-to-first-token budget (Phase 0: soft/warning-only while the
+    # overhaul's latency work lands; the harness measures it already, this
+    # just makes the budget visible per scenario).
+    result.checks.append((
+        "ttft_ok",
+        result.time_to_first_token_ms == 0 or result.time_to_first_token_ms <= scenario.max_ttft_ms,
+        f"ttft={result.time_to_first_token_ms:.0f}ms (max={scenario.max_ttft_ms:.0f}ms)",
     ))
 
     result.checks.append(("no_corpus_text_tags", "<corpus_text>" not in result.answer_text, ""))
@@ -525,18 +547,20 @@ def run_scenario(host: str, scenario: Scenario, *, live: bool = True) -> StreamR
     extract_result(stream)
     run_checks(stream, scenario)
 
-    passed = sum(1 for _, ok, _ in stream.checks if ok)
-    total = len(stream.checks)
+    gating = gating_failures(stream)
+    total = sum(1 for name, _ok, _ in stream.checks if name not in SOFT_CHECKS)
     ttft = f" TTFT={stream.time_to_first_token_ms:.0f}ms" if stream.time_to_first_token_ms else ""
     if live:
-        print(f"  [{'PASS' if passed == total else 'FAIL'}] Checks: {passed}/{total} | "
+        print(f"  [{'PASS' if not gating else 'FAIL'}] Checks: {total - len(gating)}/{total} | "
               f"Tools: {len(stream.tool_calls)} | Citations: {len(stream.citations)} | "
               f"Latency: {stream.latency_ms:.0f}ms{ttft} | Answer: {len(stream.answer_text)} chars")
         if stream.error:
             print(f"  WARN: {stream.error}")
         for check_name, check_ok, check_detail in stream.checks:
-            if not check_ok:
+            if not check_ok and check_name not in SOFT_CHECKS:
                 print(f"    FAIL {check_name}: {check_detail}")
+            elif not check_ok:
+                print(f"    WARN {check_name}: {check_detail} (soft)")
     return stream
 
 
@@ -546,14 +570,23 @@ def run_scenario(host: str, scenario: Scenario, *, live: bool = True) -> StreamR
 
 def print_final_report(results: list[StreamResult], verbose: bool = False) -> None:
     """Print the merged final report (superset of both old reports)."""
+    soft_fails = [(r, name, detail) for r in results for name, ok, detail in r.checks
+                  if not ok and name in SOFT_CHECKS]
+
     print(f"\n\n{'=' * 70}")
     print("CHAT EVAL REPORT")
     print(f"{'=' * 70}")
     print(f"Scenarios: {len(results)}")
 
-    total_checks = sum(len(r.checks) for r in results)
-    passed_checks = sum(1 for r in results for _, ok, _ in r.checks if ok)
+    total_checks = sum(1 for r in results for name, _ok, _ in r.checks if name not in SOFT_CHECKS)
+    passed_checks = sum(1 for r in results for name, ok, _ in r.checks if ok and name not in SOFT_CHECKS)
     print(f"Total checks: {passed_checks}/{total_checks} ({passed_checks / total_checks * 100:.1f}%)")
+    soft_fails = [(r, name, detail) for r in results for name, ok, detail in r.checks
+                  if not ok and name in SOFT_CHECKS]
+    if soft_fails:
+        print(f"Soft (non-gating) warnings: {len(soft_fails)}")
+        for r, name, detail in soft_fails:
+            print(f"  {r.scenario_id:25s} WARN {name}: {detail}")
 
     # By category
     categories: dict[str, list[StreamResult]] = {}
@@ -563,8 +596,8 @@ def print_final_report(results: list[StreamResult], verbose: bool = False) -> No
     print(f"\n{'-' * 70}")
     print("BY CATEGORY:")
     for cat, cat_results in sorted(categories.items()):
-        cat_checks = sum(len(r.checks) for r in cat_results)
-        cat_passed = sum(1 for r in cat_results for _, ok, _ in r.checks if ok)
+        cat_checks = sum(1 for r in cat_results for name, _ok, _ in r.checks if name not in SOFT_CHECKS)
+        cat_passed = sum(1 for r in cat_results for name, ok, _ in r.checks if ok and name not in SOFT_CHECKS)
         cat_pass_rate = cat_passed / cat_checks * 100 if cat_checks else 0
         cat_latency = sum(r.latency_ms for r in cat_results) / len(cat_results)
         cat_tools = sum(len(r.tool_calls) for r in cat_results) / len(cat_results)
@@ -666,7 +699,8 @@ def print_final_report(results: list[StreamResult], verbose: bool = False) -> No
             if failed_checks:
                 print("  Failed checks:")
                 for check_name, check_detail in failed_checks:
-                    print(f"    FAIL {check_name}: {check_detail}")
+                    soft = " (soft)" if check_name in SOFT_CHECKS else ""
+                    print(f"    FAIL {check_name}: {check_detail}{soft}")
 
     print(f"\n{'=' * 70}")
     if passed_checks == total_checks:

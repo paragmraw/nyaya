@@ -233,6 +233,7 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
         raw_parts: list[str] = []
         leaked_parts: list[str] = []
         reasoning_buf = ""
+        first_token_ms: float | None = None
         async for chunk in astream_with_retry(synthesis_model, out_msgs, **stream_kwargs):
             chunks.append(chunk)
             ak = getattr(chunk, "additional_kwargs", None) or {}
@@ -266,6 +267,12 @@ def make_synthesis_node(settings: Any, synthesis_model: Any, *, has_tools: bool 
                     continue
                 token_event(text)
                 raw_parts.append(text)
+                if first_token_ms is None:
+                    # The overhaul's headline metric — time from node entry
+                    # to the first accepted answer token — logged for every
+                    # turn (mirrors the synthesis_ms duration log).
+                    first_token_ms = (time.monotonic() - t0) * 1000
+                    log.info("synthesis: first token in %.0fms", first_token_ms)
             um = getattr(chunk, "usage_metadata", None)
             if isinstance(um, dict) and any(isinstance(v, int) for v in um.values()):
                 usage(um)

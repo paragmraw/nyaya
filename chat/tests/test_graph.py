@@ -1339,3 +1339,26 @@ async def test_synthesis_keeps_cited_answer_over_uncited_resynthesis(fake_model,
     assert out["last_answer"] == prev  # the kept answer stays authoritative
     corrections = [e["content"] for e in captured if e["type"] == "correction"]
     assert corrections[-1] == prev  # the frontend is restored to the good answer
+
+
+@pytest.mark.asyncio
+async def test_synthesis_logs_first_token_latency(settings, monkeypatch, caplog):
+    """The synthesis stream must log its time-to-first-token — the overhaul's
+    headline metric — mirroring the duration_ms phase log."""
+    import logging as _logging
+
+    from langchain_core.messages import AIMessageChunk
+
+    from nyaya_chat.graph.synthesis import make_synthesis_node
+
+    _captured_events(monkeypatch)
+    answer = "Murder requires intention [[act: IPC, ref: s. 302]]."
+    model = _FakeStreamingModel([
+        AIMessageChunk(content="Murder requires intention"),
+        AIMessageChunk(content=" [[act: IPC, ref: s. 302]]."),
+    ])
+    node = make_synthesis_node(settings, model, has_tools=True)
+    with caplog.at_level(_logging.INFO, logger="nyaya_chat.graph.synthesis"):
+        await node(_leak_state())
+    assert any("first token" in rec.message for rec in caplog.records), \
+        [r.message for r in caplog.records]
