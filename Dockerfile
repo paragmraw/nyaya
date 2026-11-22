@@ -30,7 +30,7 @@ RUN npm run build
 # python:3.12-slim-bookworm (3.12.16) pinned by linux/amd64 manifest digest so
 # duckdb, lancedb, pypdfium2, pyarrow, and zstandard install via manylinux
 # glibc wheels with zero compilers or libpq/postgresql-dev.
-FROM python:3.12-slim-bookworm@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4 AS py-builder
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS py-builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -98,7 +98,7 @@ RUN mkdir -p /app/data \
     fi
 
 # --- Stage 3: hardened non-root runtime -------------------------------------
-FROM python:3.12-slim-bookworm@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4 AS runtime
+FROM python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
