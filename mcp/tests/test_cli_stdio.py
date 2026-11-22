@@ -42,24 +42,20 @@ def test_mcp_app_import_and_create_mcp_never_calls_get_settings():
 
 def test_stdio_jsonrpc_handshake_and_tools_list_zero_env_zero_stdout_noise(tmp_path: Path):
     """Subprocess stdio JSON-RPC initialize + tools/list works with 0 secrets and 0 non-JSON stdout bytes."""
-    requests = "\n".join(
-        [
-            json.dumps(
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {},
-                        "clientInfo": {"name": "test-stdio", "version": "2.0.0"},
-                    },
-                }
-            ),
-            json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}),
-            json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
-        ]
-    ) + "\n"
+    init_req = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-stdio", "version": "2.0.0"},
+            },
+        }
+    )
+    initialized_notif = json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    tools_req = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
 
     clean_env = {
         k: v
@@ -67,7 +63,7 @@ def test_stdio_jsonrpc_handshake_and_tools_list_zero_env_zero_stdout_noise(tmp_p
         if not k.startswith("NYAYA_") and k not in {"DATABASE_URL", "NVIDIA_API_KEY", "REDIS_URL"}
     }
 
-    proc = subprocess.run(
+    proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
@@ -81,31 +77,57 @@ def test_stdio_jsonrpc_handshake_and_tools_list_zero_env_zero_stdout_noise(tmp_p
         ],
         cwd=str(Path(__file__).resolve().parents[1]),
         env=clean_env,
-        input=requests,
-        capture_output=True,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=30,
-        check=False,
     )
-    assert proc.returncode == 0, f"stdio failed (rc={proc.returncode}): stderr={proc.stderr!r}"
+    try:
+        assert proc.stdin is not None
+        assert proc.stdout is not None
+        assert proc.stderr is not None
 
-    raw_lines = [line for line in proc.stdout.splitlines() if line.strip()]
-    assert len(raw_lines) >= 2, f"Expected >=2 JSON-RPC responses on stdout, got: {proc.stdout!r}"
+        proc.stdin.write(init_req + "\n")
+        proc.stdin.flush()
+        init_line = proc.stdout.readline()
+        assert init_line.strip(), f"Expected initialize response on stdout, stderr={proc.stderr.read()!r}"
+        init_resp = json.loads(init_line)
+        assert init_resp.get("jsonrpc") == "2.0"
+        assert init_resp.get("id") == 1
+        assert "result" in init_resp
 
-    parsed_lines = []
-    for line in raw_lines:
-        # Every single byte on stdout MUST be valid JSON-RPC 2.0
-        msg = json.loads(line)
-        assert msg.get("jsonrpc") == "2.0"
-        parsed_lines.append(msg)
+        proc.stdin.write(initialized_notif + "\n" + tools_req + "\n")
+        proc.stdin.flush()
+        tools_line = proc.stdout.readline()
+        assert tools_line.strip(), f"Expected tools/list response on stdout, stderr={proc.stderr.read()!r}"
+        tools_resp = json.loads(tools_line)
+        assert tools_resp.get("jsonrpc") == "2.0"
+        assert tools_resp.get("id") == 2
+        tools = tools_resp["result"]["tools"]
+        assert len(tools) == 12
+        assert {t["name"] for t in tools} == EXPECTED_12_TOOLS
 
-    init_resp = next(m for m in parsed_lines if m.get("id") == 1)
-    assert "result" in init_resp
+        proc.stdin.close()
+        rc = proc.wait(timeout=15)
+        remaining_out = proc.stdout.read()
+        stderr_out = proc.stderr.read()
+        assert rc == 0, f"stdio failed (rc={rc}): stderr={stderr_out!r}"
 
-    tools_resp = next(m for m in parsed_lines if m.get("id") == 2)
-    tools = tools_resp["result"]["tools"]
-    assert len(tools) == 12
-    assert {t["name"] for t in tools} == EXPECTED_12_TOOLS
+        for line in remaining_out.splitlines():
+            if line.strip():
+                # Every single byte on stdout MUST be valid JSON-RPC 2.0
+                msg = json.loads(line)
+                assert msg.get("jsonrpc") == "2.0"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        if proc.stdin and not proc.stdin.closed:
+            proc.stdin.close()
+        if proc.stdout and not proc.stdout.closed:
+            proc.stdout.close()
+        if proc.stderr and not proc.stderr.closed:
+            proc.stderr.close()
 
 
 def test_cli_sync_subcommand_builds_local_core(tmp_path: Path):
