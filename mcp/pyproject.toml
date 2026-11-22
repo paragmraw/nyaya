@@ -8,7 +8,7 @@ dynamic = ["version"]  # single source: __version__ in nyaya/__init__.py
 description = "Zero-DB-ops Indian law MCP server: Constitution, Central & State Acts, 12 Regulators, 15 Tribunals, BNS/BNSS/BSA concordance, Supreme Court, High Court, and District Court judgments."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.11.5"
 authors = [{ name = "nyaya contributors" }]
 keywords = ["mcp", "indian-law", "constitution", "ipc", "crpc", "bns", "bnss", "bsa", "legal"]
 
