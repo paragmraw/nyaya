@@ -30,7 +30,11 @@ jobs:
         run: uv sync --extra http --extra ingest --dev
 
       - name: Install chat sub-app
-        run: uv pip install -e ../chat
+        run: |
+          uv export --project ../chat --locked --no-dev --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt
+          uv pip install -r /tmp/chat-requirements.txt
+          uv pip install --no-deps -e ../chat
+          rm -f /tmp/chat-requirements.txt
 
       - name: Lint MCP (ruff)
         run: uv run ruff check nyaya/ tests/

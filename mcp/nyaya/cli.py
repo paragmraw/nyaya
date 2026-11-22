@@ -244,7 +244,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 1
 
-    log.info("Starting nyaya HTTP server: %s", settings.as_dict())
+    log.info(
+        "Starting nyaya HTTP server (host=%s, port=%d, offline_only=%s, commercial_safe_only=%s)",
+        args.host,
+        settings.port,
+        settings.offline_only,
+        settings.commercial_safe_only,
+    )
     uvicorn.run(
         "nyaya.http_app:create_http_app",
         factory=True,
