@@ -164,6 +164,7 @@ class Settings:
     guardrail_enabled: bool = GUARDRAIL_ENABLED
     guardrail_classifier_max_tokens: int = GUARDRAIL_CLASSIFIER_MAX_TOKENS
     guardrail_classifier_timeout_s: float = GUARDRAIL_CLASSIFIER_TIMEOUT_S
+    commercial_safe_only: bool = False
 
     @property
     def tool_allowlist(self) -> tuple[str, ...]:
@@ -197,6 +198,7 @@ class Settings:
             "sse_keepalive_interval_s": self.sse_keepalive_interval_s,
             "turn_budget_s": self.turn_budget_s,
             "guardrail_enabled": self.guardrail_enabled,
+            "commercial_safe_only": self.commercial_safe_only,
             "log_level": self.log_level,
         }
 
@@ -221,9 +223,12 @@ def get_settings() -> Settings:
     port = os.environ.get("PORT", "8000")
     default_mcp_url = f"http://localhost:{port}/mcp"
     mcp_url = os.environ.get("MCP_URL", default_mcp_url)
+    cs_raw = os.environ.get("NYAYA_COMMERCIAL_SAFE_ONLY", "").strip().lower()
+    cs_only = cs_raw in {"1", "true", "yes", "on"}
     return Settings(
         nvidia_api_key=SecretStr(_required_env("NVIDIA_API_KEY")),
         mcp_url=mcp_url,
+        commercial_safe_only=cs_only,
     )
 
 

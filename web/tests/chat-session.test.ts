@@ -218,8 +218,8 @@ test("plan and reasoning events patch their fields when a frame flushes", async 
 
 test("tool events accumulate into a merged tools list", async () => {
   const { patches } = await runClosed([
-    ["tool_start", { id: "t1", name: "semantic_query", args: { query: "murder" } }],
-    ["tool_result", { id: "t1", name: "semantic_query", summary: "5 hits" }],
+    ["tool_start", { id: "t1", name: "search_statutes", args: { query: "murder" } }],
+    ["tool_result", { id: "t1", name: "search_statutes", summary: "5 hits" }],
     ["done", {}],
   ]);
   const tools = last(patches, "tools") as ChatMessage["tools"];

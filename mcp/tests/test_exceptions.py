@@ -1,137 +1,130 @@
-"""Unit tests for ``nyaya.exceptions``.
-
-Verifies the error hierarchy: stable ``code`` attributes, the ``NotFound.kind``
-field, and that every concrete exception is catchable via the ``NyayaError`` base.
-"""
+"""Unit tests for the canonical 9 v2 ``NyayaError`` hierarchy."""
 
 from __future__ import annotations
 
 import pytest
 
 from nyaya.exceptions import (
+    AmbiguousReference,
+    CommercialLicenseBlocked,
     ConfigurationError,
-    DatabaseUnavailable,
-    EmbeddingUnavailable,
+    InvalidFilter,
     NotFound,
     NyayaError,
-    SearchError,
+    PdfFetchError,
+    QueryTimeout,
+    QueryTooBroad,
+    StorageUnavailable,
+    TextUnavailableMetadataOnly,
 )
 
+EXPECTED_CODES = {
+    "not_found": NotFound,
+    "ambiguous_reference": AmbiguousReference,
+    "text_unavailable_metadata_only": TextUnavailableMetadataOnly,
+    "pdf_fetch_error": PdfFetchError,
+    "invalid_filter": InvalidFilter,
+    "query_too_broad": QueryTooBroad,
+    "query_timeout": QueryTimeout,
+    "storage_unavailable": StorageUnavailable,
+    "commercial_license_blocked": CommercialLicenseBlocked,
+}
 
-def test_nyaya_error_has_code_and_hint_attributes():
-    """The base class exposes ``code`` and ``hint`` as class-level attributes."""
+
+def test_exact_9_nyaya_error_subclasses() -> None:
+    """Exactly 9 canonical NyayaError subclasses exist."""
+    subclasses = set(NyayaError.__subclasses__())
+    assert subclasses == set(EXPECTED_CODES.values())
+    assert {cls.code for cls in subclasses} == set(EXPECTED_CODES.keys())
+
+
+def test_nyaya_error_base_attributes() -> None:
     assert NyayaError.code == "nyaya_error"
     assert NyayaError.hint is None
-
-
-def test_nyaya_error_message_set():
-    """The message passed to the constructor is stored on the instance."""
-    err = NyayaError("boom")
+    err = NyayaError("boom", hint="retry")
     assert err.message == "boom"
+    assert err.hint == "retry"
     assert str(err) == "boom"
 
 
-def test_nyaya_error_hint_settable():
-    """The hint kwarg is stored on the instance when provided."""
-    err = NyayaError("boom", hint="try again")
-    assert err.hint == "try again"
-
-
-def test_nyaya_error_hint_defaults_none():
-    """Without a hint kwarg, hint is None."""
-    err = NyayaError("boom")
-    assert err.hint is None
-
-
-def test_not_found_default_code():
-    """NotFound carries the stable 'not_found' code."""
-    assert NotFound.code == "not_found"
-
-
-def test_not_found_kind_attribute():
-    """NotFound exposes a ``kind`` field distinguishing what was missing."""
-    err = NotFound("missing", kind="section")
+def test_not_found_payload() -> None:
+    err = NotFound(
+        "Section 999 not found",
+        kind="section",
+        did_you_mean=["302", "304"],
+        hint="Try search_statutes",
+    )
+    assert err.code == "not_found"
     assert err.kind == "section"
-
-
-def test_not_found_kind_default():
-    """The default kind is 'unknown' when not specified."""
-    err = NotFound("missing")
-    assert err.kind == "unknown"
-
-
-def test_not_found_hint_settable_via_constructor():
-    """NotFound accepts a hint via the constructor (inherited from NyayaError)."""
-    err = NotFound("missing section", kind="section", hint="try semantic_query")
-    assert err.hint == "try semantic_query"
-    assert err.kind == "section"
-
-
-def test_database_unavailable_code():
-    """DatabaseUnavailable carries the 'database_unavailable' code."""
-    assert DatabaseUnavailable.code == "database_unavailable"
-
-
-def test_search_error_code():
-    """SearchError carries the 'search_error' code."""
-    assert SearchError.code == "search_error"
-
-
-def test_configuration_error_code():
-    """ConfigurationError carries the 'configuration_error' code."""
-    assert ConfigurationError.code == "configuration_error"
-
-
-def test_embedding_unavailable_code():
-    """EmbeddingUnavailable carries the 'embedding_unavailable' code."""
-    assert EmbeddingUnavailable.code == "embedding_unavailable"
-
-
-@pytest.mark.parametrize(
-    "exc_cls,args",
-    [
-        (NotFound, ("missing",)),
-        (DatabaseUnavailable, ("db down",)),
-        (SearchError, ("bad query",)),
-        (ConfigurationError, ("bad env",)),
-        (EmbeddingUnavailable, ("no fastembed",)),
-    ],
-)
-def test_all_exceptions_catchable_as_nyaya_error(exc_cls, args):
-    """Every concrete exception is a subclass of NyayaError and catchable as such."""
-    with pytest.raises(NyayaError) as exc_info:
-        raise exc_cls(*args)
-    assert isinstance(exc_info.value, NyayaError)
-    # The code attribute survives the raise.
-    assert exc_info.value.code
-
-
-def test_not_found_is_nyaya_error():
-    """NotFound instances are NyayaError instances."""
-    assert isinstance(NotFound("x"), NyayaError)
-
-
-def test_exception_codes_are_unique():
-    """Each concrete exception has a distinct code (clients branch on this)."""
-    codes = {
-        NyayaError.code,
-        NotFound.code,
-        DatabaseUnavailable.code,
-        SearchError.code,
-        ConfigurationError.code,
-        EmbeddingUnavailable.code,
+    assert err.did_you_mean == ["302", "304"]
+    d = err.to_dict()
+    assert d == {
+        "code": "not_found",
+        "message": "Section 999 not found",
+        "kind": "section",
+        "did_you_mean": ["302", "304"],
+        "hint": "Try search_statutes",
     }
-    assert len(codes) == 6, "Error codes must be unique across the hierarchy"
 
 
-def test_exception_message_preserved_in_str():
-    """The message is accessible via str() (inherits from Exception)."""
-    err = NotFound("section 999 not found", kind="section")
-    assert "section 999" in str(err)
+def test_ambiguous_reference_payload() -> None:
+    candidates = [{"case_id": "sc:1", "title": "A v B"}, {"case_id": "sc:2", "title": "A v C"}]
+    err = AmbiguousReference("Multiple matches", kind="judgment", candidates=candidates)
+    assert err.code == "ambiguous_reference"
+    assert err.candidates == candidates
+    assert err.to_dict()["candidates"] == candidates
 
 
-def test_database_unavailable_hint_inherited():
-    """DatabaseUnavailable accepts the hint kwarg from NyayaError."""
-    err = DatabaseUnavailable("db down", hint="check DATABASE_URL")
-    assert err.hint == "check DATABASE_URL"
-    assert err.code == "database_unavailable"
+def test_text_unavailable_metadata_only_payload() -> None:
+    err = TextUnavailableMetadataOnly(
+        "Scanned PDF without text layer",
+        kind="judgment",
+        metadata={"case_id": "hc:1", "chars_per_page": 0.0},
+        hint="Download PDF directly",
+    )
+    assert err.code == "text_unavailable_metadata_only"
+    assert err.to_dict()["metadata"]["case_id"] == "hc:1"
+
+
+def test_pdf_fetch_error_payload() -> None:
+    err = PdfFetchError("Key rejected", reason="disallowed_key")
+    assert err.code == "pdf_fetch_error"
+    assert err.reason == "disallowed_key"
+    assert err.to_dict()["reason"] == "disallowed_key"
+
+
+def test_invalid_filter_payload() -> None:
+    err = InvalidFilter("Bad tier", kind="court_tier", allowed_values=["supreme_court", "high_court"])
+    assert err.code == "invalid_filter"
+    assert err.allowed_values == ["supreme_court", "high_court"]
+    assert err.to_dict()["allowed_values"] == ["supreme_court", "high_court"]
+
+
+def test_query_too_broad_and_timeout() -> None:
+    broad = QueryTooBroad("Unfiltered 81M scan", hint="Supply state or year")
+    timeout = QueryTimeout("DuckDB 5s timeout exceeded")
+    assert broad.code == "query_too_broad"
+    assert timeout.code == "query_timeout"
+    assert broad.to_dict()["hint"] == "Supply state or year"
+
+
+def test_storage_unavailable_and_commercial_blocked() -> None:
+    storage = StorageUnavailable("Bucket unreachable", degraded_capabilities=["lance_fts"])
+    blocked = CommercialLicenseBlocked("DDL blocked", license_spdx="CC-BY-NC-SA-4.0")
+    assert storage.code == "storage_unavailable"
+    assert storage.to_dict()["degraded_capabilities"] == ["lance_fts"]
+    assert blocked.code == "commercial_license_blocked"
+    assert blocked.to_dict()["license_spdx"] == "CC-BY-NC-SA-4.0"
+
+
+def test_configuration_error_is_value_error_not_nyaya_error() -> None:
+    err = ConfigurationError("Invalid PORT")
+    assert isinstance(err, ValueError)
+    assert not isinstance(err, NyayaError)
+
+
+@pytest.mark.parametrize("code,exc_cls", list(EXPECTED_CODES.items()))
+def test_all_9_errors_catchable_as_nyaya_error(code: str, exc_cls: type[NyayaError]) -> None:
+    with pytest.raises(NyayaError) as exc_info:
+        raise exc_cls("boom")
+    assert exc_info.value.code == code

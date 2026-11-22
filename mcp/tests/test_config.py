@@ -1,149 +1,148 @@
-"""Unit tests for the config loader."""
+"""Unit tests for the zero-Supabase v2 runtime config loader."""
 
 from __future__ import annotations
+
+import sys
+import types
+from pathlib import Path
 
 import pytest
 
 from nyaya import config
 from nyaya.exceptions import ConfigurationError
 
+_ALL_NYAYA_ENV_VARS = (
+    "DATABASE_URL",
+    "NVIDIA_API_KEY",
+    "NYAYA_DATA_DIR",
+    "NYAYA_CACHE_DIR",
+    "NYAYA_BUCKET_ENDPOINT",
+    "NYAYA_BUCKET_NAME",
+    "NYAYA_BUCKET_ACCESS_KEY_ID",
+    "NYAYA_BUCKET_SECRET_ACCESS_KEY",
+    "NYAYA_BUCKET_REGION",
+    "NYAYA_BUCKET_URL_STYLE",
+    "NYAYA_MANIFEST_URL",
+    "NYAYA_COMMERCIAL_SAFE_ONLY",
+    "NYAYA_OFFLINE_ONLY",
+    "NYAYA_DUCKDB_EXT_DIR",
+    "NYAYA_LOG_LEVEL",
+    "NYAYA_TRUSTED_PROXY_HOPS",
+    "PORT",
+    "REDIS_URL",
+)
 
-def _set_env(monkeypatch, **extra):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-key")
-    for k, v in extra.items():
-        monkeypatch.setenv(k, v)
 
-
-def test_settings_required_vars(monkeypatch):
-    _set_env(monkeypatch)
-    from nyaya import config
+def _clear_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in _ALL_NYAYA_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
     config.get_settings.cache_clear()
+
+
+def test_settings_zero_env_vars_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """v2 MCP requires ZERO DATABASE_URL and ZERO NVIDIA_API_KEY."""
+    _clear_env(monkeypatch)
     s = config.get_settings()
-    assert s.database_url.startswith("postgresql://")
-    assert s.nvidia_api_key == "nvapi-test-key"
-    assert s.pool_min == config.POOL_MIN
-    assert s.pool_max == config.POOL_MAX
-    assert s.pool_timeout == config.POOL_TIMEOUT
+    assert s.port == config.PORT_DEFAULT
+    assert s.bucket_region == "auto"
+    assert s.bucket_url_style == "vhost"
+    assert s.commercial_safe_only is False
+    assert s.offline_only is False
+    assert s.trusted_proxy_hops == 1
+    assert isinstance(s.data_dir, Path)
+    assert isinstance(s.cache_dir, Path)
+    assert not hasattr(s, "database_url")
+    assert not hasattr(s, "nvidia_api_key")
 
 
-def test_settings_missing_database_url(monkeypatch):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    with pytest.raises(ConfigurationError) as exc_info:
-        config.get_settings()
-    assert "DATABASE_URL" in str(exc_info.value)
+def test_bucket_and_flag_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _clear_env(monkeypatch)
+    data_dir = tmp_path / "data"
+    cache_dir = tmp_path / "cache"
+    ext_dir = tmp_path / "ext"
+    monkeypatch.setenv("NYAYA_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("NYAYA_CACHE_DIR", str(cache_dir))
+    monkeypatch.setenv("NYAYA_DUCKDB_EXT_DIR", str(ext_dir))
+    monkeypatch.setenv("NYAYA_BUCKET_ENDPOINT", "https://t3.storageapi.dev")
+    monkeypatch.setenv("NYAYA_BUCKET_NAME", "nyaya-prod")
+    monkeypatch.setenv("NYAYA_BUCKET_ACCESS_KEY_ID", "tid_key")
+    monkeypatch.setenv("NYAYA_BUCKET_SECRET_ACCESS_KEY", "tsec_supersecret")
+    monkeypatch.setenv("NYAYA_BUCKET_REGION", "auto")
+    monkeypatch.setenv("NYAYA_BUCKET_URL_STYLE", "path")
+    monkeypatch.setenv("NYAYA_MANIFEST_URL", "https://huggingface.co/datasets/nyaya/manifest.json")
+    monkeypatch.setenv("NYAYA_COMMERCIAL_SAFE_ONLY", "1")
+    monkeypatch.setenv("NYAYA_OFFLINE_ONLY", "true")
+    monkeypatch.setenv("NYAYA_TRUSTED_PROXY_HOPS", "2")
+    monkeypatch.setenv("PORT", "9000")
+    monkeypatch.setenv("REDIS_URL", "redis://user:redispass@localhost:6379/0")
 
-
-def test_settings_missing_nvidia_key(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host:5432/db")
-    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
-    from nyaya import config
-    config.get_settings.cache_clear()
-    with pytest.raises(ConfigurationError) as exc_info:
-        config.get_settings()
-    assert "NVIDIA_API_KEY" in str(exc_info.value)
-
-
-def test_port_from_railway_env(monkeypatch):
-    _set_env(monkeypatch, PORT="8080")
-    from nyaya import config
-    config.get_settings.cache_clear()
     s = config.get_settings()
-    assert s.port == 8080
+    assert s.data_dir == data_dir
+    assert s.cache_dir == cache_dir
+    assert s.duckdb_ext_dir == ext_dir
+    assert s.bucket_endpoint == "https://t3.storageapi.dev"
+    assert s.bucket_name == "nyaya-prod"
+    assert s.bucket_url_style == "path"
+    assert s.commercial_safe_only is True
+    assert s.offline_only is True
+    assert s.trusted_proxy_hops == 2
+    assert s.port == 9000
 
 
-def test_invalid_port_raises(monkeypatch):
-    _set_env(monkeypatch, PORT="abc")
-    from nyaya import config
-    config.get_settings.cache_clear()
+def test_as_dict_redacts_bucket_secret_and_redis(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NYAYA_BUCKET_ACCESS_KEY_ID", "tid_mykey")
+    monkeypatch.setenv("NYAYA_BUCKET_SECRET_ACCESS_KEY", "tsec_topsecret_value")
+    monkeypatch.setenv("REDIS_URL", "redis://default:s3cr3t@redis.internal:6379/0")
+
+    d = config.get_settings().as_dict()
+    assert d["bucket_secret_access_key"] == "***"
+    assert d["bucket_access_key_id"] == "***"
+    assert "tsec_topsecret_value" not in str(d)
+    assert "s3cr3t" not in d["redis_url"]
+    assert "***" in d["redis_url"]
+
+
+def test_as_dict_uncredentialed_redis_preserved(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    d = config.get_settings().as_dict()
+    assert d["redis_url"] == "redis://localhost:6379/0"
+
+
+@pytest.mark.parametrize("bad_port", ["abc", "0", "65536", "-1"])
+def test_invalid_port_raises(monkeypatch: pytest.MonkeyPatch, bad_port: str) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("PORT", bad_port)
     with pytest.raises(ConfigurationError):
         config.get_settings()
 
 
-def test_as_dict_redacts_credentials(monkeypatch):
-    _set_env(monkeypatch, DATABASE_URL="postgresql://user:secret@host:5432/db")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    d = s.as_dict()
-    assert "secret" not in d["database_url"]
-    assert "***" in d["database_url"]
-    assert d["nvidia_api_key"] == "***"
+def test_invalid_bucket_url_style_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NYAYA_BUCKET_URL_STYLE", "invalid-style")
+    with pytest.raises(ConfigurationError):
+        config.get_settings()
 
 
-def test_redact_postgres_scheme(monkeypatch):
-    _set_env(monkeypatch, DATABASE_URL="postgres://user:secret@host:5432/db")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    d = s.as_dict()
-    assert "secret" not in d["database_url"]
-    assert "***" in d["database_url"]
+def test_invalid_trusted_proxy_hops_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NYAYA_TRUSTED_PROXY_HOPS", "-1")
+    with pytest.raises(ConfigurationError):
+        config.get_settings()
 
 
-def test_redact_no_credentials(monkeypatch):
-    _set_env(monkeypatch, DATABASE_URL="postgresql://nowhere.example.com:5432/db")
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    d = s.as_dict()
-    assert "***" not in d["database_url"]
-
-
-def test_as_dict_all_fields(monkeypatch):
-    _set_env(monkeypatch)
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    d = s.as_dict()
-    assert set(d.keys()) == {
-        "database_url", "nvidia_api_key", "port", "pool_min", "pool_max",
-        "pool_timeout", "statement_timeout_ms", "log_level",
-        "embedding_model", "reranker_model", "embedding_dim", "redis_url",
-    }
-
-
-def test_constants_match_settings(monkeypatch):
-    _set_env(monkeypatch)
-    from nyaya import config
-    config.get_settings.cache_clear()
-    s = config.get_settings()
-    assert s.statement_timeout_ms == config.STATEMENT_TIMEOUT_MS
-    assert s.log_level == config.LOG_LEVEL
-    assert s.embedding_model == config.EMBEDDING_MODEL
-    assert s.reranker_model == config.RERANKER_MODEL
-    assert s.embedding_dim == config.EMBEDDING_DIM
-    assert s.redis_url == config.REDIS_URL
-
-
-def test_rate_limit_constants():
-    from nyaya import config
+def test_rate_limit_constants() -> None:
     rl = config.get_rate_limit_settings()
     assert rl.read_per_min == config.RATE_READ_PER_MIN
-    assert rl.embedding_per_min == config.RATE_MCP_PER_MIN
+    assert rl.mcp_per_min == config.RATE_MCP_PER_MIN
+    assert rl.analytics_per_min == config.RATE_ANALYTICS_PER_MIN == 20
     assert rl.chat_per_min == config.RATE_CHAT_PER_MIN
     assert rl.body_size_max_bytes == config.RATE_BODY_MAX_BYTES
 
 
-# ---------------------------------------------------------------------------
-# Optional .env loading (Task 11): get_settings() must NOT touch .env unless
-# the operator explicitly opts in with NYAYA_DOTENV=1 — otherwise a stray
-# .env file silently changes test/CI behavior (e.g. pointing DATABASE_URL at
-# a local dev database).
-# ---------------------------------------------------------------------------
-
 @pytest.fixture
-def _dotenv_env(monkeypatch, tmp_path):
-    """A tmp cwd with a .env file, a fake ``dotenv`` module that applies it,
-    and a cleared get_settings cache. Yields the list of load_dotenv calls."""
-    import sys
-    import types
-
-    from nyaya import config
-
+def _dotenv_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     env_file = tmp_path / ".env"
     env_file.write_text("PORT=9911\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
@@ -154,7 +153,7 @@ def _dotenv_env(monkeypatch, tmp_path):
 
     def fake_load_dotenv(*args, **kwargs):
         calls.append((args, kwargs))
-        for line in env_file.read_text().splitlines():
+        for line in env_file.read_text(encoding="utf-8").splitlines():
             if "=" in line:
                 key, _, value = line.partition("=")
                 monkeypatch.setenv(key.strip(), value.strip())
@@ -170,42 +169,23 @@ def _dotenv_env(monkeypatch, tmp_path):
         config.get_settings.cache_clear()
 
 
-def test_dotenv_not_loaded_by_default(_dotenv_env):
-    """Without NYAYA_DOTENV the .env file is ignored (PORT stays unset)."""
-    from nyaya import config
-
+def test_dotenv_not_loaded_by_default(_dotenv_env) -> None:
     s = config.get_settings()
     assert _dotenv_env == []
     assert s.port != 9911
 
 
 @pytest.mark.parametrize("value", ["1", "true", "YES", " on ", "1  "])
-def test_dotenv_opt_in_loads_env_file(monkeypatch, _dotenv_env, value):
-    """NYAYA_DOTENV=<truthy> makes get_settings() load .env from the CWD."""
+def test_dotenv_opt_in_loads_env_file(monkeypatch: pytest.MonkeyPatch, _dotenv_env, value: str) -> None:
     monkeypatch.setenv(config.DOTENV_ENV_VAR, value)
     s = config.get_settings()
-    assert _dotenv_env, "load_dotenv was not called despite NYAYA_DOTENV being set"
+    assert _dotenv_env
     assert s.port == 9911
 
 
-@pytest.mark.parametrize("value", ["0", "false", "off", "", "no"])
-def test_dotenv_falsy_values_do_not_load(monkeypatch, _dotenv_env, value):
-    monkeypatch.setenv(config.DOTENV_ENV_VAR, value)
-    from nyaya import config as _config  # noqa: F401 - gate is inside get_settings
-
-    s = config.get_settings()
-    assert _dotenv_env == []
-    assert s.port != 9911
-
-
-def test_dotenv_missing_package_is_a_no_op(monkeypatch, _dotenv_env):
-    """python-dotenv not installed (optional extra) -> silent no-op, settings
-    still build from the real environment."""
-    import sys
-
+def test_dotenv_missing_package_is_a_no_op(monkeypatch: pytest.MonkeyPatch, _dotenv_env) -> None:
     monkeypatch.setenv(config.DOTENV_ENV_VAR, "1")
-    monkeypatch.setitem(sys.modules, "dotenv", None)  # import raises ImportError
-
+    monkeypatch.setitem(sys.modules, "dotenv", None)
     s = config.get_settings()
     assert _dotenv_env == []
-    assert s.database_url.startswith("postgresql://")
+    assert s.port == config.PORT_DEFAULT

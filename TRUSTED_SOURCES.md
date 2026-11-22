@@ -1,54 +1,136 @@
-# Trusted Sources — Nyaya Corpus Provenance
+# Trusted Sources & Corpus Provenance — Nyaya v2.0
 
-This document describes the trust model for the legal data ingested by the Nyaya
-MCP server. The corpus is **public-domain legal text** (Indian government edicts,
-court judgments) sourced from a combination of official and third-party
-aggregators.
+This document describes the legal provenance, copyright basis, licensing
+boundaries, automated integrity gates, and LLM security posture for data
+ingested and served by **Nyaya (`nyaya-mcp`)**.
 
-## Trust Model
+## Legal & Copyright Basis (India)
 
-**The corpus is trusted.** The operator is responsible for verifying the integrity
-of each upstream source before ingestion. The ingest pipeline applies
-[control-character sanitization](mcp/nyaya/sanitize.py) and length caps as
-defense-in-depth, but does **not** redact or filter natural-language content.
+Nyaya does **not** rely on US public-domain doctrines. Primary Indian legal
+materials are reproduced and indexed under **Indian law**:
 
-If you add a user-submission or crowd-sourced upload path in the future, you
-MUST implement additional prompt-injection defenses (e.g. output delimiters,
-snippet post-processing). See the security review for details.
+1. **Indian Copyright Act, 1957 — Section 52(1)(q):**
+   - **Section 52(1)(q)(ii):** Reproduction or publication of any Act of a
+     Legislature (and rules/regulations made thereunder), subject to statutory
+     conditions.
+   - **Section 52(1)(q)(iv):** Reproduction or publication of any judgment or
+     order of a Court, Tribunal, or other judicial authority, unless prohibited
+     from publication by that authority.
+2. ***Eastern Book Company & Ors. v. D.B. Modak & Anr.*, (2008) 1 SCC 1:**
+   Raw judicial decisions are reproducible under Section 52(1)(q)(iv), whereas
+   commercial law-reporter editorial additions (headnotes, proprietary
+   paragraph numbering, cross-notes, and digests) carry independent copyright.
+   Nyaya **strictly excludes** commercial reporter headnotes and proprietary
+   editorial digests (`verify-gate` checks for reporter signatures such as
+   `"SCC Online"`, `"Manupatra"`, and `"AIR Headnote"`).
+3. **Statutory Non-Publication Exclusions:**
+   Orders subject to judicial or statutory publication bans are blocked by
+   `check_publication_ban()` (`mcp/nyaya/sanitize.py`) and audited by
+   `nyaya-ingest verify-gate`:
+   - Sealed-cover and *in-camera* proceedings prohibited from publication
+   - Victim-identifying orders under **IPC s. 228A / BNS s. 72**, **POCSO Act
+     ss. 23 & 33(7)**, **Juvenile Justice Act s. 74**, and **HIV/AIDS Act s. 34**
+   *(Context-aware detection distinguishes operative suppression directives from
+   ordinary doctrinal precedents discussing those sections.)*
 
-## Sources
+## Trust Model & OWASP LLM01 Posture
 
-| Source | URL | Data | License | Integrity Check |
-|--------|-----|------|---------|-----------------|
-| indiankanoon.org | https://indiankanoon.org | Landmark Supreme Court judgments | Public domain (government edicts) | Manual review; no automated checksum |
-| PRS Legislative Research | https://prsindia.org | BNS/BNSS/BSA 2023 PDFs | CC BY 4.0 | Manual review; no automated checksum |
-| constitutionofindia.net | https://constitutionofindia.net | Constitution articles | Public domain | Manual review; no automated checksum |
-| civictech-India (GitHub) | https://github.com/civictech-India/Indian-Law-Penal-Code-Json | IPC, IEA (Evidence Act), CPC JSON | Public domain | Manual review; no automated checksum |
-| mratanusarkar/Indian-Laws (HuggingFace) | https://huggingface.co/datasets/mratanusarkar/Indian-Laws | CrPC + commercial statutes (Companies, GST, IT Act, Arbitration, Consumer Protection) bare acts JSON | Public domain | Manual review; no automated checksum |
-| Vikhram-S/IndianConstitution (PyPI) | https://pypi.org/project/indianconstitution | Constitution articles | Apache-2.0 | Manual review; no automated checksum |
-| NVIDIA API | https://build.nvidia.com | nemotron-3-embed-1b (embeddings), llama-nemotron-rerank-vl-1b-v2 (reranking) | NVIDIA API Terms | API key secured; responses trusted |
+**The legal corpus is UNTRUSTED DATA, not trusted instructions.**
 
-## Recommended Hardening (Future Work)
+Primary court filings, party pleadings quoted verbatim inside judgments, and
+external legal compilations can contain adversarial text or malformed payloads.
+Accordingly, Nyaya treats every retrieved statutory and judicial string as
+**untrusted primary legal data** (`trust="untrusted_primary_law"`) under
+**OWASP LLM01 (Prompt Injection)**:
 
-1. **Pin SHA256 hashes** for each upstream artifact in the hydration notebook.
-2. **Disable cross-domain redirects** in fetchers, or allow-list redirect targets.
-3. **Verify content hashes** before inserting into the database.
-4. **Prefer official sources** (egazette.nic.in) for the most sensitive acts (BNS/BNSS/BSA).
-5. **Secure NVIDIA API keys** — store in secret manager; rotate periodically; never commit to source control.
+- **Canonical Data Framing (`frame_corpus_text()` in `mcp/nyaya/sanitize.py`):**
+  Every primary legal text field returned by any MCP tool or resource is wrapped
+  in an attributed envelope:
+  ```xml
+  <corpus_text doc_id="..." source="..." license="..." commercial_safe="true|false" as_of="..." sha256="..." trust="untrusted_primary_law">
+  ...sanitized and escaped text...
+  </corpus_text>
+  ```
+- **Invisible & Control-Character Stripping:** Strips C0/C1 control characters
+  (preserving `\n`, `\r`, `\t`), BiDi overrides, soft hyphens (`U+00AD`),
+  mid-text BOM (`U+FEFF`), variation selectors (`U+FE00–U+FE0F`), and **Unicode
+  Tag smuggling (`U+E0000–U+E007F`)**, while preserving valid Devanagari and
+  Indic Unicode ranges (`U+0900–U+0D7F`).
+- **Inner Delimiter Escaping (`escape_corpus_delimiters()`):** Escapes `<` to
+  `&lt;` on breakout/control tags (`</corpus_text>`, `<system>`, `<instructions>`,
+  `<|im_start|>`, `<|im_end|>`) without corrupting ordinary mathematical `<`/`>`
+  prose.
+- **Non-Destructive Injection Flagging (`detect_suspected_injection()`):**
+  Records `suspected_injection="true"` for audit visibility without silently
+  altering verbatim primary statutory or judicial wording.
+- **Lossless Chunking (`MAX_CHUNK_BYTES = 16_384`):** Eliminates legacy
+  200 KB document truncation limits while keeping individual chunks bounded.
+- **System-Prompt Isolation (`mcp_app.py`, `prompts/__init__.py`, `chat/`):**
+  Server instructions and MCP prompt templates explicitly instruct downstream
+  LLMs that `<corpus_text>` contents are untrusted legal data and never
+  executable instructions.
 
-## Prompt-Injection Defense (OWASP LLM01)
+## Upstream Sources (`sources.lock.yaml`)
 
-The corpus text is returned verbatim to LLMs via MCP tools. A compromised upstream
-could inject text containing LLM instructions (e.g. "ignore previous instructions").
-Current defenses:
+All upstream sources are pinned in `mcp/nyaya/ingest/data/sources.lock.yaml`,
+restricted to an explicit domain allowlist (cross-domain HTTP redirects blocked),
+verified by SHA-256 / S3 ETag / `SHA256SUMS.json`, and validated before any
+build or publish.
 
-- ✅ Control characters stripped at ingest time
-- ✅ Row length capped at 200 KB
-- ✅ Database CHECK constraint at 1 MB
-- ✅ NVIDIA API responses (embeddings, reranking) are from a trusted provider and not user-controllable
+| Source | URI / Bucket | Coverage | License (`SPDX`) | `commercial_safe` | Verification |
+|---|---|---|---|---|---|
+| **Vaquill Open India Law (`v2026.08.1`)** | `https://oss-data-in.vaquill.ai/v2026.08.1/` | Central + 36 State/UT Acts, 12 Regulators, 15 Tribunals, SC/HC compilations | `CC-BY-4.0` (`coverage.yml` `red` rejected) | `true` | `SHA256SUMS.json` + domain allowlist |
+| **Dattam Labs — Supreme Court** | `s3://indian-supreme-court-judgments` | 35k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
+| **Dattam Labs — High Courts** | `s3://indian-high-court-judgments` | 17.77M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
+| **PRS Legislative Research** | `https://prsindia.org` | BNS / BNSS / BSA 2023 & legislative act deltas | `CC-BY-4.0` | `true` | Pinned SHA-256 + domain allowlist |
+| **Legislative Department / India Code** | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `IN-S52-1-q` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
+| **Sansad Digital Library (CAD)** | `https://eparlib.sansad.in` | Constituent Assembly Debates (12 volumes) | `IN-S52-1-q` (s. 52(1)(q) / s. 28) | `true` | Pinned SHA-256 |
+| **Justice Hub / KHOJ** | `https://justicehub.in` | High Court judge metadata (CC-BY-4.0 subset) | `CC-BY-4.0` | `true` | Pinned SHA-256 |
+| **Development Data Lab (DDL)** | `https://www.devdatalab.org/judicial-data` | 81M District Court metadata (2010–2018) | `CC-BY-NC-SA-4.0` | **`false`** | Pinned SHA-256; ML religion/caste cols dropped |
+| **ILDC Research Pack** | Hugging Face research pack | 35k SC outcome/explanation annotations | `CC-BY-NC-4.0` | **`false`** | Pinned SHA-256 |
 
-Future defenses (not yet implemented):
+### Non-Commercial Filtering (`NYAYA_COMMERCIAL_SAFE_ONLY`)
 
-- ⬜ Wrap tool responses in `<corpus_text>...</corpus_text>` delimiters
-- ⬜ Update tool descriptions to instruct the LLM that corpus text is data, not instructions
-- ⬜ Post-process retrieved snippets to strip obvious injection patterns
+- By default (academic/research-inclusive posture), Nyaya includes DDL 81M and
+  ILDC tagged `commercial_safe=false` and `terms_status="non_commercial_only"`.
+- Commercial deployments **must** set `NYAYA_COMMERCIAL_SAFE_ONLY=1` (or pass
+  `commercial_safe_only=true` per call) so SQLite, LanceDB, DuckDB, MCP tools,
+  and REST endpoints automatically exclude all `commercial_safe=false` datasets
+  (returning `commercial_license_blocked` on targeted NC lookups).
+
+### Optional Chat LLM Provider
+
+- **MCP retrieval requires zero LLM or embedding API keys.** Search is 100%
+  local/lexical (SQLite FTS5 + LanceDB native Rust BM25 FTS + DuckDB Parquet).
+- Only the optional `/chat` FastAPI + LangGraph sub-app calls `ChatNVIDIA`
+  (`integrate.api.nvidia.com`) when `NVIDIA_API_KEY` is configured.
+
+## Automated Legal Integrity Gate (`nyaya-ingest verify-gate`)
+
+Every ingestion run must pass 7 hard-fail suites before producing `gate-pass.json`
+(which binds exact artifact SHA-256s required by `nyaya-ingest publish`):
+
+1. `check_amendments`: Contiguous Constitutional Amendments 1–106 with golden
+   date/article assertions (e.g., 42nd=1976, 99th=`struck_down`, 106th=2023).
+2. `check_concordance`: Referential integrity and anti-collapse checks across
+   IPC↔BNS, CrPC↔BNSS, and IEA↔BSA, plus 24 mandatory golden pairs.
+3. `check_coverage_and_non_truncation`: Completeness floors and `>500 KB`
+   non-truncation checks (*Kesavananda Bharati*, *Puttaswamy*).
+4. `check_extraction_quality`: Rejects HTML 404/error placeholders masquerading
+   as PDFs, non-UTF-8 text, and missing `text_sha256`.
+5. `check_licensing_and_provenance`: Rejects `terms_status="red"`, unknown/copyleft
+   SPDX tags, missing provenance, NC mis-tagging, and reporter headnotes.
+6. `check_statutory_exclusions`: Blocks any row flagged by `check_publication_ban()`.
+7. `check_owasp_llm01`: Verifies zero raw controls, BiDi overrides, Unicode Tags,
+   or unescaped `</corpus_text>` tags in indexed chunks.
+
+## Banned Sources & Copyleft Dependencies
+
+CI (`.github/workflows/security.yml`) and `lockfile.py` strictly ban:
+- **Scraped / unclear-rights sources:** Unofficial third-party case-law scrapers,
+  unverified community dumps (`civictech-India`, `mratanusarkar`), and
+  `terms_status="red"` Vaquill entries (enforced via `BANNED_DOMAINS` in
+  `mcp/nyaya/ingest/lockfile.py`).
+- **Copyleft & banned packages in lockfiles:** `ecourts` (GPL-3.0),
+  `pymupdf` / `fitz` (AGPL-3.0), `surya-ocr` (GPL), and legacy database/vector
+  client drivers (enforced by `.github/workflows/security.yml`).

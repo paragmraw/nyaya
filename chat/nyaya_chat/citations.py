@@ -1,28 +1,76 @@
-"""Citation verification: parse and verify [[act: X, ref: Y]] markers.
+"""Citation verification: parse and verify [[act: X, ref: Y]] markers via nyaya.citations.
 
-After the synthesis LLM produces an answer, this module:
-1. Parses all [[act: X, ref: Y]] citation markers from the answer text.
-2. Verifies each citation against the tool results returned during this turn.
-3. Strips ungrounded citations (those not backed by any tool result).
-4. If zero grounded citations remain AND tools were called, appends a caveat.
+Delegates canonical Indian legal citation extraction and grounding verification
+to ``nyaya.citations`` (with an extra pass for Constitutional/statutory
+amendments, regulator circulars/notifications, and dynamic act names present
+in tool outputs):
 
-This is a programmatic safety net — the synthesis prompt already instructs
-the model to ground citations, but prompts are not guarantees. Legal Q&A
-demands verifiable provenance.
+- Fixes the v0.2 first-number bug (``AIR 1973 SC 9999`` never matches
+  ``AIR 1973 SC 1461``; ``(1973) 4 SCC 999`` never matches ``(1973) 4 SCC 225``).
+- Fixes the ``act=None`` judgment drop bug (grounds ``2017 INSC 801``,
+  ``2024:DHC:1234``, ``2024:BHC-OS:567``, ``AIR 1973 SC 1461``,
+  ``(2017) 10 SCC 1``, ``[1973] Supp SCR 1``, and 16-char CNRs like
+  ``MHAU019999992015``).
+- Supports sub-sections (``s. 65B(4)``), Constitution articles (``Art. 21A``,
+  ``Art. 19(1)(a)``), Constitution schedules (``Schedule 7 List I Entry 82``),
+  CPC Orders/Rules (``O. VII R. 11(d)``), regulations (``Reg. 30(1)``),
+  circulars, notifications, and Constitutional Amendments (``42nd Amendment``).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
+
+from nyaya.citations import (
+    _DEFAULT_ALIAS_MAP,
+    CITATION_MARKER_RE,
+    ParsedCitation,
+    _marker_candidate_keys,
+    _merged_alias_map,
+    _repair_whitespace_around_markers,
+    _resolve_act_alias,
+    canonicalize_court,
+    parse_single_citation,
+)
+from nyaya.citations import (
+    extract_grounded_keys as _nyaya_extract_grounded_keys,
+)
+from nyaya.citations import (
+    parse_citations as parse_legal_citations,
+)
 
 log = logging.getLogger("nyaya_chat.citations")
 
-# Matches [[act: <short_name>, ref: <ref>]] inline citation markers. This is
-# the single source of truth for the marker syntax: the agent's reflection
-# check, the citation verifier below, and the eval scripts all import it.
-CITATION_RE = re.compile(r"\[\[act:\s*([^,\]]+?)\s*,\s*ref:\s*([^\]]+?)\s*\]\]")
+# Single source of truth for inline marker syntax [[act: <short_name>, ref: <ref>]]
+CITATION_RE = CITATION_MARKER_RE
+
+_CIRCULAR_OR_NOTIF_RE = re.compile(
+    r"^(?P<kind>cir(?:cular)?|notif(?:ication)?)\.?\s*(?:no\.?\s*)?(?P<num>[A-Za-z0-9_./()-]+)$",
+    re.IGNORECASE,
+)
+_AMEND_NUM_RE = re.compile(
+    r"^(?:(?P<ord>\d{1,3})(?:st|nd|rd|th)\s+(?:constitutional\s+|constitution\s+)?amendment(?:\s+act)?|amendment\s+(?P<num>\d{1,3}))$",
+    re.IGNORECASE,
+)
+
+__all__ = [
+    "CITATION_MARKER_RE",
+    "CITATION_RE",
+    "Citation",
+    "ParsedCitation",
+    "canonicalize_court",
+    "extract_grounded_keys",
+    "parse_citations",
+    "parse_legal_citations",
+    "parse_single_citation",
+    "verify_citations",
+    "verify_inline_markers",
+]
 
 
 @dataclass
@@ -32,7 +80,7 @@ class Citation:
 
 
 def parse_citations(text: str) -> list[Citation]:
-    """Extract all [[act: X, ref: Y]] markers from the answer text."""
+    """Extract all [[act: X, ref: Y]] inline markers from the answer text."""
     citations: list[Citation] = []
     seen: set[str] = set()
     for m in CITATION_RE.finditer(text):
@@ -45,135 +93,136 @@ def parse_citations(text: str) -> list[Citation]:
     return citations
 
 
-def _normalize(s: str) -> str:
-    """Normalize for comparison: lowercase, strip whitespace and common prefixes."""
-    s = s.strip().lower()
-    # Strip leading "s." / "section " / "art." / "article " prefixes
-    s = re.sub(r"^(?:s(?:ec(?:tion)?)?\.?\s*|art(?:icle)?\.?\s*)", "", s)
-    return s.strip()
+def _collect_dynamic_aliases(
+    node: Any,
+    aliases: dict[str, str],
+) -> None:
+    if isinstance(node, list):
+        for item in node:
+            _collect_dynamic_aliases(item, aliases)
+        return
+    if not isinstance(node, dict) or "error" in node:
+        return
+    for key in ("act", "short_name", "from_act", "to_act"):
+        val = node.get(key)
+        if isinstance(val, str) and val.strip():
+            clean = val.strip()
+            low = clean.lower()
+            if low not in aliases:
+                aliases[low] = clean
+    for v in node.values():
+        if isinstance(v, (dict, list)):
+            _collect_dynamic_aliases(v, aliases)
 
 
-def _extract_numeric(s: str) -> str:
-    """Extract the numeric core from a ref string (e.g. 's. 302' -> '302', 'art. 21A' -> '21a')."""
-    s = _normalize(s)
-    m = re.search(r"(\d+[a-z]*)", s)
-    return m.group(1) if m else ""
+def _index_extra_keys(
+    node: Any,
+    aliases: Mapping[str, str],
+    out: set[str],
+) -> None:
+    """Index AmendmentRecord numbers and Circular/Notification references."""
+    if isinstance(node, list):
+        for item in node:
+            _index_extra_keys(item, aliases, out)
+        return
+    if not isinstance(node, dict) or "error" in node:
+        return
+
+    # 1. AmendmentRecord: {"act": "Constitution", "number": 42, ...}
+    num = node.get("number")
+    if isinstance(num, int) and (
+        "amendment_id" in node
+        or "provisions_affected" in node
+        or "enactment_date" in node
+        or "year" in node
+    ):
+        raw_act = str(node.get("act") or "Constitution")
+        canon_act = _resolve_act_alias(raw_act, aliases)
+        out.add(f"amendment::{canon_act}::{num}")
+
+    # 2. Circulars / Notifications: {"act": "RBI", "ref": "Circular 2024-25/12"}
+    act = node.get("act")
+    ref = node.get("ref")
+    if isinstance(act, str) and act.strip() and isinstance(ref, str) and ref.strip():
+        canon_act = _resolve_act_alias(act.strip(), aliases)
+        m_cir = _CIRCULAR_OR_NOTIF_RE.match(ref.strip())
+        if m_cir:
+            k_prefix = "circular" if m_cir.group("kind").lower().startswith("cir") else "notification"
+            out.add(f"{k_prefix}::{canon_act}::{m_cir.group('num').upper()}")
+
+    for v in node.values():
+        if isinstance(v, (dict, list)):
+            _index_extra_keys(v, aliases, out)
 
 
-def _extract_tool_acts_refs(tool_messages_content: list[str]) -> set[str]:
-    """Extract (act, ref) pairs from tool result JSON strings.
+def _extra_marker_keys(
+    act: str,
+    ref: str,
+    aliases: Mapping[str, str],
+) -> set[str]:
+    canon_act = _resolve_act_alias(act.strip(), aliases)
+    ref_clean = ref.strip()
+    keys: set[str] = set()
 
-    Tool results are JSON strings from the native tools. They may be:
-    - A Document: {"act": "IPC", "ref": "302", ...}
-    - A SearchResponse: {"results": [{"act": "IPC", "ref": "s. 302", ...}]}
-    - A CrossRefList: {"references": [{"from_act": "IPC", "from_section": "302", ...}]}
-    - An ActsList: {"acts": [{"short_name": "IPC", ...}]}
-    - An error: {"error": {...}}
-    """
-    import json
+    m_cir = _CIRCULAR_OR_NOTIF_RE.match(ref_clean)
+    if m_cir:
+        k_prefix = "circular" if m_cir.group("kind").lower().startswith("cir") else "notification"
+        keys.add(f"{k_prefix}::{canon_act}::{m_cir.group('num').upper()}")
 
-    pairs: set[str] = set()
-    for content in tool_messages_content:
+    m_am = _AMEND_NUM_RE.match(ref_clean)
+    if m_am:
+        num_str = m_am.group("ord") or m_am.group("num")
+        if num_str:
+            keys.add(f"amendment::{canon_act}::{int(num_str)}")
+
+    return keys
+
+
+def _build_aliases_for_payloads(
+    tool_payloads: Sequence[str],
+    alias_map: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    merged = _merged_alias_map(alias_map)
+    for content in tool_payloads:
         if not content or not content.strip():
             continue
         try:
             data = json.loads(content)
         except (json.JSONDecodeError, TypeError):
-            # Not JSON — might be a plain text result; skip
             continue
-
-        if not isinstance(data, dict):
-            continue
-
-        # Error responses don't contribute citations
-        if "error" in data:
-            continue
-
-        # Single document: {"act": "IPC", "ref": "302", "kind": "section", ...}
-        if "act" in data and "ref" in data:
-            act = _normalize(str(data.get("act") or ""))
-            ref = _normalize(str(data.get("ref") or ""))
-            if act and ref:
-                pairs.add(f"{act}|{ref}")
-            # Also add without the "s." prefix normalization
-            act_raw = str(data.get("act") or "").strip().lower()
-            ref_raw = str(data.get("ref") or "").strip().lower()
-            if act_raw and ref_raw:
-                pairs.add(f"{act_raw}|{ref_raw}")
-
-        # SearchResponse: {"results": [{"act": "IPC", "ref": "s. 302", ...}]}
-        if "results" in data and isinstance(data["results"], list):
-            for r in data["results"]:
-                if isinstance(r, dict):
-                    act = _normalize(str(r.get("act") or ""))
-                    ref = _normalize(str(r.get("ref") or ""))
-                    if act and ref:
-                        pairs.add(f"{act}|{ref}")
-
-        # CrossRefList: {"references": [{"from_act": ..., "from_section": ..., "to_act": ..., "to_section": ...}]}
-        if "references" in data and isinstance(data["references"], list):
-            for r in data["references"]:
-                if isinstance(r, dict):
-                    for act_key, ref_key in [("from_act", "from_section"), ("to_act", "to_section")]:
-                        act = _normalize(str(r.get(act_key) or ""))
-                        ref = _normalize(str(r.get(ref_key) or ""))
-                        if act and ref:
-                            pairs.add(f"{act}|{ref}")
-
-        # ActsList: {"acts": [{"short_name": "IPC", ...}]}
-        if "acts" in data and isinstance(data["acts"], list):
-            for a in data["acts"]:
-                if isinstance(a, dict):
-                    act = str(a.get("short_name") or "").strip().lower()
-                    if act:
-                        # Acts don't have a ref, but we record the act name
-                        # so citations referencing this act are considered grounded
-                        pairs.add(f"{act}|")
-
-    return pairs
+        _collect_dynamic_aliases(data, merged)
+    return merged
 
 
-def _repair_whitespace_around_markers(text: str) -> str:
-    """Collapse marker-removal debris (doubled spaces, gap before punctuation)
-    in the gaps BETWEEN citation markers; markers pass through byte-identical."""
-    _PUNCT = r"[ \t]+([.,;:!?])"
-    _HORIZ = r"(?<=\S)[ \t]{2,}(?=\S)"
-
-    def _repair(gap: str) -> str:
-        gap = re.sub(_PUNCT, r"\1", gap)
-        return re.sub(_HORIZ, " ", gap)
-
-    if not CITATION_RE.search(text):
-        return _repair(text)
-    parts: list[str] = []
-    pos = 0
-    for m in CITATION_RE.finditer(text):
-        parts.append(_repair(text[pos:m.start()]))
-        parts.append(m.group(0))
-        pos = m.end()
-    parts.append(_repair(text[pos:]))
-    return "".join(parts)
-
-
-def verify_citations(
-    answer_text: str,
-    tool_messages_content: list[str],
+def extract_grounded_keys(
+    tool_payloads: Sequence[str],
     *,
+    alias_map: Mapping[str, str] | None = None,
+) -> set[str]:
+    """Extract canonical citation/provision/judgment keys from serialized tool outputs."""
+    aliases = _build_aliases_for_payloads(tool_payloads, alias_map)
+    keys = _nyaya_extract_grounded_keys(tool_payloads, alias_map=aliases)
+    for content in tool_payloads:
+        if not content or not content.strip():
+            continue
+        try:
+            data = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        _index_extra_keys(data, aliases, keys)
+    return keys
+
+
+def verify_inline_markers(
+    answer_text: str,
+    tool_payloads: Sequence[str],
+    *,
+    alias_map: Mapping[str, str] | None = None,
     had_tool_calls: bool = False,
 ) -> str:
-    """Verify citations in the answer against tool results.
-
-    Args:
-        answer_text: The synthesis LLM's full answer text.
-        tool_messages_content: List of ToolMessage content strings from this turn.
-        had_tool_calls: Whether any tool calls were made during this turn.
-
-    Returns:
-        The answer text with ungrounded citations stripped. If zero grounded
-        citations remain and tools were called, a caveat is appended.
-    """
-    citations = parse_citations(answer_text)
-    if not citations:
+    """Verify ``[[act: X, ref: Y]]`` inline markers strictly against tool payloads."""
+    matches = list(CITATION_MARKER_RE.finditer(answer_text))
+    if not matches:
         if had_tool_calls:
             return answer_text.rstrip() + (
                 "\n\n> **Note:** The model's response did not include verifiable "
@@ -181,72 +230,44 @@ def verify_citations(
             )
         return answer_text
 
-    tool_pairs = _extract_tool_acts_refs(tool_messages_content)
+    aliases = _build_aliases_for_payloads(tool_payloads, alias_map)
+    grounded_keys = extract_grounded_keys(tool_payloads, alias_map=aliases)
+    grounded_count = 0
 
-    # Check each citation against tool results
-    grounded: list[Citation] = []
-    ungrounded: list[Citation] = []
-    for cite in citations:
-        act_n = _normalize(cite.act)
-        ref_n = _normalize(cite.ref)
-        # Check exact (act, ref) match (both normalized -- "s." prefix stripped)
-        if f"{act_n}|{ref_n}" in tool_pairs:
-            grounded.append(cite)
-        # Also check if the ref matches as a substring (e.g. "302" in "s. 302")
-        elif any(
-            p.startswith(f"{act_n}|") and p.split("|", 1)[1] == ref_n
-            for p in tool_pairs
-        ):
-            grounded.append(cite)
-        # Also try whitespace-insensitive ref match
-        elif any(
-            p.startswith(f"{act_n}|")
-            and p.split("|", 1)[1].replace(" ", "") == ref_n.replace(" ", "")
-            for p in tool_pairs
-        ):
-            grounded.append(cite)
-        # Also try numeric core match: extract the numeric part from both refs
-        # e.g. "s. 302" -> "302", "302" -> "302", "s.302" -> "302"
-        elif any(
-            p.startswith(f"{act_n}|")
-            and _extract_numeric(p.split("|", 1)[1]) == _extract_numeric(ref_n)
-            and _extract_numeric(ref_n)  # only if there IS a numeric part
-            for p in tool_pairs
-        ):
-            grounded.append(cite)
-        else:
-            ungrounded.append(cite)
-            log.info("ungrounded citation stripped: act=%s ref=%s", cite.act, cite.ref)
+    def _replace(match: re.Match[str]) -> str:
+        nonlocal grounded_count
+        act_str = match.group(1).strip()
+        ref_str = match.group(2).strip()
+        candidates = _marker_candidate_keys(act_str, ref_str, aliases) | _extra_marker_keys(
+            act_str, ref_str, aliases
+        )
+        if candidates and (candidates & grounded_keys):
+            grounded_count += 1
+            return match.group(0)
+        log.info("ungrounded citation stripped: act=%s ref=%s", act_str, ref_str)
+        return ""
 
-    # Strip ungrounded citation markers from the text. The model's markers
-    # are not byte-identical to the canonical form (whitespace variants like
-    # ``[[act:X,ref:Y]]`` or extra spaces inside the braces), so match by
-    # normalized (act, ref) SPAN instead of exact-string replace — a miss
-    # here would leave the raw ``[[act: …]]`` marker in the rendered answer.
-    ungrounded_keys = {(_normalize(c.act), _normalize(c.ref)) for c in ungrounded}
-
-    def _strip_ungrounded(match: re.Match[str]) -> str:
-        act_n = _normalize(match.group(1))
-        ref_n = _normalize(match.group(2))
-        if (act_n, ref_n) in ungrounded_keys:
-            return ""
-        return match.group(0)
-
-    result = CITATION_RE.sub(_strip_ungrounded, answer_text)
-
-    # Repair the gaps left by removed markers: glue punctuation that lost
-    # its preceding space, and collapse runs of horizontal whitespace —
-    # horizontal runs ONLY, never newlines or leading indentation (the old
-    # ``r"  +"`` regex ate paragraph breaks and code-block indentation).
-    # Grounded markers are masked out first: they are machine-parsed by the
-    # frontend, so their bytes must survive the repair untouched.
+    result = CITATION_MARKER_RE.sub(_replace, answer_text)
     result = _repair_whitespace_around_markers(result)
 
-    # If zero grounded citations remain and tools were called, add caveat
-    if not grounded and had_tool_calls:
+    if grounded_count == 0 and had_tool_calls:
         result = result.rstrip() + (
             "\n\n> **Note:** The model's response did not include verifiable "
             "citations from the corpus. Please verify the information independently."
         )
-
     return result
+
+
+def verify_citations(
+    answer_text: str,
+    tool_messages_content: Sequence[str],
+    *,
+    had_tool_calls: bool = False,
+) -> str:
+    """Verify inline ``[[act: X, ref: Y]]`` markers in the answer against tool results."""
+    return verify_inline_markers(
+        answer_text,
+        tool_messages_content,
+        alias_map=_DEFAULT_ALIAS_MAP,
+        had_tool_calls=had_tool_calls,
+    )

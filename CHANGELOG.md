@@ -7,28 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- Deployment config migrated from Railway's deprecated `railway.toml` Config-as-Code to Railway IaC (`.railway/railway.ts`, managed via `railway config plan`/`apply`) — the legacy format stops being read by Railway on 2026-12-01. Production images now also build with the chat panel enabled (`NEXT_PUBLIC_CHAT_ENABLED` Dockerfile default flipped to `true`).
-- MCP tool registration now fails fast: a duplicate tool name, a raising register function, or a module that does not land the tools it claims aborts startup with a `RuntimeError` instead of logging and continuing with a silently crippled tool surface (supersedes the 0.2.0 log-and-continue behavior — FastMCP itself only warns on duplicates and keeps the first registration).
-- `cross_reference`'s `direction` parameter is now a closed Literal (`from`/`to`/`both`) enforced by FastMCP schema validation at the tool boundary, replacing runtime validation; `db.get_cross_refs` types it as `CrossRefDirection`.
-- `Kind`/`HitKind` consolidated: `HitKind` is now an alias of `Kind` (one definition, one place to extend).
-- `load_dotenv()` in `get_settings()` is now opt-in: set `NYAYA_DOTENV=1` to load a local `.env` (the quickstart flow). Off by default so tests/CI are never surprised by a stray `.env`; a no-op when the optional `python-dotenv` dependency (new `dotenv` extra) is not installed.
-- `list_chapters` tool signature now returns a typed `dict[str, Any]`.
-- Chat eval harnesses merged: `eval/validate_chat.py` folded into `eval/chat_eval.py` (superset of both scenario datasets and check sets). Time-to-first-token is now measured off the live incremental SSE stream instead of being estimated as `latency * 0.3`, and the harness is wrapped by offline-skipping pytest tests under the `eval` marker (`chat/tests/test_chat_eval.py`, opt-in via `NYAYA_EVAL_HOST`).
-- `mypy` is genuinely clean on `nyaya.db`: the pool/connection are typed as `ConnectionPool[psycopg.Connection[dict[str, Any]]]` so dict rows propagate, and the module-wide `disable_error_code` override that hid 28 real errors is removed (24 source files, 0 errors, 0 suppression overrides left).
+## [2.0.0] - 2026-11-22
+
+Full monorepo re-architecture to **Option R2 (Zero-Supabase, Zero-DB-Ops, Pure-Lexical/Metadata/Graph)** and **Nyaya MCP v2.0 (`nyaya-mcp`)**.
 
 ### Added
-- `mcp/tests/test_rest.py` — REST endpoint contract tests against the real ASGI app (stats shapes, degraded health, error redaction, clamping, tool listing), all offline via fakes.
-- `mcp/tests/test_tools_contract.py` — per-tool contract tests (16-tool registration surface, readOnly annotations, Literal enum in the `cross_reference` schema, `include_text`/`snippet_chars` parameters) plus fail-fast registration tests, TTL-cache unit tests for `_LockedTTLCache`, and a middleware-stack-order structural test on the real app.
-- `NYAYA_DOTENV=1` opt-in `.env` loading (see Changed) documented in the mcp README quickstart.
+- **Option R2 Hybrid Storage & Retrieval (`mcp/nyaya/storage/`, `mcp/nyaya/retrieval/`):**
+  - Baked read-only immutable SQLite core (`nyaya-core.sqlite`) with FTS5 (`porter unicode61 remove_diacritics 2 tokenchars '.-/()'`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry, SC metadata, citation graph edges, and courts directory.
+  - Railway Storage Bucket (Tigris S3) cold tiers: 3 LanceDB native Rust BM25 FTS tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and DuckDB `httpfs` over compacted ZSTD Parquet partitions (17.77M HC, 81M DDL District Courts, 15 Tribunals, 12 Regulators, SC mirror) with `manifest.json` partition pruning.
+  - Direct anonymous AWS Open Data PDF extraction via Apache-2.0 `pypdfium2` (`pdf_fetcher.py`) with strict bucket/key regex allowlist, `follow_redirects=False`, 15 MB / 500-page caps, `%PDF-` magic check, `chars_per_page >= 50` scanned-PDF detection, ephemeral `ParagraphBM25`, and a 256 MB disk zstd LRU cache.
+  - Phase-1 pure-lexical `RetrievalEngine` (`QueryAnalyzer`, `LexicalEngine`, weighted RRF `k=60`, court-hierarchy prior, exact-match top-3 floor).
+- **MCP v2.0 Surface (12 Tools · 8 Resources · 4 Prompts):**
+  - 12 tools: `search_statutes`, `get_provision`, `browse_statute`, `compare_provisions`, `cross_reference`, `get_provision_history`, `search_judgments`, `get_judgment`, `trace_precedent`, `judgment_analytics`, `verify_citations`, `corpus_status` (enforcing `openWorldHint` split, `StatutoryValidity` envelopes, `precedent_status="unverified_automated"`, and `commercial_safe_only`).
+  - 8 `nyaya://` resources (`corpus/status`, `statutes`, `statute/{act}`, `provision/{act}/{ref}`, `amendment/{act}/{number}`, `judgment/{identifier}`, `judgment/{identifier}/paragraphs/{start}-{end}`, `courts`).
+  - 4 practitioner/student MCP prompts (`audit_legal_draft`, `transition_criminal_code`, `precedent_research_memo`, `irac_case_brief`).
+- **Dual Transport & CLI (`mcp/nyaya/{cli,mcp_app,http_app}.py`):** Renamed PyPI distribution to `nyaya-mcp` with `nyaya-mcp`, `nyaya`, and `nyaya-ingest` scripts supporting local zero-secret `stdio` (`uvx nyaya-mcp`), `sync`, and stateless `--transport http`.
+- **Shared Indian Citation Parser (`mcp/nyaya/citations.py`):** Priority-ordered parser covering 16-char CNRs, `INSC`, HC neutral citations (`2024:DHC:1234`), AIR, SCC, SCR, CPC Orders/Rules, Constitution Articles/Schedules/Amendments, and chained statute sections.
+- **Ingestion CLI & Automated Legal Integrity Gate (`mcp/nyaya/ingest/`):** `nyaya-ingest` (`sync --tier daily|static`, `build-sqlite`, `build-lance-fts`, `compact-parquet`, `verify-gate`, `publish`), verified reference YAML tables, `.github/workflows/ingest-refresh.yml`, and root [`NOTICE`](NOTICE).
+- **CI/CD & Security Hygiene:** Added `mypy` gate on `chat/nyaya_chat/`, `stdio` JSON-RPC pipe test (12 tools, zero stdout pollution), offline `retrieval_eval.py`, zero-secret hardened Docker smoke test (`--read-only --memory=1g`), `chat/` `pip-audit` job, and lockfile copyleft/Postgres ban check in `.github/workflows/security.yml`.
 
-### Removed
-- Unused `EmbeddingService`/`get_default_service`/`embed_texts` indirection from `nyaya.embeddings` (the module-level `embed_query`/`rerank_query` functions are the only API).
-- Duplicate `_BIDI_RE` (now a single `BIDI_RE` in `nyaya/sanitize.py`, shared with `db.py`) and duplicate `_redact_url` (single home in `config.py`; `ratelimit.py` imports it).
-- The dead `mcp_instance._nyaya_chat_app` write-only attribute in `server.py`.
+### Changed
+- **Container & Infrastructure:** Migrated `Dockerfile` from Alpine to digest-pinned `python:3.12-slim-bookworm` with pre-installed `/app/duckdb_ext` `httpfs`, installed `nyaya-mcp` console scripts (`nyaya-mcp`, `nyaya`, `nyaya-ingest`) and package data into site-packages with `/app/web/out` static fallback, and added a dual-mode `data-stage` (`NYAYA_CORE_SQLITE_URL` + SHA-256 or offline `tests.fixtures.mini_corpus.builder`). Updated `docker-compose.yml` to mount disk-backed `nyaya_cache:/var/cache/nyaya` (preventing Linux `tmpfs` OOM under `mem_limit: 1g`). Updated `.railway/railway.ts` for Option R2 Bucket variables and `asia-southeast1` region guidance.
+- **v2 REST API (`mcp/nyaya/rest.py`):** Migrated endpoints to `/api/corpus-status`, `/api/acts`, `/api/judgments`, `/api/analytics`, `/api/tools`, and `/api/health-summary`.
+- **Chat Sub-App (`chat/`):** Migrated `TOOL_SPECS` to 8 v2 tools, delegated citation verification to shared `nyaya.citations`, updated `cleaning.py` for parameterized `<corpus_text ...>` tags, and expanded `eval/golden.jsonl` from 25 to 90 cases.
+- **Web Frontend (`web/`):** Bumped `API_VERSION` to `2.0.0`, hydrated against v2 REST endpoints, updated `McpConfig` with `Local (uvx stdio)` + `Remote (HTTP)` tabs, added commercial-safe/category filters and academic CC-BY-NC notice, and purged v0.2 Postgres/Supabase/LLM-embedding copy.
+- **Legal & Security Docs:** Replaced US public-domain claims in [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md) with Indian Copyright Act 1957 s. 52(1)(q) + *EBC v. D.B. Modak* + s. 228A/BNS s. 72 exclusions; revoked "corpus is trusted" in favor of OWASP LLM01 `<corpus_text>` isolation.
+
+### Security
+- **OWASP LLM01 Sanitization (`mcp/nyaya/sanitize.py`):** Added `frame_corpus_text()`, Unicode Tag (`U+E0000–U+E007F`) stripping, inner delimiter escaping, non-destructive `detect_suspected_injection()`, and operative `check_publication_ban()`.
+- **HTTP Middleware Hardening (`mcp/nyaya/ratelimit.py`, `mcp/nyaya/security_headers.py`):** Right-most trusted `X-Forwarded-For` (`NYAYA_TRUSTED_PROXY_HOPS`), 50k-key bounded LRU `InMemoryBackend`, streaming body-size cap (`400` on invalid `Content-Length`, `413` on chunked overflow), `analytics_per_min=20` bucket, COOP/CORP headers, and proxy-aware HSTS.
+- **DuckDB & PDF Hardening:** Scoped S3 secret (`SCOPE 's3://<bucket>'`), scheme stripping + `NYAYA_BUCKET_URL_STYLE="vhost"`, 256 MB memory limit, 5s `con.interrupt()`, and strict S3 PDF bucket/key regex + `follow_redirects=False`.
 
 ### Fixed
-- CHANGELOG 0.2.0 entry: `SYNTHESIS_MAX_TOKENS` was recorded as 4096 but ships as 2048; the `article_amendments` junction-table claim was wrong — the v0.2 schema **dropped** `article_amendments` (schema.sql only `DROP`s it) and keeps `articles_affected` as a CSV in `documents.metadata`.
+- Eliminated citation verification first-number collision (`AIR 1973 SC 9999` vs `AIR 1973 SC 1461`) and `act=None` judgment citation drops.
+- Fixed `retrieval_eval.py` act-only recall false positives to require exact canonical `(act, ref)` / judgment key matches.
+- Fixed v0.2 Constitutional Amendment year/article errors (1st–106th), IPC↔BNS collapse errors, and the 200 KB document truncation limit.
+
+### Removed
+- Completely removed Supabase, Postgres, `pgvector`, `DATABASE_URL`, `psycopg`, `psycopg-pool`, `openai` (from `mcp/`), `mcp/schema.sql`, `mcp/notebooks/hydrate.ipynb`, `mcp/nyaya/db.py`, `mcp/nyaya/embeddings.py`, and all 16 legacy v0.2 MCP tools.
 
 ## [0.2.0] - 2026-08-18
 
@@ -48,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `load_dotenv()` moved from module import time to `get_settings()` for test isolation.
 - Added `redis_url` to `Settings` dataclass.
 - `tools/__init__.py` now wraps each tool registration in try/except so one failure doesn't block all tools.
+- Deployment config migrated from `railway.toml` to `.railway/railway.ts`, `NEXT_PUBLIC_CHAT_ENABLED` Dockerfile default flipped to `true`, fail-fast tool registration, `cross_reference` closed Literal `direction`, `Kind`/`HitKind` alias, opt-in `NYAYA_DOTENV=1`, merged `eval/chat_eval.py` harness, and strict `mypy` on `nyaya.db` (subsequently superseded in v2.0.0).
 
 ### Added
 - `articles_affected` stays a CSV column inside `documents.metadata` in the v0.2 unified schema (the old `article_amendments` junction table is dropped by schema.sql, not added — the original entry here claimed the opposite).
@@ -58,7 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `list_sections` now raises `NotFound` on nonexistent acts (consistent with `list_chapters`).
 - `get_amendments_for_article` regex fix (POSIX `[[:<:]]`/`[[:>:]]` word boundaries) and input validation.
 - Coverage configuration in `pyproject.toml` (`pytest --cov=nyaya`).
-- New test files: `test_config.py`, `test_exceptions.py`, `test_sanitize.py`, `test_security.py`, `test_server.py`, `test_structured_errors.py`.
+- New test files: `test_config.py`, `test_exceptions.py`, `test_sanitize.py`, `test_security.py`, `test_server.py`, `test_structured_errors.py`, `test_rest.py`, `test_tools_contract.py`.
 - Web: `lib/types.ts` and `lib/data.ts` for shared types and curated data.
 - Web: SWR `fallbackData` support for `useHealthSummary` and `useTools`.
 - Web: fetch timeout (10s) with `AbortController`.

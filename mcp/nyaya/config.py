@@ -1,17 +1,8 @@
-"""Runtime configuration for nyaya.
+"""Zero-Supabase runtime configuration for nyaya v2.0.
 
-Environment variables read:
-
-``DATABASE_URL`` (required)
-    Postgres/Supabase connection string.
-``NVIDIA_API_KEY`` (required)
-    NVIDIA API Catalog key for the embedder + reranker (integrate.api.nvidia.com).
-    Previously only required by the chat sub-app; now required by the MCP server
-    itself since retrieval is embedding-based.
-``PORT`` (optional, default 8000)
-    HTTP port for the uvicorn server. Railway injects this automatically.
-
-Everything else is a Python constant in this module.
+Importing this module or ``nyaya`` has zero I/O side effects: ``get_settings()``
+is evaluated lazily only when requested by the runtime, CLI, or HTTP server.
+Neither ``DATABASE_URL`` nor ``NVIDIA_API_KEY`` is required by the MCP server.
 """
 
 from __future__ import annotations
@@ -19,86 +10,63 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from .exceptions import ConfigurationError
 
-# ---------------------------------------------------------------------------
-# Tunable constants (edit here; no env vars).
-# ---------------------------------------------------------------------------
+BucketUrlStyle = Literal["vhost", "path"]
 
 PORT_DEFAULT = 8000
-
-# Connection-pool size bounds for the read layer.
-POOL_MIN = 1
-POOL_MAX = 8
-POOL_TIMEOUT = 3.0
-
-# Postgres ``statement_timeout`` applied to each pooled connection (ms).
-STATEMENT_TIMEOUT_MS = 15000
-
 LOG_LEVEL = "INFO"
-
-# NVIDIA API embedding + reranker model ids (used by embeddings.py).
-EMBEDDING_MODEL = "nvidia/nemotron-3-embed-1b"
-RERANKER_MODEL = "nvidia/llama-nemotron-rerank-vl-1b-v2"
-EMBEDDING_DIM = 2048
-
-# Total wall-clock budget for one rerank call (attempts + backoff + HTTP).
-# Without a deadline, 3 attempts x 120s httpx timeout + exponential backoff
-# can hang ~6 minutes worst case; beyond this deadline the reranker is
-# abandoned and search falls back to raw ANN scores (reranker_unavailable).
-# 5s: a healthy rerank call takes ~1s, so the deadline only ever bites on
-# the failure path — 15s of retries there was pure waste before fallback.
-RERANK_DEADLINE_S = 5.0
-
-# Default text-snippet length for list-style responses (matches the
-# historical ``left(d.text, 300)`` used by semantic search).
 SNIPPET_CHARS = 300
-
-# Redis connection string for distributed rate limiting. When set,
-# rate-limit counters are shared across all workers. When None, falls back
-# to in-memory (single-worker only). Read from the REDIS_URL env var at
-# get_settings() time; the module constant is the default.
-REDIS_URL: str | None = None
-
-# Directory containing the built Next.js static export, served at /.
 WEB_OUT = "web/out"
 
-# Rate-limit thresholds (requests-per-minute per client IP).
+REDIS_URL: str | None = None
+
 RATE_READ_PER_MIN = 120
 RATE_MCP_PER_MIN = 30
+RATE_ANALYTICS_PER_MIN = 20
 RATE_CHAT_PER_MIN = 15
 RATE_BODY_MAX_BYTES = 1_048_576
 
-
-def _required(name: str) -> str:
-    val = os.environ.get(name)
-    if not val:
-        raise ConfigurationError(
-            f"Required environment variable {name!r} is not set. "
-            "Copy .env.example to .env and fill in the values."
-        )
-    return val
-
-
-# Opt-in flag that lets get_settings() load a local ``.env`` file. Off by
-# default so tests and CI (which set real env vars) never see a stray .env.
 DOTENV_ENV_VAR = "NYAYA_DOTENV"
-_DOTENV_TRUTHY = frozenset({"1", "true", "yes", "on"})
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _is_truthy(val: str | None) -> bool:
+    return (val or "").strip().lower() in _TRUTHY
+
+
+def _default_data_dir() -> Path:
+    app_data = Path("/app/data")
+    if app_data.is_dir():
+        return app_data
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".cache"
+    return base / "nyaya" / "data"
+
+
+def _default_cache_dir() -> Path:
+    tmp_cache = Path("/tmp/nyaya-cache")
+    if Path("/app/data").is_dir() or tmp_cache.is_dir():
+        return tmp_cache
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".cache"
+    return base / "nyaya" / "cache"
+
+
+def _default_duckdb_ext_dir() -> Path | None:
+    app_ext = Path("/app/duckdb_ext")
+    if app_ext.is_dir():
+        return app_ext
+    return None
 
 
 def _maybe_load_dotenv() -> None:
-    """Load a local ``.env`` file, but only when explicitly enabled.
-
-    Makes the ``cp .env.example .env`` quickstart in ``mcp/README.md`` work
-    without exporting the variables by hand. Opt-in — ``NYAYA_DOTENV=1`` — so
-    tests and CI are never surprised by a stray ``.env``; also a no-op when
-    python-dotenv is not installed (it is an optional dependency, see the
-    ``dotenv`` extra in ``pyproject.toml``). ``load_dotenv`` never overrides
-    variables that are already set, so real environment always wins.
-    """
-    if os.environ.get(DOTENV_ENV_VAR, "").strip().lower() not in _DOTENV_TRUTHY:
+    """Load a local ``.env`` file only when ``NYAYA_DOTENV`` is truthy."""
+    if not _is_truthy(os.environ.get(DOTENV_ENV_VAR)):
         return
     try:
         from dotenv import load_dotenv
@@ -108,8 +76,6 @@ def _maybe_load_dotenv() -> None:
 
 
 def _redact_url(url: str) -> str:
-    from urllib.parse import urlsplit, urlunsplit
-
     parts = urlsplit(url)
     if parts.hostname and (parts.username or parts.password):
         netloc = f"***@{parts.hostname}"
@@ -121,33 +87,45 @@ def _redact_url(url: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str
-    nvidia_api_key: str
-    port: int
-    pool_min: int
-    pool_max: int
-    pool_timeout: float
-    statement_timeout_ms: int
+    data_dir: Path
+    cache_dir: Path
+    bucket_endpoint: str | None
+    bucket_name: str | None
+    bucket_access_key_id: str | None
+    bucket_secret_access_key: str | None
+    bucket_region: str
+    bucket_url_style: BucketUrlStyle
+    manifest_url: str | None
+    commercial_safe_only: bool
+    offline_only: bool
+    duckdb_ext_dir: Path | None
     log_level: str
-    embedding_model: str
-    reranker_model: str
-    embedding_dim: int
+    port: int
     redis_url: str | None
+    trusted_proxy_hops: int
+
+    @property
+    def has_bucket_config(self) -> bool:
+        return bool(self.bucket_endpoint and self.bucket_name)
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "database_url": _redact_url(self.database_url),
-            "nvidia_api_key": "***",
-            "port": self.port,
-            "pool_min": self.pool_min,
-            "pool_max": self.pool_max,
-            "pool_timeout": self.pool_timeout,
-            "statement_timeout_ms": self.statement_timeout_ms,
+            "data_dir": str(self.data_dir),
+            "cache_dir": str(self.cache_dir),
+            "bucket_endpoint": self.bucket_endpoint,
+            "bucket_name": self.bucket_name,
+            "bucket_access_key_id": "***" if self.bucket_access_key_id else None,
+            "bucket_secret_access_key": "***" if self.bucket_secret_access_key else None,
+            "bucket_region": self.bucket_region,
+            "bucket_url_style": self.bucket_url_style,
+            "manifest_url": self.manifest_url,
+            "commercial_safe_only": self.commercial_safe_only,
+            "offline_only": self.offline_only,
+            "duckdb_ext_dir": str(self.duckdb_ext_dir) if self.duckdb_ext_dir else None,
             "log_level": self.log_level,
-            "embedding_model": self.embedding_model,
-            "reranker_model": self.reranker_model,
-            "embedding_dim": self.embedding_dim,
+            "port": self.port,
             "redis_url": _redact_url(self.redis_url) if self.redis_url else None,
+            "trusted_proxy_hops": self.trusted_proxy_hops,
         }
 
 
@@ -160,26 +138,54 @@ def get_settings() -> Settings:
         port = int(port_raw)
     except ValueError:
         raise ConfigurationError(f"PORT must be an integer, got {port_raw!r}") from None
-
     if not 1 <= port <= 65535:
         raise ConfigurationError(f"PORT must be in range 1-65535, got {port}") from None
 
-    if POOL_MIN > POOL_MAX:
-        raise ConfigurationError(f"POOL_MIN ({POOL_MIN}) must be <= POOL_MAX ({POOL_MAX})")
+    hops_raw = os.environ.get("NYAYA_TRUSTED_PROXY_HOPS", "1")
+    try:
+        trusted_proxy_hops = int(hops_raw)
+    except ValueError:
+        raise ConfigurationError(
+            f"NYAYA_TRUSTED_PROXY_HOPS must be an integer, got {hops_raw!r}"
+        ) from None
+    if trusted_proxy_hops < 0:
+        raise ConfigurationError(
+            f"NYAYA_TRUSTED_PROXY_HOPS must be >= 0, got {trusted_proxy_hops}"
+        ) from None
+
+    url_style_raw = (os.environ.get("NYAYA_BUCKET_URL_STYLE") or "vhost").strip().lower()
+    if url_style_raw not in ("vhost", "path"):
+        raise ConfigurationError(
+            f"NYAYA_BUCKET_URL_STYLE must be 'vhost' or 'path', got {url_style_raw!r}"
+        )
+    bucket_url_style: BucketUrlStyle = "vhost" if url_style_raw == "vhost" else "path"
+
+    data_dir_raw = os.environ.get("NYAYA_DATA_DIR")
+    data_dir = Path(data_dir_raw) if data_dir_raw else _default_data_dir()
+
+    cache_dir_raw = os.environ.get("NYAYA_CACHE_DIR")
+    cache_dir = Path(cache_dir_raw) if cache_dir_raw else _default_cache_dir()
+
+    ext_dir_raw = os.environ.get("NYAYA_DUCKDB_EXT_DIR")
+    duckdb_ext_dir = Path(ext_dir_raw) if ext_dir_raw else _default_duckdb_ext_dir()
 
     return Settings(
-        database_url=_required("DATABASE_URL"),
-        nvidia_api_key=_required("NVIDIA_API_KEY"),
+        data_dir=data_dir,
+        cache_dir=cache_dir,
+        bucket_endpoint=os.environ.get("NYAYA_BUCKET_ENDPOINT") or None,
+        bucket_name=os.environ.get("NYAYA_BUCKET_NAME") or None,
+        bucket_access_key_id=os.environ.get("NYAYA_BUCKET_ACCESS_KEY_ID") or None,
+        bucket_secret_access_key=os.environ.get("NYAYA_BUCKET_SECRET_ACCESS_KEY") or None,
+        bucket_region=(os.environ.get("NYAYA_BUCKET_REGION") or "auto").strip() or "auto",
+        bucket_url_style=bucket_url_style,
+        manifest_url=os.environ.get("NYAYA_MANIFEST_URL") or None,
+        commercial_safe_only=_is_truthy(os.environ.get("NYAYA_COMMERCIAL_SAFE_ONLY")),
+        offline_only=_is_truthy(os.environ.get("NYAYA_OFFLINE_ONLY")),
+        duckdb_ext_dir=duckdb_ext_dir,
+        log_level=(os.environ.get("NYAYA_LOG_LEVEL") or LOG_LEVEL).strip().upper(),
         port=port,
-        pool_min=POOL_MIN,
-        pool_max=POOL_MAX,
-        pool_timeout=POOL_TIMEOUT,
-        statement_timeout_ms=STATEMENT_TIMEOUT_MS,
-        log_level=LOG_LEVEL,
-        embedding_model=EMBEDDING_MODEL,
-        reranker_model=RERANKER_MODEL,
-        embedding_dim=EMBEDDING_DIM,
-        redis_url=os.environ.get("REDIS_URL", REDIS_URL),
+        redis_url=os.environ.get("REDIS_URL", REDIS_URL) or None,
+        trusted_proxy_hops=trusted_proxy_hops,
     )
 
 
@@ -188,11 +194,19 @@ class RateLimitSettings:
     """Rate-limit configuration (requests-per-minute per client IP)."""
 
     read_per_min: int = RATE_READ_PER_MIN
+    mcp_per_min: int = RATE_MCP_PER_MIN
     embedding_per_min: int = RATE_MCP_PER_MIN
+    analytics_per_min: int = RATE_ANALYTICS_PER_MIN
     chat_per_min: int = RATE_CHAT_PER_MIN
     body_size_max_bytes: int = RATE_BODY_MAX_BYTES
+    trusted_proxy_hops: int = 1
 
 
 @lru_cache(maxsize=1)
 def get_rate_limit_settings() -> RateLimitSettings:
-    return RateLimitSettings()
+    hops_raw = os.environ.get("NYAYA_TRUSTED_PROXY_HOPS", "1")
+    try:
+        hops = max(0, int(hops_raw))
+    except ValueError:
+        hops = 1
+    return RateLimitSettings(trusted_proxy_hops=hops)

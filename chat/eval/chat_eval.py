@@ -312,24 +312,27 @@ SCENARIOS: list[Scenario] = [
     Scenario("fact-ipc-420", "Explain IPC section 420 on cheating.", "factual_lookup", "Tool call + cited answer"),
     Scenario("fact-art-14", "What is Article 14 of the Constitution about?", "factual_lookup", "Tool call + cited answer"),
 
-    # ── Semantic search (topical queries) ──
-    Scenario("semantic-good-faith", "What is the legal definition of good faith in Indian law?", "semantic_search", "semantic_query + cited answer"),
-    Scenario("semantic-dowry", "What are the laws against dowry in India?", "semantic_search", "semantic_query + cited answer"),
-    Scenario("semantic-self-defence", "When can a person legally use force in self defence?", "semantic_search", "semantic_query + cited answer"),
+    # ── Semantic / Lexical search (topical queries) ──
+    Scenario("semantic-good-faith", "What is the legal definition of good faith in Indian law?", "semantic_search", "search_statutes + cited answer"),
+    Scenario("semantic-dowry", "What are the laws against dowry in India?", "semantic_search", "search_statutes + cited answer"),
+    Scenario("semantic-self-defence", "When can a person legally use force in self defence?", "semantic_search", "search_statutes + cited answer"),
 
     # ── Cross-act comparisons ──
-    Scenario("compare-ipc-bns-murder", "Compare the punishment for murder under IPC and the new BNS. What changed?", "comparison", "Multiple tool calls + cited comparison"),
-    Scenario("compare-ipc-bns-theft", "How does theft differ between IPC and BNS?", "comparison", "Multiple tool calls + cited comparison"),
+    Scenario("compare-ipc-bns-murder", "Compare the punishment for murder under IPC and the new BNS. What changed?", "comparison", "compare_provisions or parallel lookups + cited comparison"),
+    Scenario("compare-ipc-bns-theft", "How does theft differ between IPC and BNS?", "comparison", "compare_provisions or parallel lookups + cited comparison"),
 
     # ── Refusal (out-of-corpus) ──
     Scenario("refusal-nonexistent", "What does the Indian Space Act of 2050 say about Mars colonies?", "refusal", "Tool call + refusal, no fabricated citations"),
     Scenario("refusal-fake-section", "What does IPC section 99999 say?", "refusal", "Tool call + refusal, no fabricated citations"),
 
-    # ── Judgment lookup ──
-    Scenario("judgment-kesavananda", "What was the Kesavananda Bharati case about?", "judgment", "get_judgment + cited answer"),
+    # ── Judgment lookup & v2 precedent / validity / citation verification ──
+    Scenario("judgment-kesavananda", "What was the Kesavananda Bharati case about?", "judgment", "get_judgment or search_judgments + cited answer"),
+    Scenario("hc-precedent-dhc", "What did the Delhi High Court hold in 2024:DHC:1234 regarding anticipatory bail?", "judgment", "get_judgment or search_judgments + HC neutral citation"),
+    Scenario("struck-down-it-66a", "Is Section 66A of the Information Technology Act, 2000 still in force?", "factual_lookup", "get_provision or search_statutes surfacing struck_down validity alert"),
+    Scenario("verify-citations-kesavananda", "Does AIR 1973 SC 9999 exist in the corpus, or what is the true citation for Kesavananda Bharati?", "judgment", "Verifies real citation and refuses fake page 9999"),
 
     # ── Definition lookup ──
-    Scenario("definition-dishonestly", "What is the meaning of 'dishonestly' under the IPC?", "definition", "get_section or semantic_query + cited answer"),
+    Scenario("definition-dishonestly", "What is the meaning of 'dishonestly' under the IPC?", "definition", "get_provision or search_statutes + cited answer"),
 
     # ── Multi-turn conversation ──
     Scenario("multi-turn-1", "What does Article 19 of the Constitution guarantee?", "multi_turn", "Tool call + cited answer"),
@@ -506,11 +509,19 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
 
     elif scenario.category == "semantic_search":
         result.checks.append(("has_tool_calls", len(result.tool_calls) > 0, f"tools={tools}"))
-        result.checks.append(("uses_semantic_query", "semantic_query" in tools, f"tools={tools}"))
+        result.checks.append((
+            "uses_search_tool",
+            any(t in ("search_statutes", "search_judgments", "get_provision") for t in tools),
+            f"tools={tools}",
+        ))
         result.checks.append(("has_citations", len(result.citations) > 0, f"citations={result.citations[:3]}"))
 
     elif scenario.category == "comparison":
-        has_comparison_tools = len(result.tool_calls) >= 2 or "cross_reference" in tools
+        has_comparison_tools = (
+            len(result.tool_calls) >= 2
+            or "compare_provisions" in tools
+            or "cross_reference" in tools
+        )
         result.checks.append(("has_comparison_tools", has_comparison_tools, f"tools={tools}"))
         result.checks.append(("mentions_both_acts", "ipc" in answer_lower and "bns" in answer_lower, ""))
         result.checks.append(("has_citations", len(result.citations) > 0, f"citations={result.citations[:3]}"))
@@ -536,11 +547,12 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
     elif scenario.category == "judgment":
         result.checks.append((
             "uses_judgment_tool",
-            any(t in ("get_judgment", "semantic_query") for t in tools), f"tools={tools}",
+            any(t in ("get_judgment", "search_judgments", "trace_precedent") for t in tools),
+            f"tools={tools}",
         ))
 
     elif scenario.category == "definition":
-        has_definition_tool = any(t in ("semantic_query", "get_section") for t in tools)
+        has_definition_tool = any(t in ("search_statutes", "get_provision", "browse_statute") for t in tools)
         result.checks.append(("uses_definition_tool", has_definition_tool, f"tools={tools}"))
         result.checks.append(("has_citations", len(result.citations) > 0, f"citations={result.citations[:3]}"))
 

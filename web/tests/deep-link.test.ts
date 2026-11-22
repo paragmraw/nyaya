@@ -6,7 +6,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCorpusDeepLink } from "../src/lib/deep-link";
+import { parseCorpusDeepLink, resolveDeepLinkRow } from "../src/lib/deep-link";
 
 test("parses act and ref from a canonical deep-link search string", () => {
   assert.deepEqual(parseCorpusDeepLink("?act=IPC&ref=s.302"), {
@@ -52,4 +52,42 @@ test("no act param (or empty) is not a deep link", () => {
   assert.equal(parseCorpusDeepLink("?ref=s.302"), null);
   assert.equal(parseCorpusDeepLink("?act=&ref=s.302"), null);
   assert.equal(parseCorpusDeepLink("?utm_source=chat"), null);
+});
+
+test("parses v2 INSC, HC neutral, CNR, CPC O.7 R.11, and s.65B(4) deep-links", () => {
+  assert.deepEqual(parseCorpusDeepLink("?act=SC&ref=2017%20INSC%20801"), {
+    act: "SC",
+    ref: "2017 INSC 801",
+  });
+  assert.deepEqual(parseCorpusDeepLink("?act=DHC&ref=2024%3ADHC%3A1234"), {
+    act: "DHC",
+    ref: "2024:DHC:1234",
+  });
+  assert.deepEqual(parseCorpusDeepLink("?act=CNR&ref=MHAU019999992015"), {
+    act: "CNR",
+    ref: "MHAU019999992015",
+  });
+  assert.deepEqual(parseCorpusDeepLink("?act=CPC&ref=O.7%20R.11"), {
+    act: "CPC",
+    ref: "O.7 R.11",
+  });
+  assert.deepEqual(parseCorpusDeepLink("?act=EvidenceAct&ref=s.65B(4)"), {
+    act: "EvidenceAct",
+    ref: "s.65B(4)",
+  });
+});
+
+test("resolveDeepLinkRow matches exact short_names and aliases case-insensitively", () => {
+  const rows = [
+    { short_name: "IPC" },
+    { short_name: "EvidenceAct", aliases: ["IEA", "Indian Evidence Act"] },
+    { short_name: "SC", aliases: ["Supreme Court"] },
+    { short_name: "HC", aliases: ["DHC", "BHC", "High Court"] },
+    { short_name: "DDL", aliases: ["CNR", "District Court"] },
+  ];
+  assert.equal(resolveDeepLinkRow("ipc", rows), "IPC");
+  assert.equal(resolveDeepLinkRow("IEA", rows), "EvidenceAct");
+  assert.equal(resolveDeepLinkRow("DHC", rows), "HC");
+  assert.equal(resolveDeepLinkRow("CNR", rows), "DDL");
+  assert.equal(resolveDeepLinkRow("UnknownAct", rows), null);
 });

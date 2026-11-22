@@ -1,34 +1,27 @@
 "use client";
 
-// Deep-link landing for citation chips: /corpus/?act=IPC&ref=s.302.
-//
-// The corpus table's rows come from the curated sources list, not from the
-// live acts snapshot, so a deep link is resolved against CURATED short_names
-// (case-insensitive) and can only highlight the act's row — provision text
-// itself is retrieved live through the chat API, never listed on this page.
-// The query string is read from window.location.search inside useEffect:
-// static export has no server-rendered search params, and useSearchParams
-// would drag the page into a Suspense boundary.
+// Deep-link landing + live SWR hydration for /corpus/:
+// Citation chips link to /corpus/?act=IPC&ref=s.302 or /corpus/?act=SC&ref=2017%20INSC%20801.
+// Resolves deep links against CURATED short_names and aliases, and merges live
+// /api/acts and /api/corpus-status responses onto the build-time snapshot.
 
 import { useMemo, useState, useSyncExternalStore } from "react";
 import CorpusTable from "./CorpusTable";
-import { CURATED } from "@/lib";
-import { parseCorpusDeepLink, type CorpusDeepLink } from "@/lib/deep-link";
+import { CURATED, useActs, useCorpusStatus } from "@/lib";
+import { parseCorpusDeepLink, resolveDeepLinkRow, type CorpusDeepLink } from "@/lib/deep-link";
 
 type ActLike = {
   short_name: string;
-  // Other snapshot fields pass through untouched; this wrapper never reads them.
 } & Record<string, unknown>;
 
-// The query string never changes without a navigation (which remounts the
-// page), so the store subscription is a no-op; the server snapshot is the
-// empty string, meaning "no deep link" — matching the static build output.
 const subscribeNoop = () => () => {};
 const getSearch = () => window.location.search;
 const getSearchServer = () => "";
 
 export default function CorpusDeepLink({ acts }: { acts: ActLike[] | undefined }) {
   const [dismissed, setDismissed] = useState(false);
+  const { data: liveStatus } = useCorpusStatus();
+  const { data: liveActs } = useActs({ limit: 200 });
 
   const search = useSyncExternalStore(subscribeNoop, getSearch, getSearchServer);
   const link = useMemo<CorpusDeepLink | null>(
@@ -37,11 +30,15 @@ export default function CorpusDeepLink({ acts }: { acts: ActLike[] | undefined }
   );
   const matched = useMemo<string | null>(() => {
     if (!link) return null;
-    const hit = CURATED.find(
-      (c) => c.short_name.toLowerCase() === link.act.toLowerCase(),
-    );
-    return hit ? hit.short_name : null;
+    return resolveDeepLinkRow(link.act, CURATED);
   }, [link]);
+
+  const effectiveActs = useMemo(() => {
+    if (liveActs?.items && liveActs.items.length > 0) {
+      return liveActs.items;
+    }
+    return acts;
+  }, [liveActs, acts]);
 
   const notice = (() => {
     if (!link || dismissed) return null;
@@ -49,9 +46,9 @@ export default function CorpusDeepLink({ acts }: { acts: ActLike[] | undefined }
       return (
         <div role="status" className="deep-link-notice" style={noticeStyle}>
           <span>
-            Cited source <strong>{link.ref ? `${matched} ${link.ref}` : matched}</strong> —
-            highlighted among the indexed sources below. Provision text is
-            retrieved live through the chat API, not listed on this page.
+            Cited source <strong>{link.ref ? `${matched} · ${link.ref}` : matched}</strong> —
+            highlighted among the indexed sources below. Provision and judgment text is
+            retrieved via MCP or the chat API.
           </span>
           <button type="button" style={closeStyle} onClick={() => setDismissed(true)} aria-label="Dismiss">
             ×
@@ -62,9 +59,8 @@ export default function CorpusDeepLink({ acts }: { acts: ActLike[] | undefined }
     return (
       <div role="status" className="deep-link-notice" style={noticeStyle}>
         <span>
-          No indexed source matches <strong>{link.act}</strong>. The available
-          sources are listed below; provision text is retrieved live through
-          the chat API.
+          No curated table row directly matches <strong>{link.act}</strong>. Use the category filters below
+          or query the source live through MCP (<code>get_provision</code> / <code>get_judgment</code>).
         </span>
         <button type="button" style={closeStyle} onClick={() => setDismissed(true)} aria-label="Dismiss">
           ×
@@ -76,13 +72,16 @@ export default function CorpusDeepLink({ acts }: { acts: ActLike[] | undefined }
   return (
     <>
       {notice}
-      <CorpusTable acts={acts} highlightAct={matched ?? undefined} />
+      <CorpusTable
+        acts={effectiveActs}
+        sources={liveStatus?.sources}
+        snapshotDate={liveStatus?.as_of}
+        highlightAct={matched ?? undefined}
+      />
     </>
   );
 }
 
-// Inline styles keep globals.css untouched (a concurrent refactor owns it).
-// Tokens only, so both themes keep working.
 const noticeStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "flex-start",

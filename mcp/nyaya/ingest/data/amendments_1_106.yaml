@@ -1,0 +1,959 @@
+schema_version: 2
+target_act_id: "constitution"
+source_id: "legislative_constitution"
+updated_at: "2026-11-22"
+amendments:
+  - number: 1
+    year: 1951
+    enacted_date: "1951-06-18"
+    effective_date: "1951-06-18"
+    title: "The Constitution (First Amendment) Act, 1951"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["15", "19", "31A", "31B", "85", "87", "174", "176", "341", "342", "372", "376", "Schedule 9"]
+    summary: "Added reasonable restrictions to Article 19(2), enabled special provisions for advancement of socially and educationally backward classes under Article 15(4), and inserted Articles 31A, 31B and the Ninth Schedule to protect agrarian reform laws."
+  - number: 2
+    year: 1952
+    enacted_date: "1953-05-01"
+    effective_date: "1953-05-01"
+    title: "The Constitution (Second Amendment) Act, 1952"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["81"]
+    summary: "Removed the upper population limit of 7,50,000 citizens per Lok Sabha constituency in Article 81(1)(b)."
+  - number: 3
+    year: 1954
+    enacted_date: "1955-02-22"
+    effective_date: "1955-02-22"
+    title: "The Constitution (Third Amendment) Act, 1954"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 7"]
+    summary: "Substituted Entry 33 of List III (Concurrent List) in the Seventh Schedule regarding foodstuffs, cattle fodder, raw cotton, and raw jute."
+  - number: 4
+    year: 1955
+    enacted_date: "1955-04-27"
+    effective_date: "1955-04-27"
+    title: "The Constitution (Fourth Amendment) Act, 1955"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["31", "31A", "305", "Schedule 9"]
+    summary: "Made adequacy of compensation for compulsory acquisition non-justiciable under Article 31(2) and expanded the Ninth Schedule."
+  - number: 5
+    year: 1955
+    enacted_date: "1955-12-24"
+    effective_date: "1955-12-24"
+    title: "The Constitution (Fifth Amendment) Act, 1955"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["3"]
+    summary: "Empowered the President to prescribe a time limit for State Legislatures to express views on proposed state boundary bills under Article 3."
+  - number: 6
+    year: 1956
+    enacted_date: "1956-09-11"
+    effective_date: "1956-09-11"
+    title: "The Constitution (Sixth Amendment) Act, 1956"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["269", "286", "Schedule 7"]
+    summary: "Added Entry 92A to the Union List taxing inter-State sales and purchases of goods other than newspapers."
+  - number: 7
+    year: 1956
+    enacted_date: "1956-10-19"
+    effective_date: "1956-11-01"
+    title: "The Constitution (Seventh Amendment) Act, 1956"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["1", "3", "49", "80", "81", "82", "131", "153", "158", "168", "170", "171", "216", "217", "220", "222", "224", "230", "231", "232", "Schedule 1", "Schedule 4"]
+    summary: "Implemented the States Reorganisation Act abolishing Part A, B, C, D State classifications and reorganising India into 14 States and 6 Union Territories."
+  - number: 8
+    year: 1959
+    enacted_date: "1960-01-05"
+    effective_date: "1960-01-05"
+    title: "The Constitution (Eighth Amendment) Act, 1959"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["334"]
+    summary: "Extended reservation of seats for SCs, STs, and Anglo-Indians in the Lok Sabha and State Assemblies by ten years to 1970."
+  - number: 9
+    year: 1960
+    enacted_date: "1960-12-28"
+    effective_date: "1960-12-28"
+    title: "The Constitution (Ninth Amendment) Act, 1960"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 1"]
+    summary: "Adjusted territories in the First Schedule to implement the Indo-Pakistan 1958 agreement regarding Berubari Union."
+  - number: 10
+    year: 1961
+    enacted_date: "1961-08-11"
+    effective_date: "1961-08-11"
+    title: "The Constitution (Tenth Amendment) Act, 1961"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["240", "Schedule 1"]
+    summary: "Incorporated Dadra and Nagar Haveli as a Union Territory of India."
+  - number: 11
+    year: 1961
+    enacted_date: "1961-12-19"
+    effective_date: "1961-12-19"
+    title: "The Constitution (Eleventh Amendment) Act, 1961"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["66", "71"]
+    summary: "Provided that the election of the President or Vice-President cannot be challenged on the ground of any vacancy in the Electoral College."
+  - number: 12
+    year: 1962
+    enacted_date: "1962-03-27"
+    effective_date: "1961-12-20"
+    title: "The Constitution (Twelfth Amendment) Act, 1962"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["240", "Schedule 1"]
+    summary: "Incorporated Goa, Daman and Diu as a Union Territory in the First Schedule."
+  - number: 13
+    year: 1962
+    enacted_date: "1962-12-28"
+    effective_date: "1963-12-01"
+    title: "The Constitution (Thirteenth Amendment) Act, 1962"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["170", "371A"]
+    summary: "Inserted Article 371A conferring special constitutional protections for the State of Nagaland."
+  - number: 14
+    year: 1962
+    enacted_date: "1962-12-28"
+    effective_date: "1962-12-28"
+    title: "The Constitution (Fourteenth Amendment) Act, 1962"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["81", "239A", "240", "Schedule 1", "Schedule 4"]
+    summary: "Incorporated Pondicherry as a Union Territory and inserted Article 239A allowing legislatures and Councils of Ministers for certain UTs."
+  - number: 15
+    year: 1963
+    enacted_date: "1963-10-05"
+    effective_date: "1963-10-05"
+    title: "The Constitution (Fifteenth Amendment) Act, 1963"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["124", "128", "217", "222", "224", "224A", "226", "297", "311", "316", "Schedule 7"]
+    summary: "Raised the retirement age of High Court Judges from 60 to 62 years and expanded High Court writ jurisdiction under Article 226 where cause of action arises."
+  - number: 16
+    year: 1963
+    enacted_date: "1963-10-05"
+    effective_date: "1963-10-05"
+    title: "The Constitution (Sixteenth Amendment) Act, 1963"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["19", "84", "173", "Schedule 3"]
+    summary: "Added 'the sovereignty and integrity of India' as a permissible ground of reasonable restriction in Article 19(2)-(4) and in oaths of office."
+  - number: 17
+    year: 1964
+    enacted_date: "1964-06-20"
+    effective_date: "1964-06-20"
+    title: "The Constitution (Seventeenth Amendment) Act, 1964"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["31A", "Schedule 9"]
+    summary: "Amended the definition of 'estate' in Article 31A and added 44 State land reform enactments to the Ninth Schedule."
+  - number: 18
+    year: 1966
+    enacted_date: "1966-08-27"
+    effective_date: "1966-08-27"
+    title: "The Constitution (Eighteenth Amendment) Act, 1966"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["3"]
+    summary: "Clarified that 'State' in clauses (a) to (e) of Article 3 includes a Union Territory, facilitating the reorganisation of Punjab and Haryana."
+  - number: 19
+    year: 1966
+    enacted_date: "1966-12-11"
+    effective_date: "1966-12-11"
+    title: "The Constitution (Nineteenth Amendment) Act, 1966"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["324"]
+    summary: "Abolished Election Tribunals and vested jurisdiction to hear election petitions in the High Courts."
+  - number: 20
+    year: 1966
+    enacted_date: "1966-12-22"
+    effective_date: "1966-12-22"
+    title: "The Constitution (Twentieth Amendment) Act, 1966"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["233A"]
+    summary: "Inserted Article 233A validating certain appointments and judgments of District Judges."
+  - number: 21
+    year: 1967
+    enacted_date: "1967-04-10"
+    effective_date: "1967-04-10"
+    title: "The Constitution (Twenty-first Amendment) Act, 1967"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 8"]
+    summary: "Included Sindhi as the 15th official language in the Eighth Schedule."
+  - number: 22
+    year: 1969
+    enacted_date: "1969-09-25"
+    effective_date: "1969-09-25"
+    title: "The Constitution (Twenty-second Amendment) Act, 1969"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["244A", "275", "371B"]
+    summary: "Inserted Articles 244A and 371B enabling the creation of the autonomous State of Meghalaya within Assam."
+  - number: 23
+    year: 1969
+    enacted_date: "1970-01-23"
+    effective_date: "1970-01-23"
+    title: "The Constitution (Twenty-third Amendment) Act, 1969"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["330", "332", "333", "334"]
+    summary: "Extended reservation of seats for SCs, STs, and Anglo-Indians in Parliament and State Legislatures until 1980."
+  - number: 24
+    year: 1971
+    enacted_date: "1971-11-05"
+    effective_date: "1971-11-05"
+    title: "The Constitution (Twenty-fourth Amendment) Act, 1971"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["13", "368"]
+    summary: "Affirmed Parliament's constituent power to amend any part of the Constitution including Part III Fundamental Rights under Article 368 and exempted constitutional amendments from Article 13."
+  - number: 25
+    year: 1971
+    enacted_date: "1972-04-20"
+    effective_date: "1972-04-20"
+    title: "The Constitution (Twenty-fifth Amendment) Act, 1971"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["31", "31C"]
+    summary: "Substituted 'amount' for 'compensation' in Article 31(2) and inserted Article 31C protecting laws giving effect to Article 39(b) and (c) Directive Principles."
+  - number: 26
+    year: 1971
+    enacted_date: "1971-12-28"
+    effective_date: "1971-12-28"
+    title: "The Constitution (Twenty-sixth Amendment) Act, 1971"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["291", "362", "363A", "366"]
+    summary: "Abolished privy purses and official recognition of former rulers of princely states by inserting Article 363A and omitting Articles 291 and 362."
+  - number: 27
+    year: 1971
+    enacted_date: "1971-12-30"
+    effective_date: "1971-12-30"
+    title: "The Constitution (Twenty-seventh Amendment) Act, 1971"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["239B", "240", "371C"]
+    summary: "Reorganised North-Eastern areas, enacted Ordinance-making power for UT Administrators (Article 239B), and inserted Article 371C for Manipur."
+  - number: 28
+    year: 1972
+    enacted_date: "1972-08-27"
+    effective_date: "1972-08-29"
+    title: "The Constitution (Twenty-eighth Amendment) Act, 1972"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["312A", "314"]
+    summary: "Inserted Article 312A and repealed Article 314 to abolish special service conditions of former Indian Civil Service (ICS) officers."
+  - number: 29
+    year: 1972
+    enacted_date: "1972-06-09"
+    effective_date: "1972-06-09"
+    title: "The Constitution (Twenty-ninth Amendment) Act, 1972"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 9"]
+    summary: "Placed two Kerala Land Reforms Amendment Acts in the Ninth Schedule."
+  - number: 30
+    year: 1972
+    enacted_date: "1973-02-22"
+    effective_date: "1973-02-27"
+    title: "The Constitution (Thirtieth Amendment) Act, 1972"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["133"]
+    summary: "Amended Article 133(1) removing the Rs. 20,000 valuation threshold for civil appeals to the Supreme Court and requiring High Court certification of a substantial question of law of general importance."
+  - number: 31
+    year: 1973
+    enacted_date: "1973-10-17"
+    effective_date: "1973-10-17"
+    title: "The Constitution (Thirty-first Amendment) Act, 1973"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["81", "330", "332"]
+    summary: "Increased the maximum strength of the Lok Sabha from 525 to 545 members."
+  - number: 32
+    year: 1973
+    enacted_date: "1974-05-03"
+    effective_date: "1974-07-01"
+    title: "The Constitution (Thirty-second Amendment) Act, 1973"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["371", "371D", "371E", "Schedule 7"]
+    summary: "Inserted Articles 371D and 371E providing equitable opportunities in public employment and education and a Central University in Andhra Pradesh."
+  - number: 33
+    year: 1974
+    enacted_date: "1974-05-19"
+    effective_date: "1974-05-19"
+    title: "The Constitution (Thirty-third Amendment) Act, 1974"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["101", "190"]
+    summary: "Empowered the Speaker/Chairman to reject a legislator's resignation under Articles 101 and 190 if satisfied it is not voluntary or genuine."
+  - number: 34
+    year: 1974
+    enacted_date: "1974-09-07"
+    effective_date: "1974-09-07"
+    title: "The Constitution (Thirty-fourth Amendment) Act, 1974"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 9"]
+    summary: "Added 20 State land tenure and land ceiling laws to the Ninth Schedule."
+  - number: 35
+    year: 1974
+    enacted_date: "1975-02-22"
+    effective_date: "1975-03-01"
+    title: "The Constitution (Thirty-fifth Amendment) Act, 1974"
+    status: "superseded"
+    action: "inserted"
+    articles_affected: ["2A", "80", "81", "Schedule 10"]
+    summary: "Conferred Associate State status on Sikkim by inserting Article 2A and the former Tenth Schedule (subsequently repealed by the 36th Amendment)."
+  - number: 36
+    year: 1975
+    enacted_date: "1975-05-16"
+    effective_date: "1975-04-26"
+    title: "The Constitution (Thirty-sixth Amendment) Act, 1975"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["2A", "80", "81", "371F", "Schedule 1", "Schedule 4"]
+    summary: "Admitted Sikkim as the 22nd full State of the Indian Union, inserted Article 371F, and omitted Article 2A."
+  - number: 37
+    year: 1975
+    enacted_date: "1975-05-03"
+    effective_date: "1975-05-03"
+    title: "The Constitution (Thirty-seventh Amendment) Act, 1975"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["239A", "240"]
+    summary: "Provided a Legislative Assembly and Council of Ministers for the Union Territory of Arunachal Pradesh."
+  - number: 38
+    year: 1975
+    enacted_date: "1975-08-01"
+    effective_date: "1975-08-01"
+    title: "The Constitution (Thirty-eighth Amendment) Act, 1975"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["123", "213", "239B", "352", "356", "359", "360"]
+    summary: "Amended emergency and ordinance provisions during the 1975 Emergency (non-justiciability clauses later repealed by the 44th Amendment)."
+  - number: 39
+    year: 1975
+    enacted_date: "1975-08-10"
+    effective_date: "1975-08-10"
+    title: "The Constitution (Thirty-ninth Amendment) Act, 1975"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["71", "329", "329A", "Schedule 9"]
+    summary: "Amended election dispute provisions for high constitutional offices (Article 329A(4) struck down in Indira Nehru Gandhi v. Raj Narain and Article 329A repealed by the 44th Amendment)."
+  - number: 40
+    year: 1976
+    enacted_date: "1976-05-27"
+    effective_date: "1976-05-27"
+    title: "The Constitution (Fortieth Amendment) Act, 1976"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["297", "Schedule 9"]
+    summary: "Substituted Article 297 vesting all lands, minerals, and resources in territorial waters, continental shelf, and EEZ in the Union, and added 64 laws to the Ninth Schedule."
+  - number: 41
+    year: 1976
+    enacted_date: "1976-09-07"
+    effective_date: "1976-09-07"
+    title: "The Constitution (Forty-first Amendment) Act, 1976"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["316"]
+    summary: "Raised the retirement age of Chairman and Members of State and Joint Public Service Commissions from 60 to 62 years."
+  - number: 42
+    year: 1976
+    enacted_date: "1976-12-18"
+    effective_date: "1977-01-03"
+    title: "The Constitution (Forty-second Amendment) Act, 1976"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Preamble", "31C", "39", "39A", "43A", "48A", "51A", "74", "131A", "226", "323A", "323B", "368", "Schedule 7"]
+    summary: "Inserted 'Socialist', 'Secular' and 'and integrity' into the Preamble; added Part IVA Fundamental Duties (Article 51A), Part XIVA Tribunals (Articles 323A–323B), and Directive Principles 39A, 43A, 48A; clauses (4) and (5) of Article 368 later struck down in Minerva Mills (1980)."
+  - number: 43
+    year: 1977
+    enacted_date: "1978-04-13"
+    effective_date: "1978-04-13"
+    title: "The Constitution (Forty-third Amendment) Act, 1977"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["31D", "131A", "144A", "145", "226", "226A", "228", "228A", "366"]
+    summary: "Restored the jurisdiction of the Supreme Court and High Courts to review the constitutional validity of Central and State laws by repealing Articles 31D, 131A, 144A, 226A, and 228A."
+  - number: 44
+    year: 1978
+    enacted_date: "1979-04-30"
+    effective_date: "1979-06-20"
+    title: "The Constitution (Forty-fourth Amendment) Act, 1978"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["19", "22", "30", "31", "71", "74", "83", "132", "133", "134", "134A", "226", "300A", "352", "356", "358", "359", "361A"]
+    summary: "Omitted the Right to Property from Fundamental Rights (Articles 19(1)(f) and 31) and re-enacted it as Article 300A; replaced 'internal disturbance' with 'armed rebellion' in Article 352; and ensured Articles 20 and 21 cannot be suspended during an Emergency."
+  - number: 45
+    year: 1980
+    enacted_date: "1980-01-25"
+    effective_date: "1980-01-25"
+    title: "The Constitution (Forty-fifth Amendment) Act, 1980"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["334"]
+    summary: "Extended reservation of seats for SCs, STs, and Anglo-Indians in the Lok Sabha and State Legislative Assemblies until 1990."
+  - number: 46
+    year: 1982
+    enacted_date: "1983-02-02"
+    effective_date: "1983-02-02"
+    title: "The Constitution (Forty-sixth Amendment) Act, 1982"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["269", "286", "366", "Schedule 7"]
+    summary: "Inserted Article 366(29A) defining 'tax on the sale or purchase of goods' to cover works contracts, hire-purchase, right-to-use transfers, and catering supplies."
+  - number: 47
+    year: 1984
+    enacted_date: "1984-08-26"
+    effective_date: "1984-08-26"
+    title: "The Constitution (Forty-seventh Amendment) Act, 1984"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 9"]
+    summary: "Added 14 State land reform enactments to the Ninth Schedule."
+  - number: 48
+    year: 1984
+    enacted_date: "1984-08-26"
+    effective_date: "1984-08-26"
+    title: "The Constitution (Forty-eighth Amendment) Act, 1984"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["356"]
+    summary: "Amended Article 356(5) permitting extension of President's Rule in Punjab up to two years."
+  - number: 49
+    year: 1984
+    enacted_date: "1984-09-11"
+    effective_date: "1985-04-01"
+    title: "The Constitution (Forty-ninth Amendment) Act, 1984"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["244", "Schedule 5", "Schedule 6"]
+    summary: "Extended the Sixth Schedule autonomous district council provisions to the tribal areas of the State of Tripura."
+  - number: 50
+    year: 1984
+    enacted_date: "1984-09-11"
+    effective_date: "1984-09-11"
+    title: "The Constitution (Fiftieth Amendment) Act, 1984"
+    status: "in_force"
+    action: "substituted"
+    articles_affected: ["33"]
+    summary: "Substituted Article 33 expanding Parliament's power to modify Fundamental Rights in their application to intelligence, counter-intelligence, and military telecommunication personnel."
+  - number: 51
+    year: 1984
+    enacted_date: "1985-04-29"
+    effective_date: "1986-06-16"
+    title: "The Constitution (Fifty-first Amendment) Act, 1984"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["330", "332"]
+    summary: "Provided reservation of seats for Scheduled Tribes in the Lok Sabha and State Legislative Assemblies of Meghalaya, Nagaland, Arunachal Pradesh, and Mizoram."
+  - number: 52
+    year: 1985
+    enacted_date: "1985-02-15"
+    effective_date: "1985-03-01"
+    title: "The Constitution (Fifty-second Amendment) Act, 1985"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["101", "102", "190", "191", "Schedule 10"]
+    summary: "Enacted the Anti-Defection Law by amending Articles 101, 102, 190, and 191 and inserting the Tenth Schedule providing for disqualification on ground of political defection."
+  - number: 53
+    year: 1986
+    enacted_date: "1986-08-14"
+    effective_date: "1987-02-20"
+    title: "The Constitution (Fifty-third Amendment) Act, 1986"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["371G"]
+    summary: "Inserted Article 371G conferring special constitutional protections regarding Mizo customary law and land ownership for the State of Mizoram."
+  - number: 54
+    year: 1986
+    enacted_date: "1987-03-14"
+    effective_date: "1986-04-01"
+    title: "The Constitution (Fifty-fourth Amendment) Act, 1986"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["125", "221", "Schedule 2"]
+    summary: "Enhanced the salaries of Supreme Court and High Court Judges and empowered Parliament to revise judicial salaries by ordinary law."
+  - number: 55
+    year: 1986
+    enacted_date: "1986-12-23"
+    effective_date: "1987-02-20"
+    title: "The Constitution (Fifty-fifth Amendment) Act, 1986"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["371H"]
+    summary: "Inserted Article 371H conferring special provisions with respect to the State of Arunachal Pradesh."
+  - number: 56
+    year: 1987
+    enacted_date: "1987-05-23"
+    effective_date: "1987-05-30"
+    title: "The Constitution (Fifty-sixth Amendment) Act, 1987"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["371I"]
+    summary: "Inserted Article 371I providing for a minimum 30-member Legislative Assembly for the newly formed State of Goa."
+  - number: 57
+    year: 1987
+    enacted_date: "1987-09-15"
+    effective_date: "1987-09-21"
+    title: "The Constitution (Fifty-seventh Amendment) Act, 1987"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["332"]
+    summary: "Inserted clause (3A) in Article 332 governing ST seat reservation in the Legislative Assemblies of Arunachal Pradesh, Meghalaya, Mizoram, and Nagaland."
+  - number: 58
+    year: 1987
+    enacted_date: "1987-12-09"
+    effective_date: "1987-12-09"
+    title: "The Constitution (Fifty-eighth Amendment) Act, 1987"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["394A"]
+    summary: "Inserted Article 394A empowering the President to publish an authoritative text of the Constitution and its amendments in the Hindi language."
+  - number: 59
+    year: 1988
+    enacted_date: "1988-03-30"
+    effective_date: "1988-03-30"
+    title: "The Constitution (Fifty-ninth Amendment) Act, 1988"
+    status: "superseded"
+    action: "inserted"
+    articles_affected: ["356", "359A"]
+    summary: "Extended President's Rule in Punjab and inserted Article 359A regarding emergency provisions in Punjab (repealed by the 63rd Amendment)."
+  - number: 60
+    year: 1988
+    enacted_date: "1988-12-20"
+    effective_date: "1988-12-20"
+    title: "The Constitution (Sixtieth Amendment) Act, 1988"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["276"]
+    summary: "Raised the ceiling on taxes on professions, trades, callings, and employments under Article 276(2) from Rs. 250 to Rs. 2,500 per annum."
+  - number: 61
+    year: 1989
+    enacted_date: "1989-03-28"
+    effective_date: "1989-03-28"
+    title: "The Constitution (Sixty-first Amendment) Act, 1988"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["326"]
+    summary: "Amended Article 326 lowering the voting age for elections to the Lok Sabha and State Legislative Assemblies from 21 years to 18 years."
+  - number: 62
+    year: 1989
+    enacted_date: "1990-01-25"
+    effective_date: "1990-01-25"
+    title: "The Constitution (Sixty-second Amendment) Act, 1989"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["334"]
+    summary: "Extended reservation of seats for SCs, STs, and Anglo-Indians in the Lok Sabha and State Assemblies until 2000."
+  - number: 63
+    year: 1989
+    enacted_date: "1990-01-06"
+    effective_date: "1990-01-06"
+    title: "The Constitution (Sixty-third Amendment) Act, 1989"
+    status: "in_force"
+    action: "omitted"
+    articles_affected: ["356", "359A"]
+    summary: "Repealed Article 359A and deleted the proviso to Article 356(5) that had been inserted by the 59th Amendment."
+  - number: 64
+    year: 1990
+    enacted_date: "1990-04-16"
+    effective_date: "1990-04-16"
+    title: "The Constitution (Sixty-fourth Amendment) Act, 1990"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["356"]
+    summary: "Amended Article 356(4) allowing extension of President's Rule in Punjab to three years and six months."
+  - number: 65
+    year: 1990
+    enacted_date: "1990-06-07"
+    effective_date: "1992-03-12"
+    title: "The Constitution (Sixty-fifth Amendment) Act, 1990"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["338"]
+    summary: "Substituted a multi-member National Commission for Scheduled Castes and Scheduled Tribes in Article 338 in place of a Special Officer."
+  - number: 66
+    year: 1990
+    enacted_date: "1990-06-07"
+    effective_date: "1990-06-07"
+    title: "The Constitution (Sixty-sixth Amendment) Act, 1990"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 9"]
+    summary: "Added 55 State land reform enactments to the Ninth Schedule."
+  - number: 67
+    year: 1990
+    enacted_date: "1990-10-04"
+    effective_date: "1990-10-04"
+    title: "The Constitution (Sixty-seventh Amendment) Act, 1990"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["356"]
+    summary: "Extended the maximum duration of President's Rule in Punjab under Article 356(4) to four years."
+  - number: 68
+    year: 1991
+    enacted_date: "1991-03-12"
+    effective_date: "1991-03-12"
+    title: "The Constitution (Sixty-eighth Amendment) Act, 1991"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["356"]
+    summary: "Extended the maximum duration of President's Rule in Punjab under Article 356(4) to five years."
+  - number: 69
+    year: 1991
+    enacted_date: "1991-12-21"
+    effective_date: "1992-02-01"
+    title: "The Constitution (Sixty-ninth Amendment) Act, 1991"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["239AA", "239AB"]
+    summary: "Inserted Articles 239AA and 239AB redesignating the Union Territory of Delhi as the National Capital Territory of Delhi with a 70-member Legislative Assembly and Council of Ministers."
+  - number: 70
+    year: 1992
+    enacted_date: "1992-08-12"
+    effective_date: "1995-12-21"
+    title: "The Constitution (Seventieth Amendment) Act, 1992"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["54", "239AA"]
+    summary: "Included the elected members of the Legislative Assemblies of the National Capital Territory of Delhi and the Union Territory of Pondicherry in the Presidential Electoral College under Article 54."
+  - number: 71
+    year: 1992
+    enacted_date: "1992-08-31"
+    effective_date: "1992-08-31"
+    title: "The Constitution (Seventy-first Amendment) Act, 1992"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 8"]
+    summary: "Included Konkani, Manipuri, and Nepali languages in the Eighth Schedule."
+  - number: 72
+    year: 1992
+    enacted_date: "1992-12-04"
+    effective_date: "1992-12-05"
+    title: "The Constitution (Seventy-second Amendment) Act, 1992"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["332"]
+    summary: "Inserted clause (3B) in Article 332 providing temporary reservation formula for Scheduled Tribes in the Tripura Legislative Assembly."
+  - number: 73
+    year: 1992
+    enacted_date: "1993-04-20"
+    effective_date: "1993-04-24"
+    title: "The Constitution (Seventy-third Amendment) Act, 1992"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["243", "243A", "243B", "243C", "243D", "243E", "243F", "243G", "243H", "243I", "243J", "243K", "243L", "243M", "243N", "243O", "Schedule 11"]
+    summary: "Inserted Part IX (Articles 243 to 243O) and the Eleventh Schedule granting constitutional status to Panchayati Raj Institutions."
+  - number: 74
+    year: 1992
+    enacted_date: "1993-04-20"
+    effective_date: "1993-06-01"
+    title: "The Constitution (Seventy-fourth Amendment) Act, 1992"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["243P", "243Q", "243R", "243S", "243T", "243U", "243V", "243W", "243X", "243Y", "243Z", "243ZA", "243ZB", "243ZC", "243ZD", "243ZE", "243ZF", "243ZG", "Schedule 12"]
+    summary: "Inserted Part IXA (Articles 243P to 243ZG) and the Twelfth Schedule granting constitutional status to Municipalities and urban local bodies."
+  - number: 75
+    year: 1993
+    enacted_date: "1994-02-05"
+    effective_date: "1994-05-15"
+    title: "The Constitution (Seventy-fifth Amendment) Act, 1993"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["323B"]
+    summary: "Amended Article 323B(2) enabling State-level Rent Control Tribunals."
+  - number: 76
+    year: 1994
+    enacted_date: "1994-08-31"
+    effective_date: "1994-08-31"
+    title: "The Constitution (Seventy-sixth Amendment) Act, 1994"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 9"]
+    summary: "Placed the Tamil Nadu Backward Classes, Scheduled Castes and Scheduled Tribes (Reservation of Seats in Educational Institutions and of Appointments or Posts in the Services Under the State) Act, 1993 (69% reservation) in the Ninth Schedule."
+  - number: 77
+    year: 1995
+    enacted_date: "1995-06-17"
+    effective_date: "1995-06-17"
+    title: "The Constitution (Seventy-seventh Amendment) Act, 1995"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["16"]
+    summary: "Inserted Article 16(4A) empowering the State to provide reservation in matters of promotion in favour of Scheduled Castes and Scheduled Tribes."
+  - number: 78
+    year: 1995
+    enacted_date: "1995-08-30"
+    effective_date: "1995-08-30"
+    title: "The Constitution (Seventy-eighth Amendment) Act, 1995"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 9"]
+    summary: "Added 27 State land reform enactments to the Ninth Schedule."
+  - number: 79
+    year: 1999
+    enacted_date: "2000-01-21"
+    effective_date: "2000-01-25"
+    title: "The Constitution (Seventy-ninth Amendment) Act, 1999"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["334"]
+    summary: "Extended reservation of seats for SCs, STs, and Anglo-Indians in the Lok Sabha and State Legislative Assemblies until 2010."
+  - number: 80
+    year: 2000
+    enacted_date: "2000-06-09"
+    effective_date: "2000-06-09"
+    title: "The Constitution (Eightieth Amendment) Act, 2000"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["268", "269", "270", "272"]
+    summary: "Implemented the Tenth Finance Commission alternative scheme for pooling and devolution of Union taxes and duties to the States under Article 270."
+  - number: 81
+    year: 2000
+    enacted_date: "2000-06-09"
+    effective_date: "2000-06-09"
+    title: "The Constitution (Eighty-first Amendment) Act, 2000"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["16"]
+    summary: "Inserted Article 16(4B) allowing unfilled reserved backlog vacancies to be treated as a separate class not subject to the 50% annual reservation ceiling."
+  - number: 82
+    year: 2000
+    enacted_date: "2000-09-08"
+    effective_date: "2000-09-08"
+    title: "The Constitution (Eighty-second Amendment) Act, 2000"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["335"]
+    summary: "Added a proviso to Article 335 permitting relaxation of qualifying marks or standards of evaluation in reservations in promotion for SCs and STs."
+  - number: 83
+    year: 2000
+    enacted_date: "2000-09-08"
+    effective_date: "2000-09-08"
+    title: "The Constitution (Eighty-third Amendment) Act, 2000"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["243M"]
+    summary: "Inserted clause (3A) in Article 243M exempting Arunachal Pradesh from mandatory Panchayat reservation for Scheduled Castes."
+  - number: 84
+    year: 2001
+    enacted_date: "2002-02-21"
+    effective_date: "2002-02-21"
+    title: "The Constitution (Eighty-fourth Amendment) Act, 2001"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["55", "81", "82", "170", "330", "332"]
+    summary: "Extended the freeze on the total number of seats in the Lok Sabha and State Legislative Assemblies until the first Census taken after the year 2026."
+  - number: 85
+    year: 2001
+    enacted_date: "2002-01-04"
+    effective_date: "1995-06-17"
+    title: "The Constitution (Eighty-fifth Amendment) Act, 2001"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["16"]
+    summary: "Amended Article 16(4A) to confer consequential seniority in promotions by rule of reservation for Scheduled Castes and Scheduled Tribes."
+  - number: 86
+    year: 2002
+    enacted_date: "2002-12-12"
+    effective_date: "2010-04-01"
+    title: "The Constitution (Eighty-sixth Amendment) Act, 2002"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["21A", "45", "51A"]
+    summary: "Inserted Article 21A making free and compulsory education for children aged 6 to 14 years a Fundamental Right, substituted Article 45 for early childhood care, and added clause (k) to Article 51A."
+  - number: 87
+    year: 2003
+    enacted_date: "2003-06-22"
+    effective_date: "2003-06-22"
+    title: "The Constitution (Eighty-seventh Amendment) Act, 2003"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["81", "82", "170", "330"]
+    summary: "Provided for readjustment and delimitation of territorial constituencies on the basis of the 2001 Census without altering total state seat allocations."
+  - number: 88
+    year: 2003
+    enacted_date: "2004-01-15"
+    effective_date: "2004-01-15"
+    title: "The Constitution (Eighty-eighth Amendment) Act, 2003"
+    status: "superseded"
+    action: "inserted"
+    articles_affected: ["268A", "270", "Schedule 7"]
+    summary: "Inserted Article 268A and Entry 92C of the Union List for taxes on services (subsequently omitted by the 101st Amendment GST regime)."
+  - number: 89
+    year: 2003
+    enacted_date: "2003-09-28"
+    effective_date: "2004-02-19"
+    title: "The Constitution (Eighty-ninth Amendment) Act, 2003"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["338", "338A"]
+    summary: "Bifurcated the National Commission into the National Commission for Scheduled Castes (Article 338) and the National Commission for Scheduled Tribes (Article 338A)."
+  - number: 90
+    year: 2003
+    enacted_date: "2003-09-28"
+    effective_date: "2003-09-28"
+    title: "The Constitution (Ninetieth Amendment) Act, 2003"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["332"]
+    summary: "Inserted a proviso to Article 332(6) preserving existing representation of Scheduled Tribes and non-Scheduled Tribes in the Assam Legislative Assembly from the Bodoland Territorial Areas District."
+  - number: 91
+    year: 2003
+    enacted_date: "2004-01-01"
+    effective_date: "2004-01-01"
+    title: "The Constitution (Ninety-first Amendment) Act, 2003"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["75", "164", "361B", "Schedule 10"]
+    summary: "Capped the size of the Council of Ministers at 15% of the strength of the Lok Sabha or State Legislative Assembly (Articles 75(1A) and 164(1A)), inserted Article 361B, and deleted the one-third split exemption in Paragraph 3 of the Tenth Schedule."
+  - number: 92
+    year: 2003
+    enacted_date: "2004-01-07"
+    effective_date: "2004-01-07"
+    title: "The Constitution (Ninety-second Amendment) Act, 2003"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 8"]
+    summary: "Included Bodo, Dogri, Maithili, and Santhali in the Eighth Schedule, bringing the total number of scheduled languages to 22."
+  - number: 93
+    year: 2005
+    enacted_date: "2006-01-20"
+    effective_date: "2006-01-20"
+    title: "The Constitution (Ninety-third Amendment) Act, 2005"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["15"]
+    summary: "Inserted Article 15(5) empowering the State to make special provisions for admission of socially and educationally backward classes, SCs, and STs to educational institutions including private aided and unaided institutions (other than minority institutions)."
+  - number: 94
+    year: 2006
+    enacted_date: "2006-06-12"
+    effective_date: "2006-06-12"
+    title: "The Constitution (Ninety-fourth Amendment) Act, 2006"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["164"]
+    summary: "Amended Article 164(1) substituting Chhattisgarh and Jharkhand for Bihar regarding the requirement of a Minister in charge of Tribal Welfare."
+  - number: 95
+    year: 2009
+    enacted_date: "2010-01-18"
+    effective_date: "2010-01-25"
+    title: "The Constitution (Ninety-fifth Amendment) Act, 2009"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["334"]
+    summary: "Extended reservation of seats for SCs, STs, and Anglo-Indians in the Lok Sabha and State Legislative Assemblies to seventy years (until 2020)."
+  - number: 96
+    year: 2011
+    enacted_date: "2011-09-23"
+    effective_date: "2011-09-23"
+    title: "The Constitution (Ninety-sixth Amendment) Act, 2011"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 8"]
+    summary: "Substituted 'Odia' for 'Oriya' in the Eighth Schedule."
+  - number: 97
+    year: 2011
+    enacted_date: "2012-01-12"
+    effective_date: "2012-02-15"
+    title: "The Constitution (Ninety-seventh Amendment) Act, 2011"
+    status: "partially_struck_down"
+    action: "inserted"
+    articles_affected: ["19", "43B", "243ZH", "243ZI", "243ZJ", "243ZK", "243ZL", "243ZM", "243ZN", "243ZO", "243ZP", "243ZQ", "243ZR", "243ZS", "243ZT"]
+    summary: "Added the right to form co-operative societies to Article 19(1)(c), inserted Article 43B, and inserted Part IXB (Articles 243ZH–243ZT); Part IXB partially struck down insofar as it applies to State co-operative societies for want of Article 368(2) State ratification in Union of India v. Rajendra N. Shah, 2021 INSC 345."
+  - number: 98
+    year: 2012
+    enacted_date: "2013-01-01"
+    effective_date: "2013-10-01"
+    title: "The Constitution (Ninety-eighth Amendment) Act, 2012"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["371J"]
+    summary: "Inserted Article 371J providing special development board, equitable fund allocation, and employment/education reservation for the Hyderabad-Karnataka (Kalyana-Karnataka) region."
+  - number: 99
+    year: 2014
+    enacted_date: "2014-12-31"
+    effective_date: "2015-04-13"
+    title: "The Constitution (Ninety-ninth Amendment) Act, 2014"
+    status: "struck_down"
+    action: "inserted"
+    articles_affected: ["124", "124A", "124B", "124C", "127", "128", "217", "222", "224", "224A", "231"]
+    summary: "Established the National Judicial Appointments Commission (NJAC) via Articles 124A–124C; struck down in its entirety as unconstitutional for violating judicial independence (basic structure) in Supreme Court Advocates-on-Record Assn. v. Union of India, (2016) 5 SCC 1."
+  - number: 100
+    year: 2015
+    enacted_date: "2015-05-28"
+    effective_date: "2015-07-31"
+    title: "The Constitution (One Hundredth Amendment) Act, 2015"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["Schedule 1"]
+    summary: "Amended the First Schedule to give effect to the Land Boundary Agreement and exchange of enclaves between India and Bangladesh."
+  - number: 101
+    year: 2016
+    enacted_date: "2016-09-08"
+    effective_date: "2017-07-01"
+    title: "The Constitution (One Hundred and First Amendment) Act, 2016"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["246A", "248", "249", "250", "268", "268A", "269", "269A", "270", "271", "279A", "286", "366", "368", "Schedule 6", "Schedule 7"]
+    summary: "Introduced the Goods and Services Tax (GST) regime by inserting Articles 246A (concurrent taxing power), 269A (IGST on inter-State supplies), and 279A (GST Council)."
+  - number: 102
+    year: 2018
+    enacted_date: "2018-08-11"
+    effective_date: "2018-08-15"
+    title: "The Constitution (One Hundred and Second Amendment) Act, 2018"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["338", "338B", "342A", "366"]
+    summary: "Inserted Articles 338B and 342A granting constitutional status to the National Commission for Backward Classes (NCBC)."
+  - number: 103
+    year: 2019
+    enacted_date: "2019-01-12"
+    effective_date: "2019-01-14"
+    title: "The Constitution (One Hundred and Third Amendment) Act, 2019"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["15", "16"]
+    summary: "Inserted Articles 15(6) and 16(6) providing up to 10% reservation for Economically Weaker Sections (EWS) of citizens other than SCs, STs, and OBCs in educational admissions and public employment (upheld in Janhit Abhiyan v. Union of India, 2022 INSC 1175)."
+  - number: 104
+    year: 2020
+    enacted_date: "2020-01-21"
+    effective_date: "2020-01-25"
+    title: "The Constitution (One Hundred and Fourth Amendment) Act, 2019"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["334"]
+    summary: "Amended Article 334 extending the reservation of seats for Scheduled Castes and Scheduled Tribes in the Lok Sabha and State Legislative Assemblies to eighty years (until 2030) and discontinuing nominated seats for the Anglo-Indian community."
+  - number: 105
+    year: 2021
+    enacted_date: "2021-08-18"
+    effective_date: "2021-09-15"
+    title: "The Constitution (One Hundred and Fifth Amendment) Act, 2021"
+    status: "in_force"
+    action: "amended"
+    articles_affected: ["338B", "342A", "366"]
+    summary: "Amended Articles 338B, 342A, and 366(26C) restoring the power of State Governments and Union Territories to identify and maintain their own State lists of Socially and Educationally Backward Classes (SEBCs/OBCs)."
+  - number: 106
+    year: 2023
+    enacted_date: "2023-09-28"
+    effective_date: "2023-09-28"
+    title: "The Constitution (One Hundred and Sixth Amendment) Act, 2023"
+    status: "in_force"
+    action: "inserted"
+    articles_affected: ["239AA", "330A", "332A", "334A"]
+    summary: "Nari Shakti Vandan Adhiniyam: amended Article 239AA and inserted Articles 330A, 332A, and 334A reserving one-third of all seats for women in the Lok Sabha, State Legislative Assemblies, and the Legislative Assembly of the National Capital Territory of Delhi."

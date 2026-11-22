@@ -80,11 +80,11 @@ test("trimForRetry is a no-op when there is no user message to resend", () => {
 });
 
 test("message list round-trips through sessionStorage serialization", () => {
-  const messages = [U1, A1_OK, U2, { ...A2_FAIL, tools: [{ id: "t1", name: "get_section", state: "result" as const, summary: "{}" }] }];
+  const messages = [U1, A1_OK, U2, { ...A2_FAIL, tools: [{ id: "t1", name: "get_provision", state: "result" as const, summary: "{}" }] }];
   const restored = deserializeMessages(serializeMessages(messages));
   assert.equal(restored.length, 4);
   assert.deepEqual(restored[0], U1);
-  assert.equal(restored[3].tools[0].name, "get_section");
+  assert.equal(restored[3].tools[0].name, "get_provision");
   assert.equal(restored[3].error, "Something went wrong");
 });
 

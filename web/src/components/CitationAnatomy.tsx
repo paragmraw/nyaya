@@ -19,7 +19,7 @@ export default function CitationAnatomy() {
       <div className="section-head">
         <h2>Citation anatomy</h2>
         <p className="sec-desc">
-          A real answer with citations linked to their source cards. Click a citation to highlight its source card; click a source card to expand the source.
+          Every inline reference resolves through <code>nyaya/citations.py</code> to an exact canonical tuple, license metadata, and statutory validity envelope. Click a citation to highlight its source card.
         </p>
       </div>
 
@@ -27,19 +27,33 @@ export default function CitationAnatomy() {
         <div className="answer-bubble">
           <div className="ab-head">
             <span className="avatar" aria-hidden="true"><BalanceIcon /></span>
-            <span className="ab-title">Nyaya Assistant</span>
+            <span className="ab-title">Nyaya v2.0 · Citation Audit Example</span>
           </div>
           <p>
-            Article 21 of the Constitution guarantees the right to life and personal liberty. The Supreme Court in{" "}
-            <a href="#sc-puttaswamy" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("sc-puttaswamy"); }}>K.S. Puttaswamy v. Union of India, (2017) 10 SCC 1</a>
-            {" "}held that the right to privacy is a fundamental right protected under{" "}
-            <a href="#sc-constitution" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("sc-constitution"); }}>Art. 21, Constitution of India</a>
-            {", read with Articles 14 and 19."}
+            The Supreme Court in{" "}
+            <a href="#sc-puttaswamy" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("sc-puttaswamy"); }}>
+              2017 INSC 801 ((2017) 10 SCC 1)
+            </a>{" "}
+            affirmed privacy as an intrinsic facet of{" "}
+            <a href="#sc-constitution" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("sc-constitution"); }}>
+              Art. 21, Constitution of India
+            </a>
+            . High Court neutral citations such as{" "}
+            <a href="#hc-dhc" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("hc-dhc"); }}>
+              2024:DHC:1234
+            </a>{" "}
+            and 16-char eCourts CNRs like{" "}
+            <a href="#cnr-sample" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("cnr-sample"); }}>
+              MHAU019999992015
+            </a>{" "}
+            resolve directly without bare integer ambiguity.
           </p>
           <p>
-            The Court traced the right through earlier decisions on personal liberty and due process, establishing privacy as an intrinsic part of the guarantees in{" "}
-            <a href="#sc-constitution" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("sc-constitution"); }}>Part III of the Constitution</a>
-            {". The judgment is binding on all courts in India under Article 141."}
+            Statutory references parse sub-sections and Orders/Rules — e.g.{" "}
+            <a href="#statute-iea-cpc" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("statute-iea-cpc"); }}>
+              IEA s.65B(4) (repealed → BSA s.63) &amp; CPC O.7 R.11
+            </a>
+            {" "}— surfacing automatic repeal, savings (BNSS s.531), and invalidation flags alongside raw citation-graph edges (<code>unverified_automated</code>).
           </p>
         </div>
 

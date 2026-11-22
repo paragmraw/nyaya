@@ -34,9 +34,12 @@
 mcp/.env
 mcp/.env.local
 
-# --- Test / notebook files (not needed in the runtime image) ---
-mcp/tests
-mcp/notebooks
+# --- Test / fixture files (only mini_corpus fixture enters data-stage, never runtime) ---
+mcp/tests/*
+!mcp/tests/__init__.py
+!mcp/tests/fixtures/
+!mcp/tests/fixtures/**
+mcp/tests/fixtures/**/__pycache__
 chat/tests
 
 # --- Large / transient data (keep manual YAML, ignore raw dumps + caches) ---

@@ -6,6 +6,8 @@ type Source = {
   id: string;
   name: string;
   ref: string;
+  badge: string;
+  commercialSafe: boolean;
   desc: string;
   url: string;
   urlLabel: string;
@@ -15,18 +17,52 @@ const SOURCES: Source[] = [
   {
     id: "sc-puttaswamy",
     name: "K.S. Puttaswamy v. Union of India",
-    ref: "(2017) 10 SCC 1",
-    desc: "Supreme Court: right to privacy is a fundamental right under Article 21, read with Articles 14 and 19.",
-    url: "https://indiankanoon.org",
-    urlLabel: "indiankanoon.org → (2017) 10 SCC 1",
+    ref: "2017 INSC 801 · (2017) 10 SCC 1",
+    badge: "CC-BY-4.0 · SC",
+    commercialSafe: true,
+    desc: "9-Judge Constitution Bench on Art. 21 privacy. Subsequent edges carry precedent_status=\"unverified_automated\".",
+    url: "https://registry.opendata.aws/indian-supreme-court-judgments/",
+    urlLabel: "Dattam Labs AWS Open Data → SC PDFs",
+  },
+  {
+    id: "hc-dhc",
+    name: "Delhi High Court (Neutral Citation)",
+    ref: "2024:DHC:1234",
+    badge: "CC-BY-4.0 · 25 HCs",
+    commercialSafe: true,
+    desc: "Resolved across 17.77M+ High Court Parquet rows + on-demand AWS S3 PDFs extracted via pypdfium2.",
+    url: "https://registry.opendata.aws/indian-high-court-judgments/",
+    urlLabel: "Dattam Labs AWS Open Data → HC Parquet & PDFs",
   },
   {
     id: "sc-constitution",
     name: "Constitution of India",
     ref: "Art. 21, Constitution of India, 1950",
-    desc: "Right to life and personal liberty; the source of the privacy guarantee read into Part III.",
-    url: "https://github.com/Vikhram-S/IndianConstitution",
-    urlLabel: "Vikhram-S/IndianConstitution → Art. 21",
+    badge: "IN-S52-1-q · Core",
+    commercialSafe: true,
+    desc: "506 articles, 12 schedules, and audited Amendments 1–106 in baked SQLite FTS5.",
+    url: "https://legislative.gov.in",
+    urlLabel: "Legislative Dept., Govt. of India → Constitution",
+  },
+  {
+    id: "statute-iea-cpc",
+    name: "Statutes, Sub-Sections & Validity",
+    ref: "IEA s.65B(4) (repealed 2024-07-01 → BSA s.63) · CPC O.7 R.11",
+    badge: "CC-BY-4.0 · Concordance",
+    commercialSafe: true,
+    desc: "StatutoryValidity flags repeal date, successor provision, and struck-down/abeyance judgments.",
+    url: "https://oss-data-in.vaquill.ai",
+    urlLabel: "Vaquill Open India Law v2026.08.1 → Statutes",
+  },
+  {
+    id: "cnr-sample",
+    name: "eCourts 16-Character CNR Docket",
+    ref: "MHAU019999992015",
+    badge: "CC-BY-NC-SA-4.0 · Metadata Only",
+    commercialSafe: false,
+    desc: "DDL 81M District Court metadata record (non-commercial; excluded when NYAYA_COMMERCIAL_SAFE_ONLY=1).",
+    url: "https://www.devdatalab.org/judicial-data",
+    urlLabel: "Development Data Lab → District Court Metadata",
   },
 ];
 
@@ -56,7 +92,10 @@ export default function SourceCard({ highlightedId }: { highlightedId?: string |
           >
             <div className="sc-head">
               <span className="sc-name">{s.name}</span>
-              <span className="sc-verified"><span className="status-dot" />Sourced</span>
+              <span className={`sc-verified ${s.commercialSafe ? "" : "sc-nc"}`}>
+                <span className="status-dot" />
+                {s.badge}
+              </span>
             </div>
             <div className="sc-body">
               <div className="sc-ref">{s.ref}</div>
@@ -67,7 +106,7 @@ export default function SourceCard({ highlightedId }: { highlightedId?: string |
                 </div>
               )}
               <button className="sc-toggle" type="button" onClick={() => toggle(s.id)}>
-                {isExpanded ? "Collapse ↑" : "Expand source →"}
+                {isExpanded ? "Collapse ↑" : "Expand provenance →"}
               </button>
             </div>
           </div>

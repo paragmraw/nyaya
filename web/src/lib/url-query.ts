@@ -15,11 +15,21 @@
 export type ViewParams = {
   sort: number; // column index, -1 = unsorted (curated order)
   dir: "asc" | "desc";
-  status: string; // filter key, "all" default
+  status: string; // status filter key, "all" default
+  category: string; // category / commercial_safe filter key, "all" default
 };
 
+const VALID_CATEGORIES = new Set([
+  "all",
+  "judiciary",
+  "legislation",
+  "regulators",
+  "tribunals",
+  "commercial_safe",
+]);
+
 export function parseViewParams(search: string): ViewParams {
-  const defaults: ViewParams = { sort: -1, dir: "asc", status: "all" };
+  const defaults: ViewParams = { sort: -1, dir: "asc", status: "all", category: "all" };
   if (!search) return defaults;
   let params: URLSearchParams;
   try {
@@ -31,13 +41,26 @@ export function parseViewParams(search: string): ViewParams {
   const sort = sortRaw === null ? -1 : Number.parseInt(sortRaw, 10);
   const dir = params.get("dir");
   const status = params.get("status") || "all";
+  const categoryRaw = (params.get("category") || "all").toLowerCase();
+  const category = VALID_CATEGORIES.has(categoryRaw) ? categoryRaw : "all";
   return {
     // Out-of-range or non-numeric sort falls back to curated order rather
-    // than crashing a hand-edited URL.
-    sort: Number.isInteger(sort) && sort >= 0 && sort <= 4 ? sort : -1,
+    // than crashing a hand-edited URL. Supports columns 0..5.
+    sort: Number.isInteger(sort) && sort >= 0 && sort <= 5 ? sort : -1,
     dir: dir === "desc" ? "desc" : "asc",
     status,
+    category,
   };
+}
+
+// Pure row filter for corpus category + commercial-safe chips.
+export function filterCorpusRows<T extends { category: string; commercial_safe: boolean }>(
+  rows: readonly T[],
+  category: string,
+): T[] {
+  if (!category || category === "all") return [...rows];
+  if (category === "commercial_safe") return rows.filter((r) => r.commercial_safe);
+  return rows.filter((r) => r.category === category);
 }
 
 // Merge a patch into the params carried by `search` and serialize the new
@@ -51,11 +74,14 @@ export function serializeViewParams(
   const current = parseViewParams(search);
   const next: ViewParams = { ...current, ...patch };
   const params = new URLSearchParams();
-  if (next.sort >= 0 && next.sort <= 4) {
+  if (next.sort >= 0 && next.sort <= 5) {
     params.set("sort", String(next.sort));
     params.set("dir", next.dir);
   }
   if (next.status && next.status !== "all") params.set("status", next.status);
+  if (next.category && next.category !== "all" && VALID_CATEGORIES.has(next.category)) {
+    params.set("category", next.category);
+  }
   return params.toString();
 }
 

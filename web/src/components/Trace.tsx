@@ -1,7 +1,7 @@
 "use client";
 
 // Collapsible agent trace (plan / reasoning), shared by ChatMessage for both
-// the supervisor plan and the Nemotron reasoning stream. Plain-text while
+// the agent planning trace and the Nemotron reasoning stream. Plain-text while
 // streaming (see MarkdownContent's plain mode), markdown once final.
 
 import MarkdownContent from "./MarkdownContent";

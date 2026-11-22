@@ -48,11 +48,11 @@ async def test_load_tools_falls_back_to_mcp_when_native_empty(monkeypatch):
     """When native tools return empty, load_tools falls back to MCP client."""
     from nyaya_chat.tools_layer import load_tools
     _patch_native_tools_empty(monkeypatch)
-    _patch_mcp_client(monkeypatch, [_FakeTool(n) for n in ["semantic_query", "get_section"]])
+    _patch_mcp_client(monkeypatch, [_FakeTool(n) for n in ["search_statutes", "get_provision"]])
     get_settings = _clear_settings(monkeypatch)
     result = await load_tools(get_settings())
     assert len(result) == 2
-    assert {t.name for t in result} == {"semantic_query", "get_section"}
+    assert {t.name for t in result} == {"search_statutes", "get_provision"}
 
 
 @pytest.mark.asyncio
@@ -85,9 +85,20 @@ def test_spec_table_is_single_source_of_truth():
     """Every spec has a name, description, args model; TOOL_NAMES mirrors it."""
     from pydantic import BaseModel
 
-    from nyaya_chat.tools_layer.spec import TOOL_NAMES, TOOL_SPECS, spec_for
+    from nyaya_chat.tools_layer.spec import TOOL_NAMES, TOOL_SCHEMAS, TOOL_SPECS, spec_for
     names = {s.name for s in TOOL_SPECS}
     assert names == set(TOOL_NAMES)
+    assert names == {
+        "search_statutes",
+        "get_provision",
+        "compare_provisions",
+        "browse_statute",
+        "get_provision_history",
+        "search_judgments",
+        "get_judgment",
+        "trace_precedent",
+    }
+    assert len(TOOL_SCHEMAS) == 12
     for spec in TOOL_SPECS:
         assert spec.description
         assert isinstance(spec.args_model, type) and issubclass(spec.args_model, BaseModel)

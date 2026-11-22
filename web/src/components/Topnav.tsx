@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { API_VERSION } from "@/lib/site";
 import { applyTheme, currentTheme, THEME_STORAGE_KEY } from "@/lib/theme";
 
 // Subscribe to <html data-theme> so components re-render when the theme
@@ -182,7 +183,7 @@ export default function Topnav() {
           {NAV_LINKS.map((l) => renderNavLink(l, current))}
         </nav>
         <div className="nav-right">
-          <span className="meta">v0.2.0 · alpha</span>
+          <span className="meta">v{API_VERSION}</span>
           <a
             className="github-link"
             href="https://github.com/paragmraw/nyaya"

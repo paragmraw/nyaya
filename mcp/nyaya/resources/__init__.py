@@ -1,212 +1,194 @@
-"""MCP resources and resource templates for nyaya."""
+"""MCP v2.0 8 ``nyaya://`` resources and resource templates."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
-from .. import db
-from ..config import SNIPPET_CHARS
 from ..exceptions import NotFound
-from ..models import Document
+from ..storage import get_backend
+from ..tools._util import effective_commercial_safe
+from ..tools.browse_statute import browse_statute
+from ..tools.corpus_status import corpus_status
+from ..tools.get_judgment import get_judgment
+from ..tools.get_provision import get_provision
+from ..tools.get_provision_history import get_provision_history
 
 
-def _with_snippet(doc: Document, chars: int = SNIPPET_CHARS) -> dict:
-    """Serialize a Document with its text truncated to ``chars``.
-
-    List-style resources (judgments://, schedules://, amendments://) would
-    otherwise ship multi-KB texts per row; full text stays available through
-    the singular resources (judgment://{slug}, schedule://{n}, ...).
-    """
-    data = doc.model_dump(mode="json")
-    data["text"] = doc.text[: max(1, int(chars))]
-    return data
+def read_corpus_status() -> str:
+    """nyaya://corpus/status -> Full corpus coverage matrix, per-source licenses, and active backends."""
+    res = corpus_status(include_sources=True)
+    return res.model_dump_json(indent=2)
 
 
-def register(mcp) -> None:
-    @mcp.resource(
-        "corpus://",
-        name="Corpus overview",
-        description="Summary of the nyaya corpus: act count, section count, article count, judgment count, and the as-of date.",
-        mime_type="application/json",
+def read_statutes() -> str:
+    """nyaya://statutes -> Compact index of all indexed Central/State/UT Acts & Regulators."""
+    res = browse_statute(act=None, limit=200)
+    return res.model_dump_json(indent=2)
+
+
+def read_statute(act: str) -> str:
+    """nyaya://statute/{act} -> Single statute/regulator metadata + Chapters/Parts table of contents."""
+    res = browse_statute(act=act)
+    return res.model_dump_json(indent=2)
+
+
+def read_provision(act: str, ref: str) -> str:
+    """nyaya://provision/{act}/{ref} -> Verbatim provision text (<corpus_text>) + StatutoryValidity + links."""
+    res = get_provision(act=act, ref=ref, include_links=True)
+    return res.model_dump_json(indent=2)
+
+
+def read_amendment(act: str, number: str) -> str:
+    """nyaya://amendment/{act}/{number} -> Constitutional or statutory amendment details + affected provisions."""
+    try:
+        num = int(str(number).strip())
+    except ValueError as exc:
+        raise NotFound(
+            f"Amendment {number!r} is not a valid integer.",
+            kind="amendment",
+            hint="Use an integer amendment number such as nyaya://amendment/Constitution/42.",
+        ) from exc
+    res = get_provision_history(act=act, amendment_number=num)
+    return res.model_dump_json(indent=2)
+
+
+async def read_judgment(identifier: str) -> str:
+    """nyaya://judgment/{identifier} -> Judgment overview card + opening/operative paragraphs."""
+    res = await get_judgment(identifier=identifier, view="overview")
+    return res.model_dump_json(indent=2)
+
+
+async def read_judgment_paragraphs(identifier: str, start: str, end: str) -> str:
+    """nyaya://judgment/{identifier}/paragraphs/{start}-{end} -> Verbatim paragraph window (capped at 30 paras / 25 KB)."""
+    try:
+        p_start = max(1, int(str(start).strip()))
+        p_end = max(p_start, int(str(end).strip()))
+    except ValueError as exc:
+        raise NotFound(
+            f"Invalid paragraph range {start!r}-{end!r}; expected positive integers.",
+            kind="paragraphs",
+        ) from exc
+    capped_end = min(p_end, p_start + 29)
+    res = await get_judgment(
+        identifier=identifier,
+        view="paragraphs",
+        para_start=p_start,
+        para_end=capped_end,
+        max_chars=25_000,
     )
-    def corpus_overview() -> str:
-        stats = db.corpus_stats()
-        as_of = db.corpus_as_of()
-        return json.dumps(
-            {
-                "name": "nyaya",
-                "description": "Indian law MCP server",
-                "as_of": as_of.isoformat() if as_of else None,
-                "counts": stats,
-                "acts_url": "acts://",
-            },
-            indent=2,
-        )
+    return res.model_dump_json(indent=2)
 
-    @mcp.resource(
-        "acts://",
-        name="All acts",
-        description="List of all acts in the corpus with provenance.",
-        mime_type="application/json",
+
+def read_courts() -> str:
+    """nyaya://courts -> Canonical Indian Judicial & Regulatory Directory."""
+    backend = get_backend()
+    courts = [c.model_dump(mode="json") for c in backend.list_courts()]
+    return json.dumps(
+        {
+            "total": len(courts),
+            "commercial_safe_only": effective_commercial_safe(None),
+            "courts": courts,
+        },
+        indent=2,
     )
-    def all_acts() -> str:
-        acts = db.list_acts()
-        return json.dumps([a.model_dump(mode="json") for a in acts], indent=2)
+
+
+def register(mcp: Any) -> None:
+    """Register the 8 canonical ``nyaya://`` MCP v2.0 resources and templates."""
 
     @mcp.resource(
-        "schedules://",
-        name="Constitution schedules",
+        "nyaya://corpus/status",
+        name="Corpus coverage & licensing status",
         description=(
-            "All schedules of the Constitution of India (text snippets; use "
-            "schedule://{number} for a full schedule text)."
+            "Full corpus coverage matrix, per-source SPDX licenses (commercial_safe, terms_status), "
+            "freshness as_of, and active retrieval backends."
         ),
         mime_type="application/json",
     )
-    def all_schedules() -> str:
-        scheds = db.list_schedules()
-        return json.dumps([_with_snippet(s) for s in scheds], indent=2)
+    def _corpus_status_resource() -> str:
+        return read_corpus_status()
 
     @mcp.resource(
-        "amendments://",
-        name="Constitution amendments",
+        "nyaya://statutes",
+        name="All indexed statutes & regulators",
         description=(
-            "All amendments to the Constitution of India (text snippets; use "
-            "amendment://{number} for full amendment details)."
+            "Compact index of all 37 Central+State/UT Acts & 12 Regulators "
+            "(short_name, full_name, jurisdiction, year, status, provision_count, provenance)."
         ),
         mime_type="application/json",
     )
-    def all_amendments() -> str:
-        ams = db.list_amendments()
-        return json.dumps([_with_snippet(a) for a in ams], indent=2)
+    def _statutes_resource() -> str:
+        return read_statutes()
 
     @mcp.resource(
-        "judgments://",
-        name="All landmark judgments",
+        "nyaya://statute/{act}",
+        name="Statute metadata & table of contents",
         description=(
-            "List of landmark Supreme Court judgments in the corpus, first 100 "
-            "(text snippets; use judgment://{slug} for a case's full text)."
+            "Single statute/regulator metadata + Chapters/Parts table of contents "
+            "(accepts canonical codes like BNS, IPC, Constitution, MH-MOFA, SEBI-LODR)."
         ),
         mime_type="application/json",
     )
-    def all_judgments() -> str:
-        juds, _ = db.list_judgments(limit=100)
-        return json.dumps([_with_snippet(j) for j in juds], indent=2)
+    def _statute_resource(act: str) -> str:
+        return read_statute(act)
 
     @mcp.resource(
-        "act://{short_name}",
-        name="Act metadata + table of contents",
-        description="Metadata and chapter listing for a single act, by short name (e.g. 'IPC', 'BNS').",
+        "nyaya://provision/{act}/{ref}",
+        name="Provision verbatim text & StatutoryValidity envelope",
+        description=(
+            "Verbatim provision text (<corpus_text>) + StatutoryValidity envelope + compact "
+            "cross-links (unifies sections, Constitution articles, schedules, and CPC orders/rules)."
+        ),
         mime_type="application/json",
     )
-    def act_metadata(short_name: str) -> str:
-        act = db.get_act(short_name)
-        if act is None:
-            raise NotFound(
-                f"Act {short_name!r} not found in corpus.",
-                kind="act",
-                hint="Call acts:// or the list_acts tool to enumerate the corpus.",
-            )
-        chapters = db.list_chapters(short_name)
-        return json.dumps(
-            {
-                "act": act.model_dump(mode="json"),
-                "chapters": chapters,
-            },
-            indent=2,
-        )
+    def _provision_resource(act: str, ref: str) -> str:
+        return read_provision(act, ref)
 
     @mcp.resource(
-        "section://{act}/{number}",
-        name="Section text",
-        description="Full text of a section by act short name and section number, e.g. section://IPC/302.",
+        "nyaya://amendment/{act}/{number}",
+        name="Constitutional or statutory amendment",
+        description=(
+            "Constitutional amendment (e.g. nyaya://amendment/Constitution/42) or Central Act "
+            "amendment details + affected provisions."
+        ),
         mime_type="application/json",
     )
-    def section_resource(act: str, number: str) -> str:
-        sec = db.get_section(act, number)
-        if sec is None:
-            raise NotFound(
-                f"Section {number} of {act} not found in corpus.",
-                kind="section",
-                hint="Call semantic_query or list_chapters to find the right section.",
-            )
-        return sec.model_dump_json(indent=2)
+    def _amendment_resource(act: str, number: str) -> str:
+        return read_amendment(act, number)
 
     @mcp.resource(
-        "article://{number}",
-        name="Constitution article",
-        description="Full text of a Constitution article by number, e.g. article://21.",
+        "nyaya://judgment/{identifier}",
+        name="Judgment overview card & opening/operative excerpts",
+        description=(
+            "Judgment overview card + opening/operative paragraphs by CNR, Neutral Citation "
+            "(2024 INSC 123, 2024:DHC:1234), AIR/SCC/SCR, or case_id."
+        ),
         mime_type="application/json",
     )
-    def article_resource(number: str) -> str:
-        art = db.get_article(number)
-        if art is None:
-            raise NotFound(
-                f"Article {number!r} not found in corpus.",
-                kind="article",
-                hint="Call semantic_query or list_articles to find the right article.",
-            )
-        return art.model_dump_json(indent=2)
+    async def _judgment_resource(identifier: str) -> str:
+        return await read_judgment(identifier)
 
     @mcp.resource(
-        "judgment://{case_slug}",
-        name="Landmark judgment",
-        description="Full text of a landmark Supreme Court judgment by citation or slugified case name.",
+        "nyaya://judgment/{identifier}/paragraphs/{start}-{end}",
+        name="Judgment verbatim paragraph window",
+        description=(
+            "Verbatim paragraph-range citation deep-link (hard-capped at 30 paragraphs / 25 KB UTF-8)."
+        ),
         mime_type="application/json",
     )
-    def judgment_resource(case_slug: str) -> str:
-        jud = db.get_judgment(case_slug)
-        if jud is None:
-            raise NotFound(
-                f"Judgment {case_slug!r} not found in corpus.",
-                kind="judgment",
-                hint="Call judgments:// or semantic_query to find cases.",
-            )
-        return jud.model_dump_json(indent=2)
+    async def _judgment_paragraphs_resource(identifier: str, start: str, end: str) -> str:
+        return await read_judgment_paragraphs(identifier, start, end)
 
     @mcp.resource(
-        "amendment://{number}",
-        name="Constitution amendment",
-        description="A specific Constitutional amendment by number, e.g. amendment://42.",
+        "nyaya://courts",
+        name="Indian Judicial & Regulatory Directory",
+        description=(
+            "Canonical Indian Judicial & Regulatory Directory: Supreme Court, 25 High Courts & "
+            "45 Benches (with State/UT territorial binding map), 15 Tribunals, 12 Regulators, "
+            "and DDL District Court state codes."
+        ),
         mime_type="application/json",
     )
-    def amendment_resource(number: str) -> str:
-        try:
-            num = int(number)
-        except ValueError:
-            raise NotFound(
-                f"Amendment {number!r} is not a valid number.",
-                kind="amendment",
-                hint="Amendment numbers are integers, e.g. amendment://42.",
-            )
-        am = db.get_amendment(num)
-        if am is None:
-            raise NotFound(
-                f"Amendment {number!r} not found in corpus.",
-                kind="amendment",
-                hint="Call amendments:// to list all amendments.",
-            )
-        return am.model_dump_json(indent=2)
-
-    @mcp.resource(
-        "schedule://{number}",
-        name="Constitution schedule",
-        description="A specific Constitution Schedule by number (1-12), e.g. schedule://9.",
-        mime_type="application/json",
-    )
-    def schedule_resource(number: str) -> str:
-        try:
-            num = int(number)
-        except ValueError:
-            raise NotFound(
-                f"Schedule {number!r} is not a valid number.",
-                kind="schedule",
-                hint="Schedule numbers are integers 1-12, e.g. schedule://9.",
-            )
-        sched = db.get_schedule(num)
-        if sched is None:
-            raise NotFound(
-                f"Schedule {number!r} not found in corpus.",
-                kind="schedule",
-                hint="Call schedules:// to list all schedules.",
-            )
-        return sched.model_dump_json(indent=2)
+    def _courts_resource() -> str:
+        return read_courts()

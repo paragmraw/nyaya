@@ -1,228 +1,183 @@
-"""Contract tests for the REST endpoints in ``nyaya.rest``.
-
-These endpoints serve the web SPA with plain JSON GETs. The db layer is
-faked (no live database), and the real ``nyaya.server.app`` is booted via
-``TestClient`` so the middleware stack (request ids, security headers, CORS,
-rate limiting) is exercised exactly as in production.
-
-Covers:
-- happy-path response shapes (/api/corpus-stats, /api/acts, /api/judgments,
-  /api/health-summary, /api/tools)
-- input validation (non-integer limit/offset -> 400)
-- the degraded fallback of /api/health-summary (DB down -> 200 + partial data)
-- the safe error contract (DB down on other endpoints -> 503 database_unavailable
-  with a request_id; unexpected errors -> 500 internal_error, no internals leaked)
-- the collapsed stats/health-summary helper keeps both endpoint shapes
-"""
+"""Contract tests for the v2 REST endpoints in ``nyaya.rest``."""
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date as Date
 
 import pytest
 from starlette.testclient import TestClient
 
+from nyaya import storage
+from nyaya.exceptions import StorageUnavailable
+from nyaya.models import AnalyticsBucket, AnalyticsResult, AnalyticsTier, SourceProvenance
+from nyaya.server import create_http_app
+from tests.test_tools_contract import EXPECTED_12_TOOLS, _build_rich_memory_backend
+
 pytestmark = pytest.mark.integration
 
-from nyaya.server import app  # noqa: E402
 
-# ---------------------------------------------------------------------------
-# Fakes
-# ---------------------------------------------------------------------------
-
-_ACT = {
-    "short_name": "IPC", "full_name": "The Indian Penal Code, 1860",
-    "year": 1860, "citation": "Act No. 45 of 1860", "kind": "criminal",
-    "source": "PRS (CC BY 4.0)", "source_license": "CC BY 4.0", "as_of": None,
-}
+def _setup_test_app():
+    backend = _build_rich_memory_backend()
+    storage.set_backend(backend)
+    return create_http_app(backend=backend)
 
 
-def _stats() -> dict[str, int]:
-    return {"acts": 1, "section": 2, "article": 3, "judgment": 4,
-            "amendment": 5, "schedule": 6, "cross_refs": 7}
+def test_corpus_status_and_alias_shape():
+    """GET /api/corpus-status and /api/corpus-stats return v2 CorpusStatusResponse."""
+    app = _setup_test_app()
+    with TestClient(app) as client:
+        for path in ("/api/corpus-status", "/api/corpus-stats"):
+            r = client.get(path)
+            assert r.status_code == 200
+            body = r.json()
+            assert body["service_version"] == "2.0.0"
+            assert "counts" in body
+            assert body["counts"]["central_acts"] >= 2
+            assert body["counts"]["provisions"] >= 2
 
 
-def _fake_db(monkeypatch, *, stats=None, as_of=None, fail_stats=False):
-    from datetime import date
-
-    from nyaya import db
-    from nyaya.exceptions import DatabaseUnavailable
-
-    stats = stats if stats is not None else _stats()
-    as_of = as_of if as_of is not None else date(2026, 7, 1)
-
-    def corpus_stats():
-        if fail_stats:
-            raise DatabaseUnavailable("DB is down")
-        return dict(stats)
-
-    def corpus_as_of():
-        if fail_stats:
-            raise DatabaseUnavailable("DB is down")
-        return as_of
-
-    monkeypatch.setattr(db, "corpus_stats", corpus_stats)
-    monkeypatch.setattr(db, "corpus_as_of", corpus_as_of)
-    return db
+def test_acts_endpoint_serializes_v2_models():
+    """GET /api/acts returns {items, total, limit, offset} with v2 provenance fields."""
+    app = _setup_test_app()
+    with TestClient(app) as client:
+        r = client.get("/api/acts?q=IPC")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] == 1
+        assert body["items"][0]["short_name"] == "IPC"
+        assert body["items"][0]["license_spdx"] == "CC-BY-4.0"
+        assert body["items"][0]["commercial_safe"] is True
 
 
-# ---------------------------------------------------------------------------
-# Happy paths
-# ---------------------------------------------------------------------------
+def test_judgments_endpoint_filters_and_clamps():
+    """GET /api/judgments validates integer params and filters commercial_safe_only."""
+    app = _setup_test_app()
+    with TestClient(app) as client:
+        r_bad = client.get("/api/judgments?limit=abc")
+        assert r_bad.status_code == 400
+        assert r_bad.json()["error"] == "bad_request"
 
-def test_corpus_stats_shape(monkeypatch):
-    """GET /api/corpus-stats -> {counts, as_of} and no status key."""
-    _fake_db(monkeypatch)
+        r_all = client.get("/api/judgments?limit=999")
+        assert r_all.status_code == 200
+        body_all = r_all.json()
+        assert body_all["limit"] == 100
+        assert body_all["total"] == 2
+
+        r_cs = client.get("/api/judgments?commercial_safe_only=1")
+        assert r_cs.status_code == 200
+        body_cs = r_cs.json()
+        assert body_cs["total"] == 1
+        assert body_cs["items"][0]["case_id"] == "sc:1973:kesavananda"
+
+
+def test_analytics_endpoint_and_commercial_safe_block():
+    """GET /api/analytics returns rows/buckets and blocks district_court under commercial_safe_only."""
+    app = _setup_test_app()
+
+    class _FakeAnalytics:
+        def aggregate(
+            self,
+            dataset: AnalyticsTier,
+            group_by: str,
+            *,
+            filters: dict,
+            top_n: int = 25,
+            sample_cases: int = 0,
+            commercial_safe_only: bool | None = None,
+        ) -> AnalyticsResult:
+            return AnalyticsResult(
+                dataset=dataset,
+                group_by=group_by,
+                total_matched=42,
+                buckets=[AnalyticsBucket(key="2024", count=42, share_pct=100.0)],
+                completeness_caveat="Test caveat",
+                provenances=[
+                    SourceProvenance(
+                        source_id="dattam-hc",
+                        source_name="Dattam HC",
+                        source_url="https://example.invalid",
+                        license_spdx="CC-BY-4.0",
+                        commercial_safe=True,
+                        terms_status="cleared",
+                        as_of=Date(2026, 11, 22),
+                    )
+                ],
+            )
+
+        def close(self) -> None:
+            return None
+
+    storage.set_analytics(_FakeAnalytics())
 
     with TestClient(app) as client:
-        r = client.get("/api/corpus-stats")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["counts"] == _stats()
-    assert body["as_of"] == "2026-07-01"
-    assert "status" not in body
+        r = client.get("/api/analytics?dataset=hc&group_by=year&court=DHC")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total_cases"] == 42
+        assert body["rows"][0]["key"] == "2024"
+
+        r_nc = client.get("/api/analytics?dataset=district_court&state=MH&commercial_safe_only=1")
+        assert r_nc.status_code == 403
+        assert r_nc.json()["error"] == "commercial_license_blocked"
 
 
-def test_acts_endpoint_serializes_models(monkeypatch):
-    """GET /api/acts returns the {items, total} envelope (same shape as
-    /api/judgments and /api/tools) with the Act models inside."""
-    from nyaya import db
-    from nyaya.models import Act
-
-    monkeypatch.setattr(db, "list_acts", lambda: [Act(**_ACT)])
-
-
+def test_health_summary_healthy_and_degraded(monkeypatch):
+    """GET /api/health-summary returns 200 healthy or degrades gracefully when storage is down."""
+    app = _setup_test_app()
     with TestClient(app) as client:
-        r = client.get("/api/acts")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["total"] == 1
-    assert isinstance(body["items"], list) and len(body["items"]) == 1
-    assert body["items"][0]["short_name"] == "IPC"
-    assert body["items"][0]["kind"] == "criminal"
+        r_ok = client.get("/api/health-summary")
+        assert r_ok.status_code == 200
+        assert r_ok.json()["status"] == "healthy"
+
+        def _boom(**_kwargs):
+            raise StorageUnavailable("sqlite core missing")
+
+        monkeypatch.setattr(storage.get_backend(), "corpus_status", _boom)
+        r_deg = client.get("/api/health-summary")
+        assert r_deg.status_code == 200
+        assert r_deg.json()["status"] == "degraded"
+        assert r_deg.json()["counts"] == {}
 
 
-def test_health_summary_degrades_when_db_down(monkeypatch):
-    """DB failure -> 200 with status=degraded and empty counts (SPA renders
-    partial numbers instead of an error)."""
-    _fake_db(monkeypatch, fail_stats=True)
-
+def test_corpus_status_storage_down_is_503_with_request_id(monkeypatch):
+    app = _setup_test_app()
     with TestClient(app) as client:
-        r = client.get("/api/health-summary")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "degraded"
-    assert body["counts"] == {}
-    assert body["as_of"] is None
+        def _boom(**_kwargs):
+            raise StorageUnavailable("sqlite core missing")
 
-
-def test_health_summary_healthy_shape(monkeypatch):
-    """Healthy DB -> {status, counts, as_of}."""
-    _fake_db(monkeypatch)
-
-    with TestClient(app) as client:
-        r = client.get("/api/health-summary")
-    assert r.status_code == 200
-    body = r.json()
-    assert body == {
-        "status": "healthy",
-        "counts": _stats(),
-        "as_of": "2026-07-01",
-    }
-
-
-def test_corpus_stats_db_down_is_503_with_request_id(monkeypatch):
-    """The safe error contract: DB down -> 503 {error: database_unavailable,
-    request_id} and an X-Request-ID header from the middleware."""
-    _fake_db(monkeypatch, fail_stats=True)
-
-    with TestClient(app) as client:
-        r = client.get("/api/corpus-stats")
-    assert r.status_code == 503
-    body = r.json()
-    assert body["error"] == "database_unavailable"
-    assert body.get("request_id")
-    assert r.headers.get("x-request-id") == body["request_id"]
+        monkeypatch.setattr(storage.get_backend(), "corpus_status", _boom)
+        r = client.get("/api/corpus-status")
+        assert r.status_code == 503
+        body = r.json()
+        assert body["error"] == "storage_unavailable"
+        assert body.get("request_id")
+        assert r.headers.get("x-request-id") == body["request_id"]
 
 
 def test_internal_error_is_500_without_leaked_details(monkeypatch):
-    """An unexpected exception -> 500 {error: internal_error} — the exception
-    text must NOT reach the client."""
-    from nyaya import db
-
-    def _boom():
-        raise RuntimeError("SECRET postgres DSN leaked in traceback")
-
-    monkeypatch.setattr(db, "corpus_stats", _boom)
-
+    app = _setup_test_app()
     with TestClient(app) as client:
-        r = client.get("/api/corpus-stats")
-    assert r.status_code == 500
-    body = r.json()
-    assert body["error"] == "internal_error"
-    assert "SECRET" not in r.text
+        def _boom(**_kwargs):
+            raise RuntimeError("SECRET bucket key leaked in traceback")
+
+        monkeypatch.setattr(storage.get_backend(), "corpus_status", _boom)
+        r = client.get("/api/corpus-status")
+        assert r.status_code == 500
+        assert r.json()["error"] == "internal_error"
+        assert "SECRET" not in r.text
 
 
-def test_judgments_rejects_non_integer_limit(monkeypatch):
-    """Bad pagination input -> 400 bad_request (not a 500)."""
-    _fake_db(monkeypatch)
-
-    with TestClient(app) as client:
-        r = client.get("/api/judgments?limit=abc")
-        assert r.status_code == 400
-        assert r.json()["error"] == "bad_request"
-
-        r = client.get("/api/judgments?offset=1.5")
-        assert r.status_code == 400
-
-
-def test_judgments_clamps_limit_and_offset(monkeypatch):
-    """/api/judgments clamps limit to [1, 200] and offset to >= 0, and passes
-    them through to db.list_judgments."""
-    from nyaya import db
-    from nyaya.models import Document
-
-    captured: dict[str, Any] = {}
-
-    def fake_list_judgments(limit=50, offset=0, include_text=False, snippet_chars=300):
-        # Mirror db.list_judgments' SQL-level projection: full text only when
-        # include_text is set, else a snippet_chars-bounded text.
-        captured.update(limit=limit, offset=offset, include_text=include_text)
-        body_text = "t" * 400 if include_text else "t" * snippet_chars
-        doc = Document(kind="judgment", ref="AIR 1973 SC 1461", title="Kesavananda",
-                       text=body_text, metadata={}, source="PRS (CC BY 4.0)")
-        return [doc], 1
-
-    monkeypatch.setattr(db, "list_judgments", fake_list_judgments)
-
-    with TestClient(app) as client:
-        r = client.get("/api/judgments?limit=9999&offset=-5")
-    assert r.status_code == 200
-    body = r.json()
-    assert captured["limit"] == 200
-    assert captured["offset"] == 0
-    assert captured["include_text"] is False
-    assert body["total"] == 1
-    assert body["limit"] == 200
-    assert body["offset"] == 0
-    assert len(body["items"][0]["text"]) == 300  # snippet by default
-
-    # ?full=1 opts into the full text projection.
-    with TestClient(app) as client:
-        r_full = client.get("/api/judgments?full=1")
-        assert r_full.status_code == 200
-        assert r_full.json()["items"][0]["text"] == "t" * 400
-
-
-def test_tools_endpoint_lists_registered_tools():
-    """GET /api/tools introspects the MCP tool surface (16 tools, named)."""
-
+def test_tools_endpoint_lists_12_tools_8_resources_4_prompts():
+    """GET /api/tools introspects the MCP v2.0 surface (12 tools, 8 resources, 4 prompts)."""
+    app = _setup_test_app()
     with TestClient(app) as client:
         r = client.get("/api/tools")
-    assert r.status_code == 200
-    body = r.json()
-    assert body["total"] == 16
-    names = {item["name"] for item in body["items"]}
-    assert {"semantic_query", "get_section", "get_article", "get_judgment",
-            "list_acts", "cross_reference", "corpus_stats"} <= names
-    assert all(item["description"] for item in body["items"])
+        assert r.status_code == 200
+        body = r.json()
+        assert body["total"] == 12
+        assert body["resources_count"] == 8
+        assert body["prompts_count"] == 4
+        names = {item["name"] for item in body["items"]}
+        assert names == EXPECTED_12_TOOLS
+        assert all(item["description"] for item in body["items"])
+        assert all(isinstance(item["open_world"], bool) for item in body["items"])

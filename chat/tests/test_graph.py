@@ -96,9 +96,11 @@ def test_agent_prompt_keeps_followup_different_query_rule():
     assert "DIFFERENT query" in AGENT_PROMPT
 
 
-def test_reflection_prompt_constrains_to_semantic_query():
+def test_reflection_prompt_constrains_to_search_tools():
     from nyaya_chat.prompts import REFLECTION_PROMPT
-    assert "semantic_query" in REFLECTION_PROMPT
+    assert "search_statutes" in REFLECTION_PROMPT
+    assert "search_judgments" in REFLECTION_PROMPT
+    assert "semantic_query" not in REFLECTION_PROMPT
     assert "DIFFERENT" in REFLECTION_PROMPT
 
 
@@ -126,7 +128,7 @@ async def test_build_graph_with_tools(fake_model, fake_tools):
     gone (pipeline collapse)."""
     fake_model.responses = [
         AIMessage(content="", tool_calls=[
-            {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
         ]),
         AIMessage(content="Punishment for murder [[act: IPC, ref: s. 302]]."),
     ]
@@ -164,7 +166,7 @@ async def test_graph_agent_full_turn(fake_model, fake_tools):
     the grounded answer, and the graph ends (cited answer, round budget)."""
     fake_model.responses = [
         AIMessage(content="", tool_calls=[
-            {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
         ]),
         AIMessage(content="Punishment for murder is death or life [[act: IPC, ref: s. 302]]."),
     ]
@@ -189,7 +191,7 @@ async def test_graph_reflection_round_reruns_agent(fake_model, fake_tools, monke
     captured = _captured_events(monkeypatch)
     fake_model.responses = [
         AIMessage(content="", tool_calls=[
-            {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
         ]),
         AIMessage(content="An answer without any citations."),
         AIMessage(content="Better answer [[act: IPC, ref: s. 302]]."),
@@ -222,7 +224,7 @@ async def test_graph_emits_semantic_events_end_to_end(fake_model, fake_tools, mo
 
     fake_model.responses = [
         AIMessage(content="Looking up IPC 302.", tool_calls=[
-            {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+            {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
         ]),
         AIMessage(content="Punishment for murder is death or life [[act: IPC, ref: s. 302]]."),
     ]
@@ -347,11 +349,11 @@ def _tool_leg_state() -> dict:
         "messages": [
             HumanMessage(content="What is IPC 302?"),
             AIMessage(content="", tool_calls=[
-                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+                {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
             ]),
             ToolMessage(
                 content='{"act": "IPC", "ref": "s. 302", "kind": "section", "text": "..."}',
-                tool_call_id="tc1", name="get_section",
+                tool_call_id="tc1", name="get_provision",
             ),
         ],
         "rid": "a-leg",
@@ -369,14 +371,14 @@ async def test_agent_leg1_tool_calls_buffer_to_plan_and_tool_start(
     captured = _captured_events(monkeypatch)
     fake_model.responses = [AIMessage(
         content="Looking up IPC 302.",
-        tool_calls=[{"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}}],
+        tool_calls=[{"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}}],
     )]
     from nyaya_chat.graph.agent import make_agent_node
     node = make_agent_node(settings, fake_model, has_tools=True)
     out = await node({"messages": [HumanMessage(content="q")], "rid": "a1"})
     ai = out["messages"][0]
     assert isinstance(ai, AIMessage) and ai.tool_calls
-    assert ai.tool_calls[0]["name"] == "get_section"
+    assert ai.tool_calls[0]["name"] == "get_provision"
     assert ai.content == "Looking up IPC 302."
     types = [e["type"] for e in captured]
     assert types[0] == "status" and captured[0]["msg"] == "analyzing"
@@ -391,7 +393,7 @@ async def test_agent_drops_non_allowlisted_calls(fake_model, settings, monkeypat
     """Tool calls outside TOOL_NAMES are dropped, not executed."""
     _captured_events(monkeypatch)
     fake_model.responses = [AIMessage(content="", tool_calls=[
-        {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+        {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
         {"id": "tc2", "name": "shell_exec", "args": {"cmd": "rm -rf /"}},
     ])]
     from nyaya_chat.graph.agent import make_agent_node
@@ -399,7 +401,7 @@ async def test_agent_drops_non_allowlisted_calls(fake_model, settings, monkeypat
     out = await node({"messages": [HumanMessage(content="q")], "rid": "a2"})
     ai = out["messages"][0]
     assert isinstance(ai, AIMessage)
-    assert [tc["name"] for tc in ai.tool_calls] == ["get_section"]
+    assert [tc["name"] for tc in ai.tool_calls] == ["get_provision"]
 
 
 @pytest.mark.asyncio
@@ -462,9 +464,40 @@ async def test_agent_node_wraps_tool_results_in_corpus_tags(fake_model, settings
     node = make_agent_node(settings, fake_model, has_tools=True)
     await node(_tool_leg_state())
     sent = fake_model.calls[-1]
-    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_section"]
-    assert "<corpus_text>" in tool_msgs[0].content
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_provision"]
+    assert "<corpus_text" in tool_msgs[0].content
     assert 'kind": "section"' in tool_msgs[0].content or "..." in tool_msgs[0].content
+
+
+@pytest.mark.asyncio
+async def test_agent_node_skips_double_wrapping_when_corpus_text_already_present(fake_model, settings):
+    """When v2 tool output JSON already contains <corpus_text ...>...</corpus_text>
+    inside its string fields, _wrap_tool_results_in_corpus_tags must NOT wrap the
+    outer JSON a second time."""
+    from nyaya_chat.graph.agent import make_agent_node
+
+    fake_model.responses = [AIMessage(content="Answer [[act: IPC, ref: s. 302]].")]
+    node = make_agent_node(settings, fake_model, has_tools=True)
+    v2_json = json.dumps({
+        "act": "IPC",
+        "ref": "302",
+        "text": '<corpus_text doc_id="ipc:302" trust="untrusted_primary_law">\nWhoever commits murder...\n</corpus_text>',
+    })
+    state = {
+        "messages": [
+            HumanMessage(content="What is IPC 302?"),
+            AIMessage(content="", tool_calls=[
+                {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
+            ]),
+            ToolMessage(content=v2_json, tool_call_id="tc1", name="get_provision"),
+        ],
+        "rid": "a-nowrap",
+    }
+    await node(state)
+    sent = fake_model.calls[-1]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_provision"]
+    assert tool_msgs[0].content.startswith("{")
+    assert tool_msgs[0].content.count("</corpus_text>") == 1
 
 
 @pytest.mark.asyncio
@@ -494,15 +527,17 @@ async def test_agent_node_increments_round(fake_model, settings):
     assert out["round"] == 2
 
 
-def _semantic_query_result(n_hits: int, snippet_len: int = 2000) -> str:
+def _search_statutes_result(n_hits: int, snippet_len: int = 2000) -> str:
     return json.dumps({
         "query": "punishment for murder",
-        "total": n_hits * 5, "returned": n_hits, "offset": 0, "limit": n_hits,
-        "source": "nyaya", "as_of": "2024-01-01", "fallback_reason": None,
+        "query_mode": "bm25",
+        "total": n_hits * 5, "returned": n_hits,
+        "next_cursor": "abc", "has_more": True, "degraded_sources": [],
         "results": [
-            {"act": f"Act{i}", "ref": f"s. {100 + i}", "title": f"T{i}",
-             "snippet": f"HIT{i}-" + "z" * snippet_len,
-             "rank": 1.0 - i * 0.01, "citation": None, "kind": "section"}
+            {"act": f"Act{i}", "jurisdiction": "Central", "kind": "section",
+             "ref": f"s. {100 + i}", "title": f"T{i}", "status": "in_force",
+             "replaced_by": [], "snippet": f"HIT{i}-" + "z" * snippet_len,
+             "bm25_score": 1.0 - i * 0.01}
             for i in range(n_hits)
         ],
     })
@@ -510,29 +545,29 @@ def _semantic_query_result(n_hits: int, snippet_len: int = 2000) -> str:
 
 @pytest.mark.asyncio
 async def test_agent_node_prunes_list_type_tool_results(fake_model, settings):
-    """A multi-hit semantic_query result is bounded in what reaches the model:
+    """A multi-hit search_statutes result is bounded in what reaches the model:
     the top hit's snippet survives in full, later hits are condensed to
     identification fields + a 300-char snippet, and envelope metadata is gone."""
     from nyaya_chat.graph.agent import make_agent_node
 
     fake_model.responses = [AIMessage(content="Answer [[act: Act0, ref: s. 100]].")]
     node = make_agent_node(settings, fake_model, has_tools=True)
-    payload = _semantic_query_result(8)
+    payload = _search_statutes_result(8)
     state = {
         "messages": [
             HumanMessage(content="What is the punishment for murder?"),
             AIMessage(content="", tool_calls=[
-                {"id": "tc1", "name": "semantic_query", "args": {"query": "punishment for murder"}},
+                {"id": "tc1", "name": "search_statutes", "args": {"query": "punishment for murder"}},
             ]),
             ToolMessage(
-                content=payload, tool_call_id="tc1", name="semantic_query",
+                content=payload, tool_call_id="tc1", name="search_statutes",
             ),
         ],
     }
     await node(state)
 
     sent = fake_model.calls[-1]
-    tool_msgs = [m for m in sent if getattr(m, "name", None) == "semantic_query"]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "search_statutes"]
     assert len(tool_msgs) == 1
     sent_content = tool_msgs[0].content
     # The ~12K-token worst case is cut down to a third of the original payload.
@@ -541,12 +576,12 @@ async def test_agent_node_prunes_list_type_tool_results(fake_model, settings):
     assert "HIT0-" + "z" * 2000 in sent_content
     assert "HIT3-" + "z" * 2000 not in sent_content
     assert '"ref": "s. 103"' in sent_content  # tail hit still citable/fetchable
-    assert '"as_of"' not in sent_content  # envelope metadata pruned
+    assert '"next_cursor"' not in sent_content  # envelope metadata pruned
 
 
 @pytest.mark.asyncio
 async def test_agent_node_prunes_only_list_type_results(fake_model, settings):
-    """Full text of a single-document tool (get_section) passes to the model
+    """Full text of a single-document tool (get_provision) passes to the model
     UNPRUNED — pruning never touches single-document results."""
     from nyaya_chat.graph.agent import make_agent_node
 
@@ -558,18 +593,18 @@ async def test_agent_node_prunes_only_list_type_results(fake_model, settings):
         "messages": [
             HumanMessage(content="What is IPC 302?"),
             AIMessage(content="", tool_calls=[
-                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
+                {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
             ]),
             ToolMessage(
                 content=payload,
-                tool_call_id="tc1", name="get_section",
+                tool_call_id="tc1", name="get_provision",
             ),
         ],
     }
     await node(state)
 
     sent = fake_model.calls[-1]
-    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_section"]
+    tool_msgs = [m for m in sent if getattr(m, "name", None) == "get_provision"]
     assert len(tool_msgs) == 1
     assert full_text in tool_msgs[0].content  # verbatim, unpruned
 
@@ -583,7 +618,7 @@ def _answer_state(answer: str, round_: int, *, deadline: float | None = None) ->
     return {
         "messages": [
             HumanMessage(content="q"),
-            AIMessage(content="", tool_calls=[{"id": "t", "name": "get_section", "args": {}}]),
+            AIMessage(content="", tool_calls=[{"id": "t", "name": "get_provision", "args": {}}]),
             AIMessage(content=answer),
         ],
         "round": round_,
@@ -594,7 +629,7 @@ def _answer_state(answer: str, round_: int, *, deadline: float | None = None) ->
 def test_route_agent_tools_when_last_has_tool_calls(settings):
     from nyaya_chat.graph.agent import route_agent
     with_tools = {"messages": [AIMessage(content="", tool_calls=[
-        {"id": "t", "name": "get_section", "args": {}}])] }
+        {"id": "t", "name": "get_provision", "args": {}}])] }
     assert route_agent(with_tools, settings) == "tools"
 
 
@@ -710,11 +745,11 @@ async def test_agent_all_db_error_results_short_circuits(settings):
         "messages": [
             HumanMessage(content="q"),
             AIMessage(content="", tool_calls=[
-                {"id": "tc1", "name": "get_section", "args": {}},
-                {"id": "tc2", "name": "semantic_query", "args": {}},
+                {"id": "tc1", "name": "get_provision", "args": {}},
+                {"id": "tc2", "name": "search_statutes", "args": {}},
             ]),
-            ToolMessage(content=_db_error_content(), tool_call_id="tc1", name="get_section"),
-            ToolMessage(content=_db_error_content(), tool_call_id="tc2", name="semantic_query"),
+            ToolMessage(content=_db_error_content(), tool_call_id="tc1", name="get_provision"),
+            ToolMessage(content=_db_error_content(), tool_call_id="tc2", name="search_statutes"),
         ],
         "rid": "a6",
     }
@@ -735,14 +770,14 @@ async def test_agent_mixed_results_do_not_short_circuit(fake_model, settings):
         "messages": [
             HumanMessage(content="q"),
             AIMessage(content="", tool_calls=[
-                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "302"}},
-                {"id": "tc2", "name": "semantic_query", "args": {}},
+                {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
+                {"id": "tc2", "name": "search_statutes", "args": {}},
             ]),
             ToolMessage(
                 content='{"act": "IPC", "ref": "s. 302", "text": "real text"}',
-                tool_call_id="tc1", name="get_section",
+                tool_call_id="tc1", name="get_provision",
             ),
-            ToolMessage(content=_db_error_content(), tool_call_id="tc2", name="semantic_query"),
+            ToolMessage(content=_db_error_content(), tool_call_id="tc2", name="search_statutes"),
         ],
         "rid": "a7",
     }
@@ -751,19 +786,22 @@ async def test_agent_mixed_results_do_not_short_circuit(fake_model, settings):
 
 
 def test_agent_not_found_error_json_is_not_a_db_error():
-    """A ``not_found`` error JSON (e.g. get_section on a nonexistent section)
+    """A ``not_found`` error JSON (e.g. get_provision on a nonexistent section)
     is a legitimate result the agent must turn into a refusal — it must NOT
-    count as a database error for the short-circuit."""
-    from nyaya_chat.graph.agent import _is_db_error_json
+    count as a storage error for the short-circuit."""
+    from nyaya_chat.graph.agent import _is_db_error_json, _is_storage_error_json
     not_found = json.dumps({"error": {
         "code": "not_found",
         "message": "no section 99999 in IPC",
         "kind": "not_found",
         "hint": "check the section number",
     }})
+    assert not _is_storage_error_json(not_found)
     assert not _is_db_error_json(not_found)
-    assert _is_db_error_json(_db_error_content())  # database_unavailable still matches
-    assert _is_db_error_json(json.dumps({"error": {"code": "embedding_unavailable"}}))
+    assert _is_storage_error_json(_db_error_content())  # database_unavailable matches
+    assert _is_storage_error_json(json.dumps({"error": {"code": "storage_unavailable"}}))
+    assert not _is_storage_error_json(json.dumps({"error": {"code": "query_too_broad"}}))
+    assert not _is_storage_error_json(json.dumps({"error": {"code": "text_unavailable_metadata_only"}}))
 
 
 @pytest.mark.asyncio
@@ -780,7 +818,7 @@ async def test_agent_not_found_only_results_still_answer(fake_model, settings):
         "messages": [
             HumanMessage(content="What does IPC section 99999 say?"),
             AIMessage(content="", tool_calls=[
-                {"id": "tc1", "name": "get_section", "args": {"act": "IPC", "section_number": "99999"}},
+                {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "99999"}},
             ]),
             ToolMessage(
                 content=json.dumps({"error": {
@@ -789,7 +827,7 @@ async def test_agent_not_found_only_results_still_answer(fake_model, settings):
                     "kind": "not_found",
                     "hint": "check the section number",
                 }}),
-                tool_call_id="tc1", name="get_section",
+                tool_call_id="tc1", name="get_provision",
             ),
         ],
         "rid": "a8",
@@ -937,9 +975,9 @@ async def test_agent_keeps_cited_answer_over_uncited_resynthesis(fake_model, set
             HumanMessage(content="difference between murder and culpable homicide?"),
             AIMessage(content=prev),  # round-1 final answer
             AIMessage(content="", tool_calls=[
-                {"id": "tc2", "name": "semantic_query", "args": {"query": "murder vs culpable homicide"}},
+                {"id": "tc2", "name": "search_statutes", "args": {"query": "murder vs culpable homicide"}},
             ]),
-            ToolMessage(content=json.dumps({"results": []}), tool_call_id="tc2", name="semantic_query"),
+            ToolMessage(content=json.dumps({"results": []}), tool_call_id="tc2", name="search_statutes"),
         ],
         "round": 1,
         "last_answer": prev,

@@ -1,164 +1,126 @@
-# nyaya
+# nyaya-mcp
 
-An [MCP](https://modelcontextprotocol.io) server for Indian law. Exposes the Constitution of India, IPC, CrPC, CPC, Evidence Act, the 2023 Sanhitas (BNS/BNSS/BSA), major commercial statutes, and landmark Supreme Court judgments as MCP tools and resources — so any MCP-compatible client (Claude, opencode, Cursor, ChatGPT, Gemini) can answer questions grounded in primary legal sources.
+An [MCP](https://modelcontextprotocol.io) server for Indian law (**v2.0.0**, PyPI distribution `nyaya-mcp`). Runs locally over `stdio` via `uvx nyaya-mcp` with zero API keys, or as a stateless Railway HTTP server combining a baked SQLite FTS5 core, LanceDB native Rust BM25 FTS, DuckDB compacted ZSTD Parquet, and direct AWS Open Data PDF extraction (`pypdfium2`).
 
-> **Not legal advice.** nyaya is a research and developer tool. Statutory text is sourced from public-domain and openly-licensed repositories; always verify against the official Gazette for any legal proceeding.
+> **Not legal advice.** `nyaya-mcp` is a legal research and citation-auditing tool. Always verify primary texts against the official Gazette and check subsequent judicial treatment before filing.
 
-## What it gives you
+## MCP v2.0 Surface (12 Tools · 8 Resources · 4 Prompts)
 
-- **16 tools**: `semantic_query` (embedding retrieval + reranking), `get_section`, `get_article`, `get_judgment`, `list_acts` / `list_chapters` / `list_sections` / `list_articles` / `list_judgments`, `cross_reference` (bidirectional), `list_schedules` / `get_schedule` / `list_amendments` / `get_amendment`, `get_amendments_for_article`, `corpus_stats`
-- **11 resources**: `corpus://`, `acts://`, `schedules://`, `amendments://`, `judgments://`, `act://{name}`, `section://{act}/{num}`, `article://{num}`, `judgment://{slug}`, `amendment://{num}`, `schedule://{num}`
-- **Semantic search** via pgvector + NVIDIA `nemotron-3-embed-1b` (2048-d, 32k context, 34 Indic languages) and `llama-nemotron-rerank-vl-1b-v2` reranker — works on any platform including Alpine (API-based, no native wheels needed)
-- **Provenance on every result**: source, license, and `as_of` date (derived from the `acts` table, not hardcoded)
-- **Input normalization**: act names and section numbers are case-insensitive, whitespace-trimmed, and alias-resolved (`ipc` → `IPC`)
-- **Fuzzy judgment lookup**: `get_judgment` matches by exact citation, exact title, or fuzzy title substring (≥ 8 chars to avoid false matches)
-- **Structured errors**: all `NotFound` responses return `is_error=true` with a machine-readable `structured_content={"error": {"code": "not_found", "message": "...", "kind": "section|article|act|judgment|schedule|amendment", "hint": "..."}}` so LLM clients can branch programmatically. `EmbeddingUnavailable` is distinct from "no matches".
-- **Text projection controls on the list tools**: `list_sections` / `list_articles` / `list_judgments` return short text snippets by default (300 chars, tunable via `snippet_chars`); pass `include_text=true` for full text (large responses — prefer `get_section`/`get_article`/`get_judgment` for a single document). The REST equivalents expose the same choice: `include_text=false` by default, `?full=1` for full text.
+### 12 Tools
 
-## Corpus and sources
+All 12 tools are read-only (`readOnlyHint=True`, `destructiveHint=False`, `idempotentHint=True`), enforce `commercial_safe_only`, attach `SourceProvenance`, and wrap primary text in `<corpus_text ... trust="untrusted_primary_law">`:
 
-| Corpus | Source | License |
+| Tool | Scope (`openWorldHint`) | Purpose |
 |---|---|---|
-| Constitution (Articles 1–395) | `Vikhram-S/IndianConstitution` PyPI | Apache-2.0 |
-| Constitution Schedules | constitutionofindia.net (CLPR) | Public domain (government edicts) |
-| Constitution Amendments | Inline data (public record) | Public domain |
-| IPC, IEA (Evidence Act), CPC | `civictech-India/Indian-Law-Penal-Code-Json` (GitHub) | Public domain (government edicts) |
-| CrPC, Companies, GST (IGST+CGST), IT Act, Arbitration, Consumer Protection | `mratanusarkar/Indian-Laws` (HuggingFace) | Public domain (government edicts) |
-| BNS, BNSS, BSA (2023) | PRS PDFs | CC BY 4.0 |
-| Landmark SC judgments | indiankanoon.org (live fetch) | Public domain (government edicts) |
-| IPC↔BNS cross-reference map | Inline data (PRS comparison docs) | — |
+| `search_statutes` | `True` (SQLite + Bucket LanceDB) | Lexical BM25 / exact-phrase search across Central Acts, Constitution, 36 State/UT Acts, and 12 Regulators |
+| `get_provision` | `True` | Verbatim section/article/schedule/order-rule + `StatutoryValidity` envelope + top cross-links |
+| `browse_statute` | `True` | Search statute/regulator catalog, browse Act TOC, or paginate provisions |
+| `compare_provisions` | `False` (local SQLite core) | IPC↔BNS, CrPC↔BNSS, IEA↔BSA concordance, clause diffs, punishment/procedural deltas, BNSS s. 531 savings |
+| `cross_reference` | `False` (local SQLite core) | Bidirectional statutory and judicial citation cross-references |
+| `get_provision_history` | `False` (local SQLite core) | Constitutional Amendments 1–106, statutory amendments, and judicial invalidation timelines |
+| `search_judgments` | `True` | Multi-facet search across SC (35k+), High Courts (17.77M+), 15 Tribunals, and DDL District Courts (81M) with `include_equivalent_provisions` and `binding_for_court` |
+| `get_judgment` | `True` | Windowed judgment reader (`overview`, `paragraphs`, `pages`, `search_within`, `docket`) with direct AWS S3 `pypdfium2` extraction |
+| `trace_precedent` | `False` (local SQLite core) | Citation graph (`cited_by` / `cites` / `both`), larger-bench filters, and quoting excerpts; always returns `precedent_status="unverified_automated"` |
+| `judgment_analytics` | `True` (DuckDB Parquet) | Closed-schema partition-guarded aggregations over SC, 17.77M HC, 81M DDL District, Tribunals, and Regulators |
+| `verify_citations` | `True` | Deterministic brief/citation audit (`VERIFIED`, `VERIFIED_REPEALED`, `VERIFIED_STRUCK_DOWN_OR_READ_DOWN`, `NOT_FOUND_IN_CORPUS`, `QUOTE_VERIFIED`, `QUOTE_MISMATCH`, etc.) |
+| `corpus_status` | `False` (local SQLite core) | Unified coverage matrix, backend health, and `commercial_safe` licensing metadata |
 
-## Quickstart (local)
+### 8 `nyaya://` Resources
 
-### Prerequisites
+- `nyaya://corpus/status`
+- `nyaya://statutes`
+- `nyaya://statute/{act}`
+- `nyaya://provision/{act}/{ref}`
+- `nyaya://amendment/{act}/{number}`
+- `nyaya://judgment/{identifier}`
+- `nyaya://judgment/{identifier}/paragraphs/{start}-{end}` *(capped at 30 paragraphs / 25 KB)*
+- `nyaya://courts` *(Supreme Court, 25 High Courts & 45 Benches, 15 Tribunals, 12 Regulators, DDL state codes)*
 
-- Python 3.11+
-- A Supabase project (free tier is fine) with the `pgvector` extension enabled
-- An NVIDIA API key (get one at [build.nvidia.com](https://build.nvidia.com))
+### 4 MCP Prompts
 
-### 1. Set up Supabase
+- `audit_legal_draft` — Filing-readiness citation and statutory-validity audit table
+- `transition_criminal_code` — IPC/CrPC/IEA to BNS/BNSS/BSA transition matrix with BNSS s. 531 savings check
+- `precedent_research_memo` — Binding SC vs binding home HC vs persuasive precedent memo
+- `irac_case_brief` — Paragraph-pinned IRAC case brief with subsequent citations
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. Enable pgvector: **Database → Extensions → enable `vector`**.
-3. The schema is applied by the hydration notebook (cell 3) — no separate `schema.sql` to run.
+## Quickstart
 
-### 2. Configure environment
-
-From the repo root:
-
-```bash
-cp .env.example .env
-# Edit .env:
-#   DATABASE_URL   — the Supabase/Postgres connection string
-#   NVIDIA_API_KEY — your NVIDIA API Catalog key (required for embeddings + reranking)
-
-# Then opt in to loading it: the server only reads .env when explicitly told to
-# (so tests and CI that export real env vars are never surprised by a stray file).
-export NYAYA_DOTENV=1
-```
-
-`.env` loading requires the optional `dotenv` extra (`pip install -e ".[dotenv]"`);
-without it the flag is a silent no-op. Variables already set in the environment
-always win — `load_dotenv()` does not override them. Tests and CI leave
-`NYAYA_DOTENV` unset and pass variables directly.
-
-### 3. Install and run
-
-From the `mcp/` directory:
+### Local `stdio` (zero configuration)
 
 ```bash
-pip install -e .
+# Zero secrets needed — automatically fetches/verifies public core pack on first run
+uvx nyaya-mcp
 
-# Hydrate Supabase (one-time) — open and run the notebook:
-#   mcp/notebooks/hydrate.ipynb
-# The notebook is self-contained: installs its own deps in cell 1, fetches all
-# data sources live, embeds via the NVIDIA API, and writes to Postgres.
+# Restrict to commercial-safe datasets only (excludes CC-BY-NC DDL 81M & ILDC)
+NYAYA_COMMERCIAL_SAFE_ONLY=1 uvx nyaya-mcp --commercial-safe-only
 
-# Start the server
-nyaya
-# → Uvicorn running on http://0.0.0.0:8000
-# → MCP endpoint at http://localhost:8000/mcp
-# → Health check at http://localhost:8000/health
+# Pre-download packs for offline laptop use
+uvx nyaya-mcp sync --pack core
+uvx nyaya-mcp --offline-only --no-download
 ```
 
-### 4. Hydrate the corpus (notebook)
-
-`mcp/notebooks/hydrate.ipynb` is the single hydration path. Open it and run all cells. It:
-
-1. Installs dependencies (cell 1).
-2. Applies the schema (drops old tables, creates `acts` + `documents` + `cross_refs` with `vector(2048)`).
-3. Fetches the Constitution, bare acts, Sanhitas, judgments, and cross-references — all live from their sources.
-4. Embeds all documents via `nvidia/nemotron-3-embed-1b` (2048-d).
-5. Writes to Postgres (idempotent upserts).
-6. Runs sanity checks.
-
-The notebook is **idempotent** — re-running it rebuilds the corpus from scratch. Run it whenever the corpus or embedding model changes.
-
-## Deploy to Railway
-
-nyaya ships with a Dockerfile (repo root) and a [Railway IaC](https://docs.railway.com/infrastructure-as-code) config at `.railway/railway.ts`. The build context is the repo root.
-
-### 1. Create the project
+### Local HTTP Server (from source)
 
 ```bash
-railway login
-railway link   # or `railway init` for a fresh project
-railway up     # first deploy
+cd mcp
+uv sync --extra http --dev
+uv run nyaya-mcp --transport http --host 127.0.0.1 --port 8000
+# -> MCP endpoint: http://127.0.0.1:8000/mcp
+# -> REST API:     http://127.0.0.1:8000/api/corpus-status
+# -> Health check: http://127.0.0.1:8000/health
 ```
 
-### 2. Set environment variables
+Optional `.env` loading: set `NYAYA_DOTENV=1` with the `dotenv` extra (`uv sync --extra dotenv`). Real environment variables always take precedence.
 
-| Variable | Value |
-|---|---|
-| `DATABASE_URL` | Supabase/Postgres connection string |
-| `NVIDIA_API_KEY` | NVIDIA API Catalog key (required for embeddings + reranking) |
+### HTTP & REST API Endpoints (`mcp/nyaya/http_app.py`, `mcp/nyaya/rest.py`)
 
-`PORT` is set automatically by Railway (defaults to `8000`). Both secrets are `preserve()`d in `.railway/railway.ts`, so `railway config apply` never touches their values — but any variable you set in the Railway Variables tab must also appear there (or be added to the IaC file) before applying, since an apply can delete live variables absent from the file.
+| Endpoint | Method | Parameters & Purpose |
+|---|---|---|
+| `/mcp` | `POST` | Streamable HTTP MCP JSON-RPC 2.0 endpoint (`stateless_http=True`) |
+| `/health` | `GET` | Service health check (`status`, `service`, `version`, `backends`, `counts`) |
+| `/api/corpus-status` | `GET` | Full `CorpusStatusResponse` (`?court=&commercial_safe_only=`) |
+| `/api/acts` | `GET` | Paginated statute & regulator catalog (`?jurisdiction=&category=&q=&limit=50&offset=0&commercial_safe_only=`) |
+| `/api/judgments` | `GET` | Multi-tier judgment search (`?tier=sc\|hc\|tribunal\|district\|all&court=&year_from=&year_to=&q=&limit=50&offset=0&commercial_safe_only=`) |
+| `/api/analytics` | `GET` | Closed-schema DuckDB Parquet aggregations (`?dataset=sc\|hc\|district\|tribunal\|regulator\|all&group_by=year\|disposal_nature\|court\|bench\|act\|case_type\|judge\|state\|district\|regulator&court=&state=&judge=&act=&year_from=&year_to=&top_n=25&commercial_safe_only=`, e.g. `/api/analytics?dataset=sc&group_by=disposal_nature`) |
+| `/api/tools` | `GET` | Introspected MCP surface (`total: 12`, `resources_count: 8`, `prompts_count: 4`) |
+| `/api/health-summary` | `GET` | Always-200 health + corpus summary for frontend SWR hydration |
 
-### Changing the deploy config
+## Ingestion Pipeline (`nyaya-ingest`)
 
-`.railway/railway.ts` is the source of truth for service settings (source branch, healthcheck, replicas, variables). It needs its TypeScript SDK installed locally — run `npm install` inside `.railway/` once. Edit the file, review with `railway config plan`, apply with `railway config apply --yes`. Code deploys ride on autodeploy from `main` (or a manual `railway up`). Railway's legacy `railway.toml`/`railway.json` Config-as-Code is deprecated (unread after 2026-12-01) and not used here.
+`nyaya-ingest` (available via `uv sync --extra ingest`) builds and verifies Option R2 corpus artifacts offline or in `.github/workflows/ingest-refresh.yml`:
 
-### 3. Apply the schema migration (before/at first deploy)
+```bash
+cd mcp
+uv sync --extra ingest
+uv run nyaya-ingest sync --tier daily --work-dir ./work        # Dattam SC/HC + PRS deltas (or --tier static for Vaquill/DDL/ILDC/CAD)
+uv run nyaya-ingest build-sqlite --work-dir ./work --out ./build/nyaya-core.sqlite
+uv run nyaya-ingest build-lance-fts --work-dir ./work --out ./build/lancedb
+uv run nyaya-ingest compact-parquet --work-dir ./work --out ./build/parquet
+uv run nyaya-ingest verify-gate --build-dir ./build --strict   # emits gate-pass.json binding exact SHA-256s
+uv run nyaya-ingest publish --build-dir ./build --target all   # atomic blue/green swap on Railway Bucket + HF/GH
 
-The server expects two **additive** statements that may not exist on a database provisioned before the `ref_num` change:
-
-```sql
-alter table documents add column if not exists ref_num int
-    generated always as (coalesce(nullif(regexp_replace(ref, '[^0-9].*$', ''), '')::int, 0)) stored;
-create index if not exists documents_act_ref_num_idx on documents (act_id, ref_num);
+# Or run the full pipeline end-to-end (with --fixture and --dry-run for hermetic testing):
+uv run nyaya-ingest all --fixture --dry-run
 ```
 
-Apply these to the deployed database (they are the only safe-to-apply block, at the bottom of `schema.sql`) **before deploying the image** — until they exist, `list_sections` (ORDER BY `ref_num`) fails with `UndefinedColumn` and the flagship list tool 500s. Everything else degrades fine.
+## Client Configuration
 
-> **Never run `psql -f schema.sql` against a populated database** — the file starts with `DROP ... CASCADE` statements and will destroy the corpus. See the warning header at the top of `schema.sql`.
-
-### 4. Run ingestion (one-time)
-
-Ingestion writes to Supabase, so you can run it from your local machine (with the same `.env`) — the Railway deployment reads from the same database. Run the notebook `mcp/notebooks/hydrate.ipynb` locally once, and the deployed server immediately serves the data.
-
-### Health check
-
-Railway polls `GET /health` (declared in `.railway/railway.ts`). The endpoint returns:
+### Local (`uvx` over `stdio` — Recommended for Private Client Briefs)
 
 ```json
 {
-  "status": "healthy",
-  "service": "nyaya",
-  "version": "0.2.0",
-  "counts": {"section": 3257, "article": 464, "judgment": 5, "amendment": 106, "schedule": 12, "acts": 14, "cross_refs": 597}
+  "mcpServers": {
+    "nyaya": {
+      "command": "uvx",
+      "args": ["nyaya-mcp"]
+    }
+  }
 }
 ```
 
-## Image variants
+*(Commercial firms can add `"env": { "NYAYA_COMMERCIAL_SAFE_ONLY": "1" }` or `"args": ["nyaya-mcp", "--commercial-safe-only"]`.)*
 
-The Dockerfile builds an **Alpine** image (~270 MB). Semantic search works on Alpine because embeddings + reranking are API-based (NVIDIA API), not local — no `onnxruntime` native wheels needed.
-
-## Client configuration
-
-### Claude Desktop
-
-Add to `claude_desktop_config.json` (under Settings → Developer):
+### Remote (Streamable HTTP)
 
 ```json
 {
@@ -171,19 +133,13 @@ Add to `claude_desktop_config.json` (under Settings → Developer):
 }
 ```
 
-### Cursor
-
-**Settings → MCP → Add server**:
-- URL: `https://<your-domain>/mcp`
-- Transport: Streamable HTTP
-
-### opencode
+### opencode / FastMCP Client
 
 ```bash
+opencode mcp add nyaya -- uvx nyaya-mcp
+# or remote HTTP:
 opencode mcp add nyaya --transport http --url https://<your-domain>/mcp
 ```
-
-### Programmatic (FastMCP client)
 
 ```python
 import asyncio
@@ -192,55 +148,61 @@ from fastmcp import Client
 async def main():
     async with Client("https://<your-domain>/mcp") as client:
         tools = await client.list_tools()
-        result = await client.call_tool("get_article", {"article": "21"})
-        print(result)
+        result = await client.call_tool("get_provision", {"citation": "Article 21"})
+        print(len(tools), result)
 
 asyncio.run(main())
 ```
 
-## Development
-
-From the `mcp/` directory:
+## Development & Testing
 
 ```bash
-pip install -e ".[dev]"
-pytest                          # unit tests (no DB needed)
-pytest -m integration           # server boot + /health tests
-pytest --cov=nyaya              # with coverage
-ruff check .                    # lint
+cd mcp
+uv sync --extra http --extra ingest --dev
+uv run ruff check nyaya/ tests/
+uv run mypy nyaya/
+uv run pytest --cov=nyaya --cov-fail-under=78
+uv lock --check
 ```
 
-The test suite is fully offline: `tests/conftest.py` only pins the required env vars (`DATABASE_URL`, `NVIDIA_API_KEY`) to dummy values so `get_settings()` builds; the DB-layer fakes live next to the tests that use them (e.g. the `_FakeConn` pool fake in `tests/test_db.py`, the fake `db` functions in `tests/test_rest.py`). `pytest` runs with no Supabase and no network. Tests that boot the real ASGI app are marked `@pytest.mark.integration` and still run offline against fakes.
+Build the hermetic offline test corpus manually:
 
-## Project structure
-
+```bash
+cd mcp
+uv run python -m tests.fixtures.mini_corpus.builder /tmp/mini_corpus
+uv run nyaya-mcp --transport stdio --data-dir /tmp/mini_corpus --no-download --offline-only
 ```
-nyaya/                          # repo root
-├── .railway/                   # Railway IaC (railway.ts deploy config)
-├── docker-compose.yml          # local container run (build context = repo root)
-├── .env.example                # copy to .env and fill in
-├── Dockerfile                  # Alpine image (~270 MB)
-├── README.md                   # repo overview (this file)
-├── LICENSE                     # Apache-2.0
-└── mcp/                        # the MCP server component
-    ├── pyproject.toml          # package metadata + deps
-    ├── README.md               # detailed setup + deploy docs (this file)
-    ├── nyaya/                  # the Python package
-    │   ├── server.py           # FastMCP app + /health
-    │   ├── config.py           # env-var settings
-    │   ├── db.py               # Postgres read layer (psycopg + pgvector)
-    │   ├── embeddings.py       # NVIDIA API embed + rerank services
-    │   ├── models.py           # Pydantic models (structured output)
-    │   ├── exceptions.py       # NotFound etc.
-    │   ├── tools/              # 16 MCP tools across 9 register modules
-    │   │   ├── _error.py       # @structured_errors decorator
-    │   │   └── _util.py        # run_sync, query validation
-    │   └── resources/          # 11 MCP resources + templates
-    ├── notebooks/
-    │   └── hydrate.ipynb       # end-to-end hydration (fetch + embed + write)
-    └── tests/                  # offline unit + integration tests
+
+## Project Structure
+
+```text
+mcp/
+├── pyproject.toml                  # nyaya-mcp package, [http]/[dotenv]/[ingest]/[dev] extras
+├── uv.lock                         # Locked dependencies (verified in CI + security.yml)
+├── nyaya/
+│   ├── cli.py                      # nyaya-mcp / nyaya entrypoint (--transport stdio|http, sync)
+│   ├── mcp_app.py                  # Import-pure create_mcp() factory (zero stdout/env side effects)
+│   ├── http_app.py                 # create_http_app() Starlette stack (/health, /mcp, /api/*, /chat, SPA)
+│   ├── server.py                   # Compatibility shim delegating to cli.py / http_app.py
+│   ├── config.py                   # Option R2 Settings & rate-limit configuration
+│   ├── exceptions.py               # 9 canonical NyayaError subclasses
+│   ├── models.py                   # v2 Pydantic schemas & CorpusStatusResponse
+│   ├── citations.py                # Shared Indian legal citation parser & verifier
+│   ├── sanitize.py                 # OWASP LLM01 <corpus_text> framing, Tag strip & pub-ban checks
+│   ├── ratelimit.py                # Right-most XFF, 50k-key LRU, streaming BodySizeLimitMiddleware
+│   ├── security_headers.py         # Pure-ASGI CSP, XFO, COOP/CORP, proxy-aware HSTS
+│   ├── rest.py                     # /api/corpus-status, /acts, /judgments, /analytics, /tools, /health-summary
+│   ├── storage/                    # sqlite_store, lance_store, duckdb_store, pdf_fetcher, manifest, memory_backend
+│   ├── retrieval/                  # query_analyzer, lexical_engine, paragraph_bm25, ranking (RRF)
+│   ├── ingest/                     # lockfile, state, fetchers/, extract/, builders/, gate, publish, data/
+│   ├── tools/                      # 12 v2 MCP tool modules + fail-fast registry
+│   ├── resources/                  # 8 nyaya:// resources
+│   └── prompts/                    # 4 practitioner/student MCP prompts
+└── tests/
+    ├── fixtures/mini_corpus/       # Synthetic offline SQLite + LanceDB + Parquet + PDF builder
+    └── ingest/                     # Lockfile, delta state, PDF/chunker, builder, gate & publish tests
 ```
 
 ## License
 
-Apache-2.0. The bundled legal text retains the license of its source (see the `source` and `source_license` fields on every result). Statutory text and judgments are public domain under Section 52(1)(q) of the Copyright Act 1957. PRS-sourced text is CC BY 4.0 (attribution required). The `indianconstitution` package is Apache-2.0.
+Code is **Apache-2.0** (`../LICENSE`). Bundled legal datasets retain upstream licenses and statutory permissions under **Indian Copyright Act, 1957 s. 52(1)(q)** and ***Eastern Book Company v. D.B. Modak*, (2008) 1 SCC 1** (including CC-BY-4.0 core compilations and CC-BY-NC research datasets `DDL 81M` and `ILDC`, filterable via `NYAYA_COMMERCIAL_SAFE_ONLY`). See [`../NOTICE`](../NOTICE) and [`../TRUSTED_SOURCES.md`](../TRUSTED_SOURCES.md).

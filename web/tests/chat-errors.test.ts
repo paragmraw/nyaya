@@ -58,3 +58,11 @@ test("human-phrased server messages pass through, with detail appended", () => {
 test("detail-less machine codes render without an empty parenthetical", () => {
   assert.equal(humanizeError("agent_error"), "Nyaya's assistant is temporarily unavailable. Please retry in a moment.");
 });
+
+test("v2 NyayaError codes are humanized cleanly", () => {
+  assert.match(humanizeError("storage_unavailable"), /corpus storage is temporarily unavailable/i);
+  assert.match(humanizeError("query_too_broad"), /narrow your query/i);
+  assert.match(humanizeError("commercial_license_blocked"), /non-commercial/i);
+  assert.match(humanizeError("text_unavailable_metadata_only"), /metadata only/i);
+  assert.match(humanizeError("pdf_fetch_error"), /judgment PDF/i);
+});

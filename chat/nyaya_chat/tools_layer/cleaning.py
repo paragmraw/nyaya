@@ -1,18 +1,15 @@
 """Shared normalisation of tool-result content (one pipeline, both paths).
 
-Tool results arrive from the nyaya data layer as plain strings, as
-stringified Python literals of LangChain content-block lists
-(``"[{'type': 'text', 'text': ...}]"``), or as the block lists themselves.
-Both the tools node (which caches cleaned results in per-request state
-before they are wrapped for the synthesis prompt) and the SSE streamer
-(which renders a UI summary from whatever the graph emits) need the same
-collapse-to-string behaviour and the same length cap, so it lives here once
-— including the ``<corpus_text>`` wrapper strip, whose single
-implementation is :func:`strip_corpus_tags`.
+Tool results arrive from the nyaya v2 data layer as JSON strings (with inner
+primary-law text fields wrapped in parameterized ``<corpus_text ...>``
+envelopes), as stringified Python literals of LangChain content-block lists,
+or as the block lists themselves.
 
-This module absorbed the former ``tool_content.py``; the synthesis-input
-pruning table now derives from ``tools_layer.spec`` instead of being
-duplicated here.
+* ``clean_tool_content(content, strip_corpus=False)`` keeps ``<corpus_text>``
+  tags intact for the synthesis LLM (OWASP LLM01 isolation).
+* ``clean_for_ui_summary(content)`` / ``clean_tool_content(content, strip_corpus=True)``
+  strips unanchored ``<corpus_text ...>`` and ``</corpus_text>`` tags so UI
+  summaries never leak ``<corpus_text>`` markup.
 """
 
 from __future__ import annotations
@@ -20,22 +17,20 @@ from __future__ import annotations
 import ast
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from ..config import MAX_TOOL_CHARS
 from .spec import prune_config
 
-# The <corpus_text>...</corpus_text> wrapper the synthesis node adds around
-# tool results handed to the synthesis prompt (prompt-injection defence).
-# The node strips it defensively when reading results back; the streamer
-# strips it so it never reaches the UI summary.
-_CORPUS_OPEN_RE = re.compile(r"^<corpus_text>\n?")
-_CORPUS_CLOSE_RE = re.compile(r"\n?</corpus_text>$")
+# Unanchored regexes so parameterized <corpus_text doc_id="..." ...> tags
+# embedded inside JSON string fields are stripped cleanly for UI summaries.
+_CORPUS_OPEN_RE = re.compile(r"<corpus_text\b[^>]*>\n?")
+_CORPUS_CLOSE_RE = re.compile(r"\n?</corpus_text>")
 
 
 def strip_corpus_tags(text: str) -> str:
-    """Remove a surrounding <corpus_text>...</corpus_text> wrapper if present."""
+    """Remove all <corpus_text ...>...</corpus_text> wrappers if present."""
     text = _CORPUS_OPEN_RE.sub("", text)
     return _CORPUS_CLOSE_RE.sub("", text)
 
@@ -54,14 +49,7 @@ def _block_parts(blocks: Iterable[Any]) -> list[str]:
 
 
 def _stringified_blocks(stripped: str) -> str | None:
-    """Collapse a stringified content-block list to its joined text.
-
-    Some MCP transports stringify the content-block list into the
-    ToolMessage string. It is a Python literal (single quotes), not JSON,
-    so ``ast.literal_eval`` recovers it. Returns the joined text — possibly
-    empty — or ``None`` when the string is not such a literal, in which
-    case the caller uses the string as-is.
-    """
+    """Collapse a stringified content-block list to its joined text."""
     if not (stripped.startswith("[{") and "'type'" in stripped and "'text'" in stripped):
         return None
     try:
@@ -81,67 +69,80 @@ def _cap(text: str) -> str:
 
 
 def clean_tool_content(content: Any, *, strip_corpus: bool = False) -> str:
-    """Normalise a ToolMessage's content to a clean string capped at MAX_TOOL_CHARS.
-
-    Behaviour shared by every caller: stringified content-block lists are
-    collapsed to their text, block lists are joined, anything else is
-    stringified, and the result is capped.
-
-    The two call sites differ in exactly one way, expressed by
-    ``strip_corpus``:
-
-    * The tools node cleans results BEFORE they are wrapped for the
-      synthesis prompt, so no wrapper can be present; it passes the default
-      and keeps the raw text.
-    * The SSE streamer's UI summary may see results already wrapped in an
-      earlier round, so it asks for the wrapper to be stripped before
-      capping.
-    """
+    """Normalise a ToolMessage's content to a clean string capped at MAX_TOOL_CHARS."""
     if isinstance(content, str):
         stripped = content.strip()
         joined = _stringified_blocks(stripped)
         if joined is not None:
-            return _cap(joined)
+            out = strip_corpus_tags(joined) if strip_corpus else joined
+            return _cap(out)
         if strip_corpus:
             return _cap(strip_corpus_tags(stripped))
         return _cap(stripped)
     if isinstance(content, list):
-        return _cap(" ".join(_block_parts(content)))
-    return _cap(str(content))
+        joined_list = " ".join(_block_parts(content))
+        if strip_corpus:
+            joined_list = strip_corpus_tags(joined_list)
+        return _cap(joined_list)
+    raw = str(content)
+    return _cap(strip_corpus_tags(raw) if strip_corpus else raw)
+
+
+def clean_for_ui_summary(content: Any, tool_name: str | None = None) -> str:
+    """Clean tool output for human-visible UI summaries, stripping all <corpus_text> tags."""
+    return clean_tool_content(content, strip_corpus=True)
+
+
+# ---------------------------------------------------------------------------
+# Human-readable summarizers for all 12 MCP v2 tools
+# ---------------------------------------------------------------------------
+
+TOOL_SUMMARIZERS: dict[str, Callable[[dict[str, Any]], str]] = {
+    "search_statutes": lambda d: f"Found {d.get('returned', len(d.get('results', [])))} of {d.get('total', 0)} statutory provisions",
+    "get_provision": lambda d: f"{d.get('act', '')} {d.get('ref', '')}: {d.get('title') or 'provision'} ({(d.get('validity') or {}).get('status', 'in_force')})".strip(),
+    "browse_statute": lambda d: f"Browse ({d.get('mode', 'catalog')}): {d.get('returned', 0)} of {d.get('total', 0)} entries",
+    "compare_provisions": lambda d: f"Comparison ({d.get('mapping_type', 'one_to_one')}): {(d.get('source_provision') or {}).get('act', '')} {(d.get('source_provision') or {}).get('ref', '')}",
+    "get_provision_history": lambda d: f"History for {d.get('act', 'Constitution')} {d.get('ref') or ''}: {len(d.get('amendments', []))} amendments, {len(d.get('judicial_validity_events', []))} judicial events".strip(),
+    "cross_reference": lambda d: f"Cross-references for {(d.get('source') or {}).get('act', '')} {(d.get('source') or {}).get('ref', '')}: {d.get('returned', len(d.get('links', [])))} links",
+    "search_judgments": lambda d: f"Found {d.get('returned', len(d.get('results', [])))} of {d.get('total', 0)} judgments",
+    "get_judgment": lambda d: f"{(d.get('card') or {}).get('title', 'Judgment')} ({d.get('view', 'overview')})",
+    "trace_precedent": lambda d: f"Precedent trace for {(d.get('target') or {}).get('title', '')}: {len(d.get('edges', []))} edges ({d.get('precedent_status', 'unverified_automated')})",
+    "verify_citations": lambda d: f"Verified {len(d.get('findings', []))} citations",
+    "judgment_analytics": lambda d: f"Analytics ({d.get('court_tier', 'all')} by {d.get('group_by', '')}): {d.get('total_matched', 0)} matched cases",
+    "corpus_status": lambda d: f"Corpus status v{d.get('service_version', '2.0.0')} ({d.get('retrieval_mode', 'lexical_metadata_graph')})",
+}
+
+
+def summarize_tool_output(tool_name: str, content: Any) -> str:
+    """Return a clean UI summary for a tool output with <corpus_text> stripped."""
+    cleaned = clean_for_ui_summary(content, tool_name=tool_name)
+    summarizer = TOOL_SUMMARIZERS.get(tool_name)
+    if summarizer is not None and cleaned.startswith("{"):
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, dict) and "error" not in data:
+                return strip_corpus_tags(summarizer(data))
+        except Exception:
+            pass
+    return cleaned
 
 
 # ---------------------------------------------------------------------------
 # Synthesis-input pruning for LIST-type tool results
 # ---------------------------------------------------------------------------
 
-_SNIPPET_CHARS = 300  # matches the ~300-char snippet convention of the corpus
+_SNIPPET_CHARS = 300
 
 
 def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
-    """Bound the bulk of a LIST-type tool result before it reaches the model.
+    """Bound the bulk of a LIST-type v2 tool result before it reaches the model.
 
-    **Pruning rule (conservative)** — this exists to cut the ~12K-token worst
-    case a ``semantic_query`` (up to 50 hits) can contribute to one synthesis
-    round:
-
-    * Only the LIST-type specs (:data:`tools_layer.spec.TOOL_SPECS` entries
-      with ``list_result=True``) with a parseable JSON-object payload are
-      touched.
-    * The **top hit (index 0) is kept verbatim** — full snippet, all fields —
-      because it is the content the answer will most likely quote and the
-      citation verifier will match against.
-    * Every further hit is condensed to its identification fields (act, ref,
-      title, kind, rank, citation) plus its snippet truncated to 300 chars
-      (the corpus's own snippet convention): enough to find the provision via
-      ``get_section``/``get_article`` for full text, without shipping every
-      hit's text to the model.
-    * Redundant envelope metadata (query echo, source, as_of, offset, limit,
-      fallback_reason) is dropped; total/returned counts are kept.
-
-    Single-document results (get_section / get_article / get_judgment) and
-    anything not matching the expected JSON shape pass through UNCHANGED —
-    full text is exactly what the answer quality (and citation verification)
-    needs.
+    * Only LIST-type specs (:data:`tools_layer.spec.TOOL_SPECS` entries with
+      ``list_result=True``) with a parseable JSON-object payload are touched.
+    * Supports polymorphic ``list_keys: tuple[str, ...]`` (e.g. ``browse_statute``
+      returning ``provisions``, ``acts``, or ``chapters_or_parts``).
+    * Hit 0 is kept verbatim; hits 1..N keep identification fields plus a
+      300-char snippet (preserving balanced ``<corpus_text>`` tags if present).
     """
     config = prune_config().get(tool_name or "")
     if config is None or not isinstance(content, str):
@@ -155,8 +156,18 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
         return content
     if not isinstance(data, dict):
         return content
-    results = data.get(config["list_key"])
-    if not isinstance(results, list) or len(results) <= 1:
+
+    list_keys: tuple[str, ...] = tuple(config.get("list_keys") or (config["list_key"],))
+    active_key: str | None = None
+    results: list[Any] | None = None
+    for candidate_key in list_keys:
+        val = data.get(candidate_key)
+        if isinstance(val, list) and len(val) > 0:
+            active_key = candidate_key
+            results = val
+            break
+
+    if active_key is None or results is None or len(results) <= 1:
         return content
 
     keep_hit_fields: tuple[str, ...] = config["keep_hit_fields"]
@@ -168,11 +179,21 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
         out = {k: hit[k] for k in keep_hit_fields if k in hit}
         snippet = hit.get(snippet_field)
         if isinstance(snippet, str):
-            out[snippet_field] = (
-                snippet[: _SNIPPET_CHARS - 1] + "…"
-                if len(snippet) > _SNIPPET_CHARS
-                else snippet
-            )
+            if "<corpus_text" in snippet and "</corpus_text>" in snippet:
+                inner = strip_corpus_tags(snippet)
+                if len(inner) > _SNIPPET_CHARS:
+                    m_open = _CORPUS_OPEN_RE.search(snippet)
+                    open_tag = m_open.group(0).rstrip("\n") if m_open else "<corpus_text>"
+                    inner_trunc = inner[: _SNIPPET_CHARS - 1] + "…"
+                    out[snippet_field] = f"{open_tag}\n{inner_trunc}\n</corpus_text>"
+                else:
+                    out[snippet_field] = snippet
+            else:
+                out[snippet_field] = (
+                    snippet[: _SNIPPET_CHARS - 1] + "…"
+                    if len(snippet) > _SNIPPET_CHARS
+                    else snippet
+                )
         return out
 
     first = results[0]
@@ -180,5 +201,5 @@ def prune_list_result(content: Any, tool_name: str | None = None) -> Any:
     pruned: dict[str, Any] = {
         k: data[k] for k in config["keep_envelope_fields"] if k in data
     }
-    pruned[config["list_key"]] = [first, *rest]
+    pruned[active_key] = [first, *rest]
     return _cap(json.dumps(pruned, default=str))

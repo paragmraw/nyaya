@@ -90,16 +90,14 @@ def _is_reasoning_leak(text: str, reasoning_buffer: str) -> bool:
     return text[:REASONING_LEAK_MIN_CHARS] in reasoning_buffer
 
 
-def _is_db_error_json(text: str) -> bool:
-    """True when a tool result is the native layer's *unavailability* error JSON.
+def _is_storage_error_json(text: str) -> bool:
+    """True when a tool result is the storage layer's *unavailability* error JSON.
 
-    The native tools report a dead corpus/DB as
-    ``{"error": {"code": "database_unavailable", ...}}`` (``native.py``'s
-    ``_error_json`` shape); a failed embed is ``embedding_unavailable``.
-    Feeding those into the agent produces an answer built on nothing;
-    detecting them here lets the turn fail fast with a specific,
-    human-explainable error instead. Other error codes (``not_found``,
-    ``search_error``) are legitimate results and must NOT match.
+    Only hard storage unavailability codes (``storage_unavailable``,
+    ``database_unavailable``) trigger turn abort. Domain errors like
+    ``not_found``, ``ambiguous_reference``, ``text_unavailable_metadata_only``,
+    ``query_too_broad``, or ``commercial_license_blocked`` are valid results
+    for the agent to reason over or turn into a refusal.
     """
     if not text.strip().startswith("{"):
         return False
@@ -107,24 +105,27 @@ def _is_db_error_json(text: str) -> bool:
         payload = json.loads(text)
     except (ValueError, TypeError):
         return False
-    err = payload.get("error") if isinstance(payload, dict) else None
-    if not isinstance(err, dict):
+    if not isinstance(payload, dict):
         return False
-    # Only *unavailability* codes mean "nothing was retrieved". A
-    # ``not_found`` error (e.g. get_section on a nonexistent section) is a
-    # legitimate result the agent model must turn into a refusal —
-    # short-circuiting on it would hard-fail valid refusal turns.
-    return err.get("code") in {"database_unavailable", "embedding_unavailable"}
+    err = payload.get("error")
+    if isinstance(err, dict):
+        return err.get("code") in {"storage_unavailable", "database_unavailable"}
+    if err is True and isinstance(payload.get("error_code"), str):
+        return payload.get("error_code") in {"storage_unavailable", "database_unavailable"}
+    return False
+
+
+# Backwards-compatible alias
+_is_db_error_json = _is_storage_error_json
 
 
 def _prune_tool_results_for_model(messages: list[BaseMessage]) -> list[BaseMessage]:
     """Prune bulk, non-essential fields from LIST-type tool results.
 
     **Pruning rule (conservative):** before the message list goes to the
-    agent model, only LIST-type tool results (the multi-hit array of
-    ``semantic_query`` — up to 50 hits of snippet text, the ~12K-token worst
-    case per round) are pruned, and only beyond the top hit; single-document
-    results pass through UNCHANGED (see ``tools_layer.cleaning``).
+    agent model, only LIST-type tool results are pruned, and only beyond the
+    top hit; single-document results pass through UNCHANGED (see
+    ``tools_layer.cleaning``).
     Read-time only: it affects the model input, not the dedup cache or the
     unpruned ``messages`` used for citation verification.
     """
@@ -143,22 +144,25 @@ def _prune_tool_results_for_model(messages: list[BaseMessage]) -> list[BaseMessa
 
 
 def _wrap_tool_results_in_corpus_tags(messages: list[BaseMessage]) -> list[BaseMessage]:
-    """Wrap ToolMessage content in <corpus_text>...</corpus_text> tags.
+    """Wrap ToolMessage content in <corpus_text>...</corpus_text> tags if not already wrapped.
 
-    Prompt-injection defense: it clearly delineates corpus data from
-    instructions in the agent prompt; the system prompt instructs the model
-    to treat all text inside these tags as data only.
+    When v2 tools return JSON payloads whose primary text fields are already
+    wrapped in parameterized ``<corpus_text ...>...</corpus_text>`` envelopes,
+    skip outer re-wrapping so we never double-wrap.
     """
     result: list[BaseMessage] = []
     for m in messages:
         if isinstance(m, ToolMessage):
             content = m.content if isinstance(m.content, str) else str(m.content)
-            wrapped = ToolMessage(
-                content=f"<corpus_text>\n{content}\n</corpus_text>",
-                tool_call_id=m.tool_call_id,
-                name=m.name,
-            )
-            result.append(wrapped)
+            if "</corpus_text>" in content or content.lstrip().startswith("<corpus_text"):
+                result.append(m)
+            else:
+                wrapped = ToolMessage(
+                    content=f"<corpus_text>\n{content}\n</corpus_text>",
+                    tool_call_id=m.tool_call_id,
+                    name=m.name,
+                )
+                result.append(wrapped)
         else:
             result.append(m)
     return result

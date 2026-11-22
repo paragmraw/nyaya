@@ -3,10 +3,9 @@
 //
 // Every site-absolute URL is built from SITE (src/lib/site.ts) so identity
 // stays single-sourced. URL fragments are only used when a matching DOM id
-// exists on the target route — the test asserts this, so a future editor who
-// adds `#/some-id` anchors must also add the id (or the test fails).
+// exists on the target route — the test asserts this.
 
-import { SITE, OG_IMAGE } from "./site";
+import { API_VERSION, OG_IMAGE, SITE } from "./site";
 
 const ORG_ID = `${SITE}/#organization`;
 
@@ -21,18 +20,16 @@ export const siteSchema = {
       logo: `${SITE}/logo.svg`,
       sameAs: ["https://github.com/paragmraw/nyaya"],
       description:
-        "Conversational AI for Indian law - retrieval-grounded legal research assistant.",
+        "Zero-DB-ops Indian legal MCP server and research assistant covering statutes, regulators, tribunals, Supreme Court, High Courts, and District metadata.",
     },
     {
       "@type": "WebSite",
       "@id": `${SITE}/#website`,
       url: SITE,
       name: "Nyaya",
-      description: "A retrieval-grounded assistant for practicing lawyers.",
+      description:
+        "Pure-lexical and citation-graph legal research MCP server and assistant for Indian law.",
       publisher: { "@id": ORG_ID },
-      // No SearchAction yet: there is no /search route. Advertising one in
-      // JSON-LD sends crawlers to a dead URL (sitelinks searchbox requires
-      // the target to exist). Re-add if/when search ships.
     },
   ],
 };
@@ -42,10 +39,13 @@ export const homeSchema = {
   "@context": "https://schema.org",
   "@type": ["SoftwareApplication", "WebApplication"],
   name: "Nyaya",
-  description: "Conversational AI for Indian law - retrieval-grounded legal research assistant",
+  description:
+    "Pure-lexical Indian legal MCP server and assistant covering 37 legislatures, 12 regulators, 15 tribunals, 35k+ SC, 17.77M+ HC, and 81M+ District metadata.",
   url: `${SITE}/`,
   applicationCategory: "LegalApplication",
-  operatingSystem: "Web",
+  operatingSystem: "Linux, macOS, Windows, Web",
+  softwareVersion: API_VERSION,
+  license: "https://www.apache.org/licenses/LICENSE-2.0",
   offers: {
     "@type": "Offer",
     price: "0",
@@ -56,12 +56,12 @@ export const homeSchema = {
     "@id": ORG_ID,
   },
   featureList: [
-    "Constitutional lookup (464 articles)",
-    "CrPC procedure tracer (484 sections)",
-    "Penal code (IPC 511 / BNS 358 sections)",
-    "Precedent retrieval (5 curated SC judgments)",
-    "Drafting assist (planned)",
-    "Citation parsing (built into get_section / get_article)",
+    "Constitution of India (506 articles, 12 schedules, Amendments 1–106)",
+    "IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance and BNSS s. 531 savings",
+    "37 Central & State/UT Legislation jurisdictions + 12 Regulators",
+    "3-tier Judiciary & Tribunals (35k+ SC, 17.77M+ HC, 15 Tribunals, 81M+ District metadata)",
+    "Deterministic citation parsing & verification (verify_citations)",
+    "12 MCP tools, 8 nyaya:// resources, and 4 practitioner prompts via uvx stdio or HTTP",
   ],
   screenshot: `${SITE}${OG_IMAGE}`,
 };
@@ -70,71 +70,81 @@ export const corpusSchema = {
   "@context": "https://schema.org",
   "@type": "DataCatalog",
   name: "Nyaya Legal Corpus",
-  description: "Indexed Indian legal sources including Constitution, statutes, and case law",
+  description:
+    "Open-India-Law Pack indexed across SQLite FTS5, LanceDB BM25, DuckDB ZSTD Parquet, and on-demand S3 PDFs.",
   url: `${SITE}/corpus/`,
   publisher: { "@id": ORG_ID },
   dataset: [
     {
       "@type": "Dataset",
-      name: "Constitution of India",
-      description: "All 464 articles + 12 schedules",
+      name: "Constitution of India & Amendments 1–106",
+      description: "506 articles, 12 schedules, Constituent Assembly Debates, and verified Amendments 1–106",
       url: `${SITE}/corpus/`,
-      keywords: ["Constitution", "Fundamental Rights", "DPSP", "Amendments"],
-      license: "Apache-2.0",
+      keywords: ["Constitution", "Fundamental Rights", "Amendments 1-106", "CAD"],
+      license: "IN-S52-1-q",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
-      name: "Bharatiya Nyaya Sanhita, 2023",
-      description: "All 358 sections",
+      name: "Central & State/UT Legislation (37 Jurisdictions)",
+      description: "850+ Central Acts, BNS/BNSS/BSA 2023, IPC/CrPC/IEA concordance, and 36 State/UT packs",
       url: `${SITE}/corpus/`,
-      keywords: ["BNS", "Criminal Law", "Penal Code"],
-      license: "CC BY 4.0",
+      keywords: ["BNS", "BNSS", "BSA", "IPC", "CrPC", "Central Acts", "State Acts"],
+      license: "CC-BY-4.0",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
-      name: "Bharatiya Nagarik Suraksha Sanhita, 2023",
-      description: "All 531 sections",
+      name: "12 Financial & Sectoral Regulators",
+      description: "554,000+ circulars, regulations, and rules across SEBI, RBI, MCA, CBIC, TRAI, IRDAI, and more",
       url: `${SITE}/corpus/`,
-      keywords: ["BNSS", "Criminal Procedure", "CrPC replacement"],
-      license: "CC BY 4.0",
+      keywords: ["SEBI", "RBI", "CBIC", "Regulators", "Circulars"],
+      license: "CC-BY-4.0",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
-      name: "Bharatiya Sakshya Adhiniyam, 2023",
-      description: "All sections (replaces Evidence Act)",
+      name: "Supreme Court of India Judgments",
+      description: "35,000+ full-text Supreme Court judgments, citation graph edges, and AWS Open Data PDFs",
       url: `${SITE}/corpus/`,
-      keywords: ["BSA", "Evidence Law", "IEA replacement"],
-      license: "CC BY 4.0",
+      keywords: ["Supreme Court", "INSC", "AIR", "SCC", "Case Law"],
+      license: "CC-BY-4.0",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
-      name: "Indian Penal Code, 1860",
-      description: "All 511 sections (legacy reference)",
+      name: "25 High Courts Judgments & Orders",
+      description: "17.77M+ High Court orders/metadata in DuckDB ZSTD Parquet plus 150k+ reportable full text",
       url: `${SITE}/corpus/`,
-      keywords: ["IPC", "Criminal Law", "Legacy"],
-      license: "Public Domain",
+      keywords: ["High Court", "Neutral Citation", "CNR", "eCourts"],
+      license: "CC-BY-4.0",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
-      name: "Code of Criminal Procedure, 1973",
-      description: "All 484 sections (legacy reference)",
+      name: "15 Indian Tribunals & Quasi-Judicial Forums",
+      description: "813,168+ matters across ITAT, NCLT, NGT, SAT, CAT, CESTAT, DRT, CCI, and IBBI",
       url: `${SITE}/corpus/`,
-      keywords: ["CrPC", "Criminal Procedure", "Legacy"],
-      license: "Public Domain",
+      keywords: ["Tribunals", "NCLT", "ITAT", "NGT", "SAT"],
+      license: "CC-BY-4.0",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
-      name: "Supreme Court Landmark Judgments",
-      description: "5 curated judgments (Kesavananda, Maneka, Puttaswamy, Shah Bano, Navtej Johar)",
+      name: "DDL Indian Judicial District Court Dataset (2010–2018)",
+      description: "81,000,000+ District Court metadata records (Non-Commercial; excluded under NYAYA_COMMERCIAL_SAFE_ONLY)",
       url: `${SITE}/corpus/`,
-      keywords: ["Supreme Court", "Case Law", "Landmark Judgments"],
-      license: "Public Domain",
+      keywords: ["District Courts", "DDL", "eCourts", "Non-Commercial"],
+      license: "CC-BY-NC-SA-4.0",
+      creator: { "@id": ORG_ID },
+    },
+    {
+      "@type": "Dataset",
+      name: "ILDC Supreme Court Research Annotations",
+      description: "35,000+ SC outcome and explanation annotations (Non-Commercial; excluded under NYAYA_COMMERCIAL_SAFE_ONLY)",
+      url: `${SITE}/corpus/`,
+      keywords: ["ILDC", "Supreme Court", "Non-Commercial"],
+      license: "CC-BY-NC-4.0",
       creator: { "@id": ORG_ID },
     },
   ],
@@ -144,53 +154,54 @@ export const citationsSchema = {
   "@context": "https://schema.org",
   "@type": ["TechArticle", "HowTo"],
   name: "Nyaya Citation System",
-  description: "How Nyaya structures, verifies, and links legal citations",
+  description:
+    "How Nyaya parses, resolves, audits statutory validity, and verifies CNR, INSC, HC Neutral, AIR, SCC, and statutory citations",
   url: `${SITE}/citations/`,
   publisher: { "@id": ORG_ID },
   about: {
     "@type": "Thing",
-    name: "Legal Citation Format",
-    description: "Standardized citation formats for Indian law",
+    name: "Indian Legal Citation Format",
+    description: "Standardized citation formats for Indian statutes, regulations, and courts",
   },
   step: [
     {
       "@type": "HowToStep",
       position: 1,
       name: "Parse",
-      text: "Extract citation strings from the draft answer: article numbers, section references, case names.",
+      text: "Priority-ordered parser extracts CNR, INSC, HC Neutral, AIR, SCC, SCR, CPC Orders/Rules, and statutory sub-sections.",
       itemListElement: {
         "@type": "HowToDirection",
-        text: "Parse \"Art. 21\" → {type: constitution, art: 21}",
+        text: "Parse \"2024:DHC:1234\" → judgment::HC_NEUTRAL::2024:DHC:1234",
       },
     },
     {
       "@type": "HowToStep",
       position: 2,
-      name: "Match",
-      text: "Look up each parsed citation in the indexed corpus to confirm it exists and the text matches.",
+      name: "Resolve",
+      text: "Exact canonical tuple lookup across SQLite and Bucket indices without bare first-number guessing.",
       itemListElement: {
         "@type": "HowToDirection",
-        text: "match(\"S. 41A\", \"CrPC 1973\") → found, section_text",
+        text: "resolve(\"IEA s.65B(4)\") → EvidenceAct 65B (repealed → BSA 63)",
       },
     },
     {
       "@type": "HowToStep",
       position: 3,
-      name: "Fetch",
-      text: "Pull the full provision or judgment text from the corpus so the citation can be displayed inline.",
+      name: "Audit & Frame",
+      text: "Attaches StatutoryValidity status, raw citation-graph counts (unverified_automated), and OWASP <corpus_text> tags.",
       itemListElement: {
         "@type": "HowToDirection",
-        text: "fetch(\"Art. 21\") → Constitution article text",
+        text: "status=\"VERIFIED_STRUCK_DOWN_OR_READ_DOWN\" (IT Act s.66A)",
       },
     },
     {
       "@type": "HowToStep",
       position: 4,
-      name: "Display",
-      text: "Render the citation as a link the user can click to open the source card with the full text and provenance.",
+      name: "Verify & Link",
+      text: "Optional verbatim quote check against AWS S3 PDFs via pypdfium2 and provenance badge rendering.",
       itemListElement: {
         "@type": "HowToDirection",
-        text: "→ Source card: Constitution of India, Art. 21",
+        text: "→ Source card: 2017 INSC 801 · CC-BY-4.0",
       },
     },
   ],
@@ -200,21 +211,22 @@ export const architectureSchema = {
   "@context": "https://schema.org",
   "@type": ["SoftwareApplication", "APIReference"],
   name: "Nyaya Architecture",
-  description: "Four-stage retrieval-grounded pipeline for Indian legal AI",
+  description:
+    "Option R2 zero-DB-ops pure-lexical legal MCP pipeline: SQLite FTS5, LanceDB BM25, DuckDB ZSTD Parquet, direct S3 pypdfium2, 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
   url: `${SITE}/architecture/`,
   publisher: { "@id": ORG_ID },
   applicationCategory: "DeveloperApplication",
-  operatingSystem: "Cloud",
+  operatingSystem: "Linux, macOS, Windows",
   featureList: [
-    "Query understanding via Supervisor LLM",
-    "Parallel tool execution (semantic_query, get_section, get_article)",
-    "Reranking of retrieved passages",
-    "Synthesis LLM with citation constraints",
-    "Citation resolution and verification",
-    "MCP server for editor integration",
+    "QueryAnalyzer with Indian statute aliases and IPC/CrPC/IEA ↔ BNS/BNSS/BSA expansion",
+    "Baked read-only SQLite FTS5 + Citation Graph + Concordance core (~250 MB)",
+    "LanceDB native Rust BM25 FTS tables and DuckDB ZSTD Parquet on Railway Storage Bucket",
+    "Direct AWS Open Data S3 PDF extraction via Apache-2.0 pypdfium2 + 256 MB disk zstd LRU cache",
+    "OWASP LLM01 <corpus_text> framing and s. 228A / BNS s. 72 exclusions",
+    "12 read-only MCP tools, 8 nyaya:// resources, and 4 prompts over uvx stdio or HTTP /mcp",
   ],
   provider: { "@id": ORG_ID },
-  softwareVersion: "0.2.0",
+  softwareVersion: API_VERSION,
   releaseNotes: "https://github.com/paragmraw/nyaya/releases",
 };
 
@@ -224,34 +236,34 @@ export const faqSchema = {
   mainEntity: [
     {
       "@type": "Question",
-      name: "Does Nyaya cite unreported judgments?",
+      name: "Does Nyaya automatically determine whether a judgment is overruled or good law?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. Orders and judgments not published in a reported journal are not in the corpus. Nyaya will say it cannot find a citation rather than invent one.",
+        text: "No. trace_precedent and verify_citations return raw citation-graph edges, coram bench-strength comparisons, and quoting excerpts with precedent_status=\"unverified_automated\". Nyaya does not perform automated NLP Shepardizing; always verify currency before filing.",
       },
     },
     {
       "@type": "Question",
-      name: "Are subordinate legislation and rules indexed?",
+      name: "How does Nyaya handle scanned or image-only court PDFs?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Not yet. Notifications, rules, and subordinate legislation under major statutes are not yet indexed. Coming per the corpus roadmap.",
+        text: "Direct AWS Open Data PDFs are extracted on demand with Apache-2.0 pypdfium2. Documents yielding fewer than 50 characters per page (common in pre-2010 scanned High Court orders) are rejected as scanned_image_only (text_unavailable_metadata_only) rather than returning garbled OCR output.",
       },
     },
     {
       "@type": "Question",
-      name: "Are Pre-1950 Privy Council decisions included?",
+      name: "Can commercial law firms use Nyaya without non-commercial dataset contamination?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Judgments of the Privy Council (the apex court for British India until 1950) are not yet indexed. This is planned for a future release.",
+        text: "Yes. Nyaya code is Apache-2.0 and its legislation, regulator, tribunal, SC, and HC packs are CC-BY-4.0 / Apache-2.0 / s.52(1)(q). Bundled DDL 81M District metadata (CC-BY-NC-SA-4.0) and ILDC (CC-BY-NC-4.0) are strictly tagged commercial_safe=false and excluded whenever NYAYA_COMMERCIAL_SAFE_ONLY=1 or commercial_safe_only=true is set.",
       },
     },
     {
       "@type": "Question",
-      name: "Does Nyaya track overruled or modified judgments?",
+      name: "Are sealed orders, s. 228A victim details, or commercial headnotes included?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. Nyaya does not yet track whether a judgment has been overruled or modified by a later bench. Always confirm currency before filing.",
+        text: "No. In compliance with EBC v. D.B. Modak and Indian Copyright Act s. 52(1)(q), proprietary reporter headnotes are excluded, and sealed, in-camera, or s. 228A / BNS s. 72 / POCSO protected orders are blocked at ingestion.",
       },
     },
   ],
