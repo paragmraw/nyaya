@@ -118,3 +118,92 @@ def test_quality_failures_still_gate():
     mod.run_checks(r, scenario)
     gating = mod.gating_failures(r)
     assert any(f[0] == "has_tool_calls" for f in gating)
+
+
+def _load_retrieval_eval():
+    ret_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "eval",
+        "retrieval_eval.py",
+    )
+    spec = importlib.util.spec_from_file_location("nyaya_retrieval_eval", ret_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_retrieval_eval_rejects_wrong_section_of_same_act():
+    """Regression for v0.2 act-only recall bug: retrieving IPC s. 420 when
+    expected is IPC s. 302 must score 0.0 recall and 0.0 MRR."""
+    ret = _load_retrieval_eval()
+    expected = [{"act": "IPC", "ref": "302"}]
+    wrong_hit = [{"act": "IPC", "ref": "420"}]
+    recall, mrr, found = ret.score_retrieved_items(expected, wrong_hit)
+    assert recall == 0.0
+    assert mrr == 0.0
+    assert found == [False]
+
+    # Hallucinated AIR page in same year/court also rejected
+    expected_j = [{"act": "SC", "ref": "AIR 1973 SC 1461"}]
+    wrong_j = [{"reporter_citations": ["AIR 1973 SC 9999"]}]
+    j_recall, j_mrr, j_found = ret.score_retrieved_items(expected_j, wrong_j)
+    assert j_recall == 0.0
+    assert j_mrr == 0.0
+    assert j_found == [False]
+
+    # Exact hit at rank 2 -> recall 1.0, MRR 0.5
+    hits = [{"act": "IPC", "ref": "420"}, {"act": "IPC", "ref": "s. 302"}]
+    r_ok, mrr_ok, f_ok = ret.score_retrieved_items(expected, hits)
+    assert r_ok == 1.0
+    assert mrr_ok == 0.5
+    assert f_ok == [True]
+
+
+def test_golden_dataset_has_90_v2_cases():
+    ret = _load_retrieval_eval()
+    golden_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "eval",
+        "golden.jsonl",
+    )
+    cases = ret.load_golden(golden_path)
+    assert len(cases) >= 90
+    categories = {c.category for c in cases}
+    for required_cat in (
+        "central_act",
+        "constitution",
+        "concordance",
+        "invalidation",
+        "sc_judgment",
+        "hc_judgment",
+        "state_regulator_tribunal",
+        "district_court",
+        "refusal",
+    ):
+        assert required_cat in categories, f"missing golden category {required_cat!r}"
+
+
+def test_chat_eval_uses_v2_tool_names_and_scenarios():
+    mod = _load()
+    scenario_ids = {s.id for s in mod.SCENARIOS}
+    assert "hc-precedent-dhc" in scenario_ids
+    assert "struck-down-it-66a" in scenario_ids
+    assert "verify-citations-kesavananda" in scenario_ids
+
+    # Semantic search check must accept v2 search_statutes / search_judgments
+    scen = next(s for s in mod.SCENARIOS if s.category == "semantic_search")
+    r = mod.StreamResult(
+        scenario_id=scen.id,
+        latency_ms=800.0,
+        time_to_first_token_ms=300.0,
+        answer_text="## Answer\nGood faith is defined in BNS [[act: BNS, ref: 2]].\n\n*This is not legal advice; verify citations before filing.*",
+        tool_calls=[mod.ToolCallInfo(name="search_statutes", args={"query": "good faith"}, result_summary="Found 1")],
+        citations=[{"act": "BNS", "ref": "2"}],
+        statuses=["analyzing", "searching", "composing"],
+        request_id="rid1",
+        events=[("meta", {"request_id": "rid1"}, 0.1), ("done", {}, 0.8)],
+    )
+    mod.run_checks(r, scen)
+    assert not mod.gating_failures(r)

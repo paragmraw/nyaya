@@ -92,8 +92,7 @@ function ChatMessageViewImpl({ msg, isStreaming = false, onRetry }: { msg: ChatM
           />
         )}
 
-        {/* Agent plan (supervisor's reasoning) and reasoning trace — plain
-            while streaming (they grow for hundreds of deltas), markdown after */}
+        {/* Agent plan and reasoning trace — plain while streaming, markdown after */}
         {isBot && msg.plan && msg.plan.trim() && (
           <Trace kind="plan" text={msg.plan} plain={streamingPlain} />
         )}

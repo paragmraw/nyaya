@@ -4,18 +4,19 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseViewParams, serializeViewParams } from "../src/lib/url-query";
+import { parseViewParams, serializeViewParams, filterCorpusRows } from "../src/lib/url-query";
 
 test("parseViewParams defaults to curated order, asc, no filter", () => {
-  assert.deepEqual(parseViewParams(""), { sort: -1, dir: "asc", status: "all" });
-  assert.deepEqual(parseViewParams("?"), { sort: -1, dir: "asc", status: "all" });
+  assert.deepEqual(parseViewParams(""), { sort: -1, dir: "asc", status: "all", category: "all" });
+  assert.deepEqual(parseViewParams("?"), { sort: -1, dir: "asc", status: "all", category: "all" });
 });
 
-test("parseViewParams reads sort, dir, and status", () => {
-  assert.deepEqual(parseViewParams("?sort=3&dir=desc&status=live"), {
+test("parseViewParams reads sort, dir, status, and category", () => {
+  assert.deepEqual(parseViewParams("?sort=3&dir=desc&status=live&category=judiciary"), {
     sort: 3,
     dir: "desc",
     status: "live",
+    category: "judiciary",
   });
 });
 
@@ -52,5 +53,15 @@ test("serializeViewParams removing the sort drops sort and dir together", () => 
 
 test("serializeViewParams round-trips through parseViewParams", () => {
   const q = serializeViewParams("", { sort: 4, dir: "desc", status: "beta" });
-  assert.deepEqual(parseViewParams(`?${q}`), { sort: 4, dir: "desc", status: "beta" });
+  assert.deepEqual(parseViewParams(`?${q}`), { sort: 4, dir: "desc", status: "beta", category: "all" });
+  const q5 = serializeViewParams("", { sort: 5, dir: "asc", status: "live", category: "legislation" });
+  assert.deepEqual(parseViewParams(`?${q5}`), { sort: 5, dir: "asc", status: "live", category: "legislation" });
+});
+
+test("parseViewParams and serializeViewParams handle category filter cleanly", () => {
+  assert.equal(typeof filterCorpusRows, "function");
+  const q = serializeViewParams("", { category: "judiciary" });
+  assert.equal(q, "category=judiciary");
+  assert.equal(parseViewParams(`?${q}`).category, "judiciary");
+  assert.equal(serializeViewParams(`?${q}`, { category: "all" }), "");
 });

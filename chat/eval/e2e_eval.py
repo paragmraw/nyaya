@@ -8,7 +8,7 @@ For each golden question, sends the question to the chat agent and checks:
 4. No ungrounded citations: the citation verification system strips any
    citations not backed by tool results.
 
-Requires ``DATABASE_URL`` and ``NVIDIA_API_KEY`` env vars.
+Requires ``NVIDIA_API_KEY`` env var (zero ``DATABASE_URL`` needed in v2).
 
 Usage::
 
@@ -150,15 +150,14 @@ async def eval_e2e(cases: list[GoldenCase], timeout: float = 120) -> E2EReport:
         for m in CITATION_RE.finditer(answer):
             citations_found.append({"act": m.group(1).strip(), "ref": m.group(2).strip()})
 
-        # Check expected citations
+        # Check expected citations (strict exact canonical match; no act-only partial credit)
         found_pairs = {_normalize(f"{c['act']}|{c['ref']}") for c in citations_found}
         cite_scores: list[float] = []
         for cite in case.expected_citations:
             act_n = _normalize(cite["act"])
             ref_n = _normalize(cite["ref"])
             exact = f"{act_n}|{ref_n}" in found_pairs
-            act_match = any(p.startswith(f"{act_n}|") for p in found_pairs)
-            cite_scores.append(1.0 if exact else (0.5 if act_match else 0.0))
+            cite_scores.append(1.0 if exact else 0.0)
         citation_score = sum(cite_scores) / len(cite_scores) if cite_scores else (1.0 if not case.expected_citations else 0.0)
 
         # Check keywords

@@ -454,9 +454,39 @@ html[data-theme="dark"] .theme-icon-moon { display: none; }
 .cap-table td .cap-desc { color: var(--muted); font-size: 11px; margin-top: 2px; display: block; }
 .cap-table tbody tr:hover, .corpus-table tbody tr:hover { background: var(--fg-softer); }
 .cap-table .num-col, .corpus-table .num-col { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--muted); white-space: nowrap; }
-.corpus-table td .ct-name { font-weight: 600; }
+.corpus-table td .ct-name { font-weight: 600; display: block; }
+.corpus-table td .ct-sub { display: block; font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-top: 2px; }
 .corpus-table td .ct-cov { color: var(--muted); font-size: 11.5px; }
 .corpus-table td .ct-date { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+.filter-controls { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--gap-sm); }
+.filter-controls .filter-bar { margin-bottom: 0; }
+.license-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.badge-license { font-family: var(--font-mono); font-size: 11px; color: var(--fg); }
+.badge-commercial {
+  display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 999px;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.03em; white-space: nowrap;
+}
+.badge-safe { background: var(--accent-soft); color: var(--accent); }
+.badge-nc {
+  background: color-mix(in oklch, var(--error) 10%, transparent);
+  color: var(--error);
+  border: 1px solid color-mix(in oklch, var(--error) 30%, transparent);
+}
+.badge-bucket { background: var(--fg-soft); color: var(--muted); border: 1px solid var(--border); }
+
+/* ─── academic / non-commercial attribution banner ─────────────── */
+.nc-notice {
+  padding: var(--gap-md);
+  border: 1px solid color-mix(in oklch, var(--accent) 32%, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--accent-tint);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.nc-notice .nc-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nc-notice .nc-body { font-size: 13px; color: var(--fg); line-height: 1.55; }
+.nc-notice code { font-family: var(--font-mono); font-size: 12px; padding: 1px 4px; border-radius: 4px; background: var(--fg-soft); }
 
 /* ─── MCP config block ──────────────────────────────────────────── */
 .mcp-card {
@@ -506,6 +536,27 @@ pre.mcp-json {
 pre.mcp-json .k { color: var(--accent); }
 pre.mcp-json .s { color: var(--muted); }
 pre.mcp-json .n { color: var(--fg); }
+.mcp-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.mcp-tab {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.03em;
+  padding: 4px 9px; border-radius: var(--radius); border: 1px solid var(--border);
+  color: var(--muted); background: var(--surface); cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.mcp-tab:hover { color: var(--fg); border-color: var(--accent); }
+.mcp-tab.active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.mcp-tip {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 12px; border-top: 1px solid var(--border);
+  background: var(--surface); font-size: 11.5px; color: var(--muted);
+}
+.mcp-safe-toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--fg); font-size: 11.5px; cursor: pointer;
+}
+.mcp-safe-toggle input { accent-color: var(--accent); width: 14px; height: 14px; }
+.mcp-tip code { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+.mcp-tip-note { line-height: 1.45; }
 
 /* ─── chat panel ───────────────────────────────────────────────── */
 .chat-shell {
@@ -954,7 +1005,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   flex-shrink: 0;
 }
 
-/* Agent plan (supervisor's planning text, collapsible — like reasoning). */
+/* Agent plan (planning trace, collapsible — like reasoning). */
 .plan-trace {
   margin-top: 8px; font-size: 11px;
 }
@@ -1066,13 +1117,31 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
 .flow-step .fs-text .fs-link:hover { background: var(--accent-soft); }
 
 /* ─── MCP tools list (architecture) ────────────────────────────── */
-.mcp-tools-wrap .tools { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.tool-row { display: grid; grid-template-columns: 180px 1fr; padding: 10px var(--gap-md); border-bottom: 1px solid var(--border); gap: var(--gap-md); align-items: center; transition: background 0.15s; }
+.mcp-tools-header { display: flex; align-items: baseline; justify-content: space-between; gap: var(--gap-sm); flex-wrap: wrap; margin-bottom: var(--gap-xs); }
+.mcp-tools-head { font-size: 15px; font-weight: 600; }
+.mcp-tools-wrap .tools { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface); }
+.tool-row { display: grid; grid-template-columns: 220px 1fr; padding: 10px var(--gap-md); border-bottom: 1px solid var(--border); gap: var(--gap-md); align-items: center; transition: background 0.15s; }
 .tool-row:last-child { border-bottom: none; }
 .tool-row:hover { background: var(--bg); }
-.tool-row .tr-name { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); }
+.tool-row .tr-left { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.tool-row .tr-name { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); word-break: break-word; }
 .tool-row .tr-desc { font-size: 12.5px; color: var(--fg); }
 .tool-row .tr-desc .tr-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.mcp-subgrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-md); margin-top: var(--gap-lg); }
+.mcp-subhead { font-size: 13.5px; font-weight: 600; margin-bottom: var(--gap-xs); }
+.source-card .sc-head .sc-verified.sc-nc { color: var(--error); }
+.source-card .sc-head .sc-verified.sc-nc .status-dot { background: var(--error); }
+.verify-statuses {
+  margin-top: var(--gap-md); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; background: var(--surface);
+}
+.vs-row {
+  display: grid; grid-template-columns: 270px 1fr; gap: var(--gap-md);
+  padding: 9px var(--gap-md); border-bottom: 1px solid var(--border); align-items: center;
+}
+.vs-row:last-child { border-bottom: none; }
+.vs-code { font-family: var(--font-mono); font-size: 11px; color: var(--accent); font-weight: 600; }
+.vs-desc { font-size: 12px; color: var(--muted); }
 
 /* ─── openness / roadmap ────────────────────────────────────────── */
 .openness { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-md); }
@@ -1187,6 +1256,8 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   .pipeline { grid-template-columns: repeat(2, 1fr); }
   .pipe-card .pc-arrow { display: none; }
   .stack-grid { grid-template-columns: 1fr; }
+  .mcp-subgrid { grid-template-columns: 1fr; }
+  .vs-row { grid-template-columns: 1fr; gap: 4px; }
   .openness { grid-template-columns: 1fr; }
   .annotated { grid-template-columns: 1fr; }
   .format-grid { grid-template-columns: 1fr; }

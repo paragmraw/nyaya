@@ -1,141 +1,78 @@
 # nyaya-chat
 
-LangGraph + FastAPI chat backend for [nyaya](../README.md). A retrieval-grounded
-Indian-law assistant: a single tool-bound streaming agent over the nyaya MCP
-corpus, powered by an NVIDIA Nemotron chat model, streamed to clients over
-Server-Sent Events.
+LangGraph + FastAPI chat backend (**v2.0.0**) for [nyaya](../README.md). A retrieval-grounded Indian-law assistant powered by `ChatNVIDIA` (`langchain-nvidia-ai-endpoints`) and backed by Nyaya v2.0's pure-lexical/metadata/graph corpus.
 
 ## Architecture
 
-```
-SPA  ──POST /chat/turn (SSE)──►  nyaya Starlette app :8000  ──streamable HTTP──►  /mcp (same process)
-                                 └─ /chat sub-app (FastAPI)
+```text
+SPA  ──POST /chat/turn (SSE)──►  nyaya.http_app (:8000)  ──in-process / streamable HTTP──►  v2 Corpus / /mcp
+                                 └─ /chat sub-app (FastAPI, mounted iff NVIDIA_API_KEY is set)
                                      LangGraph agent -> tools -> agent graph
-                                     ChatNVIDIA Nemotron
+                                     ChatNVIDIA LLM + shared nyaya.citations verifier
 ```
 
-The chat backend is a **FastAPI sub-app** mounted into the existing nyaya
-MCP/Starlette server at `/chat` (see `mcp/nyaya/server.py`). The SPA, REST
-API, MCP endpoint, and chat share one origin, one healthcheck, and one
-Railway service. The sub-app owns only chat-specific concerns (the agent,
-the LLM, the SSE encoder); cross-cutting middleware (CORS, security headers,
-request-id, rate limiting, body-size cap) is provided by the host.
+The chat sub-app is mounted into `nyaya.http_app` at `/chat` whenever `NVIDIA_API_KEY` is set. Cross-cutting middleware (CORS, security headers, request-id, rate limiting, streaming body-size cap) lives on the host Starlette app; `nyaya_chat` owns the agent graph, prompts, guardrails, citation verification, and SSE projection.
 
-- **Agent**: a single tool-bound agent in a 2-node LangGraph graph —
-  `START -> agent -> (tools -> agent | END)` (see `graph/agent.py`).
-  The **agent** node plans and answers in one streaming model call: on its
-  first leg it buffers tokens, emits any preamble as a `plan` event plus the
-  tool calls (`tool_start` events), and routes to the **tools** node
-  (`DedupToolNode` runs all tool calls concurrently, deduplicating repeated
-  (name+args) calls). With tool results back in state as `ToolMessage`s, the
-  agent streams the final grounded answer live as `token` events, with
-  inline `[[act: X, ref: Y]]` citation markers the frontend parses into
-  chips. One gated reflection round re-runs the agent when the answer is
-  uncited and the time budget allows. No checkpointer is used —
-  conversation state is per-request only; we do not persist anything.
-- **Tools**: the agent calls the nyaya MCP server over streamable HTTP via
-  `langchain-mcp-adapters`' `MultiServerMCPClient`. In the same-process
-  deploy, `MCP_URL` in `chat/nyaya_chat/config.py` points at the same
-  origin's `/mcp`. A curated 6-tool allowlist (`DEFAULT_TOOLS` in
-  `config.py`) is exposed to the agent; the full 16-tool surface is
-  available to direct MCP clients.
-- **LLM**: `ChatNVIDIA`, reads `NVIDIA_API_KEY` from the environment. The
-  default model is `nvidia/nemotron-3.5-lightning-30b-a3b` (see `config.py`).
-  The agent model runs with thinking disabled (`SYNTHESIS_THINKING=False`)
-  and a single token cap (`SYNTHESIS_MAX_TOKENS=6144`); the degraded
-  no-tools fallback reuses the base model on `SYSTEM_PROMPT`.
-- **Streaming**: LangGraph custom stream mode (`["custom"]`) — nodes emit
-  typed event dicts directly (see `graph/events.py`) -> SSE events
-  (`status`, `plan`, `token`, `reasoning`, `tool_start`, `tool_result`,
-  `citations`, `correction`, `ping`, `error`, `done`). `streaming.py` is a
-  pure projection layer. Phase transitions emit `status` events
-  (`analyzing` -> `searching` -> `composing`).
-- **Retry**: model invocations (`astream_with_retry`) wrap with exponential
-  backoff + full jitter on HTTP 429 and 5xx errors (`LLM_MAX_RETRIES=4`).
-- **Protection**: a tighter per-IP rate limit on `POST /chat/*`
-  (`RATE_CHAT_PER_MIN`, default 15/min, hardcoded in `mcp/nyaya/config.py`)
-  applied by the host's `RateLimitMiddleware`. No auth (same model as the
-  MCP server - behind a reverse proxy).
+- **Agent (`graph/agent.py`):** 2-node LangGraph graph (`START -> agent -> (tools -> agent | END)`) with `DedupToolNode`, optional 1-round gated reflection, and `SYNTHESIS_THINKING=False` / `SYNTHESIS_MAX_TOKENS=6144`. Skips outer `<corpus_text>` double-wrapping whenever tool JSON already carries parameterized `<corpus_text ...>` envelopes, and treats only `storage_unavailable` / `database_unavailable` / `bucket_unavailable` as hard storage failures.
+- **8-Tool v2 Allowlist (`tools_layer/spec.py`):** Exposes 8 of the 12 MCP v2 tools to the agent:
+  `search_statutes`, `get_provision`, `compare_provisions`, `browse_statute`, `get_provision_history`, `search_judgments`, `get_judgment`, `trace_precedent`.
+  Native mode (`tools_layer/native.py`) calls `nyaya.storage` (`get_backend()`, `get_retrieval()`, `get_pdf_fetcher()`) directly; fallback mode calls `MCP_URL` over Streamable HTTP.
+- **Shared Citation Verification (`citations.py` -> `nyaya.citations`):** Preserves inline `[[act: X, ref: Y]]` streaming markers while validating against canonical structural keys (`extract_grounded_keys`), covering SC/HC neutral citations (`2024 INSC 123`, `2024:DHC:1234`), 16-char CNRs, AIR/SCC/SCR, CPC `O.7 R.11`, and sub-sections (`s.65B(4)`), and rejecting mismatched page/section hallucinations (e.g., `AIR 1973 SC 9999` vs `AIR 1973 SC 1461`).
+- **UI Cleaning (`tools_layer/cleaning.py`):** Strips parameterized `<corpus_text ...>` wrappers only from human-readable `tool_result` SSE summaries; synthesis LLM calls receive full `<corpus_text>` isolation boundaries.
+- **Protection:** `POST /chat/*` is rate-limited at `15` req/min/IP by `mcp/nyaya/ratelimit.py`.
 
 ## Quickstart (standalone dev)
 
 ```bash
-cd chat
-uv venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-uv pip install -e ".[dev]"
+cd mcp
+uv sync --extra http --dev
+uv pip install -e ../chat
 
-# .env at the repo root (shared with mcp/) must set NVIDIA_API_KEY and DATABASE_URL.
-# Start the nyaya MCP server first (provides the corpus):
-cd ../mcp && uv pip install -e ../chat && nyaya &
-# The chat sub-app is mounted automatically when NVIDIA_API_KEY is set.
-# The agent calls the MCP server at http://localhost:8000/mcp (MCP_URL in
-# chat/nyaya_chat/config.py).
-# -> http://localhost:8000/chat  (Swagger UI at /chat/docs)
+# Only NVIDIA_API_KEY is required to mount /chat
+NVIDIA_API_KEY=nvapi-... uv run nyaya-mcp --transport http --host 127.0.0.1 --port 8000
+# -> http://127.0.0.1:8000/chat/health
+# -> http://127.0.0.1:8000/chat/docs
 ```
 
 ## Environment
 
-Only `NVIDIA_API_KEY` is required (env var). All other tuning (MCP URL, LLM
-models, temperatures, token caps, message limits, tool allowlist, log level)
-lives as Python constants in `chat/nyaya_chat/config.py`.
+- `NVIDIA_API_KEY` (required to mount `/chat`; not required for `nyaya-mcp` core tools)
+- `MCP_URL` (optional; defaults to `http://localhost:${PORT}/mcp`)
+- `NYAYA_COMMERCIAL_SAFE_ONLY` (optional; inherited by `native.py` tool execution)
+- `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (optional tracing)
+
+All LLM parameters (`LLM_MODEL`, `SYNTHESIS_MODEL`, `SYNTHESIS_MAX_TOKENS`, `TURN_BUDGET_S`, `MAX_HISTORY`, `DEFAULT_TOOLS`) live in [`nyaya_chat/config.py`](nyaya_chat/config.py).
 
 ## API
 
 ### `GET /chat/health`
-```json
-{"status":"healthy","model":"nvidia/nemotron-3.5-lightning-30b-a3b","tools_loaded":6,"reason":null}
-```
-Fast by design: the health probe **never** builds the agent — it reports
-`"degraded"` with a `reason` (agent still initializing / no tools loaded)
-immediately if the graph isn't built yet; only `/chat/turn` triggers a build.
-The `model` field is always present (the frontend model badge reads it).
+
+Returns `{"status": "healthy"|"degraded", "model": "...", "tools_loaded": 8, "reason": ...}` without blocking on graph compilation.
 
 ### `POST /chat/turn`
-**Body**: `{"message": "...", "history": [{"role":"user","content":"..."}, ...]}`
-**Response**: `text/event-stream` of typed SSE events. On failure before the
-stream opens, the endpoint returns a JSON error body in the SAME unified
-shape as the SSE `error` event: `{"message": "...", "detail": "...", "rid": "..."}`
-(e.g. HTTP 503 `{"message": "agent_unavailable", "detail": "...", "rid": "..."}`).
 
-| event | data | meaning |
-|---|---|---|
-| `meta` | `{"request_id": "..."}` | request id (first event) |
-| `status` | `{"msg": "analyzing"\|"searching"\|"composing", "rid": "..."}` | phase transition (agent -> tools -> answer); every status event echoes the request id |
-| `plan` | `{"content": "..."}` | agent leg-1 preamble text (routed separately from the answer) |
-| `token` | `{"content": "..."}` | agent answer token delta (the final answer) |
-| `reasoning` | `{"content": "..."}` | reasoning_content delta (forward-compat for reasoning-capable models) |
-| `tool_start` | `{"id","name","args"}` | the model called a tool |
-| `tool_result` | `{"id","name","summary"}` | a tool returned |
-| `citations` | `{"citations": [{"act": "...", "ref": "..."}]}` | citations parsed from the agent's VERIFIED answer (no re-verification stream-side) |
-| `correction` | `{"content": "..."}` | the verified answer, emitted ONLY when it differs from the raw streamed tokens; absent when they match |
-| `ping` | `{"ts": 123}` | keepalive (every ~15s) |
-| `error` | `{"message", "detail", "rid"}` | a node failed (unified error shape) |
-| `done` | `{}` | stream complete |
+Accepts `{"message": "...", "history": [{"role": "user"|"assistant", "content": "..."}]}` and streams `text/event-stream` SSE events (`meta`, `status`, `plan`, `token`, `reasoning`, `tool_start`, `tool_result`, `citations`, `correction`, `ping`, `error`, `done`).
 
-## Tests
+## Tests & Offline Evaluation
 
 ```bash
-cd chat && pytest        # unit tests (no live NVIDIA/MCP calls)
-ruff check . && mypy nyaya_chat
+# Unit tests, lint & strict mypy (from mcp/ environment)
+cd mcp
+uv run ruff check ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
+uv run mypy ../chat/nyaya_chat/
+NVIDIA_API_KEY=nvapi-test-key-for-ci uv run pytest ../chat/tests/ -v --cov=nyaya_chat --cov-fail-under=84
+
+# 100% offline exact-match retrieval evaluation (zero NVIDIA_API_KEY needed)
+uv run python ../chat/eval/retrieval_eval.py --fixture tests/fixtures/mini_corpus
 ```
 
-Live-server eval (needs a running stack — DB, `NVIDIA_API_KEY`, and the MCP
-server in the same process):
+Live-server evaluation (requires a running HTTP server with `NVIDIA_API_KEY` set):
 
 ```bash
 cd chat
-NYAYA_EVAL_HOST=http://localhost:8001 uv run pytest -m eval   # pytest wrapper
-uv run python -m eval.chat_eval --host http://localhost:8001 --verbose   # full report
-uv run python -m eval.chat_eval --list                                  # scenario IDs
-uv run python -m eval.chat_eval --host http://localhost:8001 --test fact-ipc-302  # one scenario
+NYAYA_EVAL_HOST=http://localhost:8000 uv run pytest -m eval
+uv run python -m eval.chat_eval --host http://localhost:8000 --verbose
+uv run python -m eval.e2e_eval --golden eval/golden.jsonl --timeout 120
 ```
 
-`eval/chat_eval.py` is the single merged harness (it replaced the old
-`chat_eval.py` + `validate_chat.py` pair). It reads the SSE stream
-incrementally, so time-to-first-token is measured when the first `token`
-event actually arrives (the old harness estimated it as `latency * 0.3`).
-It ships 34 scenarios across guardrail, factual, semantic, comparison,
-refusal, judgment, definition, multi-turn, and edge-case categories, and
-exits non-zero when any quality check fails. `eval/e2e_eval.py` (golden
-dataset) and `eval/retrieval_eval.py` (offline retrieval scoring) remain
-separate, narrower tools.
+`eval/golden.jsonl` contains 90 test cases across Central/State/UT Acts, Constitution Articles/Schedules/Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA transitions, judicial invalidations, SC & HC precedent lookups, Regulators/Tribunals, DDL District analytics (`commercial_safe=false`), and adversarial/refusal traps.

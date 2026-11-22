@@ -125,3 +125,34 @@ test("citation regex stays linear when the marker prefix recurs (pump)", () => {
     assert.ok(Date.now() - t1 < 2_000, "stripCitationMarkers also stays linear");
   }
 });
+
+// v2 citation format tests (INSC, HC neutral, CNR, CPC O.7 R.11, s.65B(4))
+test("parseCitations handles SC neutral (2017 INSC 801), HC neutral (2024:DHC:1234), and CNR", () => {
+  const src =
+    "Privacy was upheld in [[act: SC, ref: 2017 INSC 801]], applied in [[act: DHC, ref: 2024:DHC:1234]], " +
+    "and docketed under [[act: CNR, ref: MHAU019999992015]].";
+  const { text, citations } = parseCitations(src);
+  assert.deepEqual(citations, [
+    { act: "SC", ref: "2017 INSC 801" },
+    { act: "DHC", ref: "2024:DHC:1234" },
+    { act: "CNR", ref: "MHAU019999992015" },
+  ]);
+  assert.ok(text.includes(`${CITE_HREF_PREFIX}SC&ref=2017%20INSC%20801`));
+  assert.ok(text.includes(`${CITE_HREF_PREFIX}DHC&ref=2024%3ADHC%3A1234`));
+  assert.ok(text.includes(`${CITE_HREF_PREFIX}CNR&ref=MHAU019999992015`));
+});
+
+test("parseCitations handles CPC O.7 R.11 and electronic evidence s.65B(4) sub-sections", () => {
+  const src = "See [[act: CPC, ref: O.7 R.11(d)]] and [[act: EvidenceAct, ref: s.65B(4)]].";
+  const { text, citations } = parseCitations(src);
+  assert.deepEqual(citations, [
+    { act: "CPC", ref: "O.7 R.11(d)" },
+    { act: "EvidenceAct", ref: "s.65B(4)" },
+  ]);
+  assert.equal(
+    stripCitationMarkers(src),
+    "See [CPC · O.7 R.11(d)] and [EvidenceAct · s.65B(4)].",
+  );
+  assert.ok(text.includes(`${CITE_HREF_PREFIX}CPC&ref=O.7%20R.11(d)`));
+  assert.ok(text.includes(`${CITE_HREF_PREFIX}EvidenceAct&ref=s.65B(4)`));
+});

@@ -1,0 +1,501 @@
+schema_version: 2
+updated_at: "2026-11-22"
+
+courts:
+  # ---------------------------------------------------------------------------
+  # 1. Supreme Court of India (SC)
+  # ---------------------------------------------------------------------------
+  - court_code: "SC"
+    dattam_code: "SCI"
+    court_name: "Supreme Court of India"
+    tier: "sc"
+    bench_code: "SC"
+    bench_name: "Principal Bench"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["SCI", "SC", "Supreme Court", "Supreme Court of India"]
+
+  # ---------------------------------------------------------------------------
+  # 2. 25 High Courts of India (with Dattam `_` and `~` code mappings)
+  # ---------------------------------------------------------------------------
+  - court_code: "AHC"
+    dattam_code: "9_13"
+    dattam_tilde: "9~13"
+    court_name: "High Court of Judicature at Allahabad"
+    tier: "hc"
+    bench_code: "AHC"
+    bench_name: "Prayagraj & Lucknow Benches"
+    state_ut: "Uttar Pradesh"
+    seat_city: "Prayagraj"
+    hc_jurisdiction: ["Uttar Pradesh"]
+    aliases: ["AHC", "ALL", "9_13", "9~13", "Allahabad High Court"]
+
+  - court_code: "APHC"
+    dattam_code: "28_2"
+    dattam_tilde: "28~2"
+    court_name: "High Court of Andhra Pradesh"
+    tier: "hc"
+    bench_code: "APHC"
+    bench_name: "Amaravati Principal Bench"
+    state_ut: "Andhra Pradesh"
+    seat_city: "Amaravati"
+    hc_jurisdiction: ["Andhra Pradesh"]
+    aliases: ["APHC", "AP", "28_2", "28~2", "Andhra Pradesh High Court"]
+
+  - court_code: "BHC"
+    dattam_code: "27_1"
+    dattam_tilde: "27~1"
+    court_name: "High Court of Bombay"
+    tier: "hc"
+    bench_code: "BHC"
+    bench_name: "Mumbai, Nagpur, Aurangabad & Goa Benches"
+    state_ut: "Maharashtra"
+    seat_city: "Mumbai"
+    hc_jurisdiction: ["Maharashtra", "Goa", "Dadra and Nagar Haveli and Daman and Diu"]
+    aliases: ["BHC", "BOM", "27_1", "27~1", "Bombay High Court"]
+
+  - court_code: "CAL"
+    dattam_code: "19_16"
+    dattam_tilde: "19~16"
+    court_name: "High Court at Calcutta"
+    tier: "hc"
+    bench_code: "CAL"
+    bench_name: "Kolkata, Port Blair & Jalpaiguri Benches"
+    state_ut: "West Bengal"
+    seat_city: "Kolkata"
+    hc_jurisdiction: ["West Bengal", "Andaman and Nicobar Islands"]
+    aliases: ["CAL", "19_16", "19~16", "Calcutta High Court"]
+
+  - court_code: "CGHC"
+    dattam_code: "22_18"
+    dattam_tilde: "22~18"
+    court_name: "High Court of Chhattisgarh"
+    tier: "hc"
+    bench_code: "CGHC"
+    bench_name: "Bilaspur Principal Bench"
+    state_ut: "Chhattisgarh"
+    seat_city: "Bilaspur"
+    hc_jurisdiction: ["Chhattisgarh"]
+    aliases: ["CGHC", "22_18", "22~18", "Chhattisgarh High Court"]
+
+  - court_code: "DHC"
+    dattam_code: "7_26"
+    dattam_tilde: "7~26"
+    court_name: "High Court of Delhi"
+    tier: "hc"
+    bench_code: "DHC"
+    bench_name: "Principal Bench"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["NCT of Delhi"]
+    aliases: ["DHC", "DEL", "7_26", "7~26", "Delhi High Court"]
+
+  - court_code: "GAU"
+    dattam_code: "18_6"
+    dattam_tilde: "18~6"
+    court_name: "Gauhati High Court"
+    tier: "hc"
+    bench_code: "GAU"
+    bench_name: "Guwahati, Kohima, Aizawl & Itanagar Benches"
+    state_ut: "Assam"
+    seat_city: "Guwahati"
+    hc_jurisdiction: ["Assam", "Nagaland", "Mizoram", "Arunachal Pradesh"]
+    aliases: ["GAU", "18_6", "18~6", "Gauhati High Court"]
+
+  - court_code: "GUJ"
+    dattam_code: "24_17"
+    dattam_tilde: "24~17"
+    court_name: "High Court of Gujarat"
+    tier: "hc"
+    bench_code: "GUJ"
+    bench_name: "Ahmedabad Principal Bench"
+    state_ut: "Gujarat"
+    seat_city: "Ahmedabad"
+    hc_jurisdiction: ["Gujarat"]
+    aliases: ["GUJ", "24_17", "24~17", "Gujarat High Court"]
+
+  - court_code: "HPHC"
+    dattam_code: "2_5"
+    dattam_tilde: "2~5"
+    court_name: "High Court of Himachal Pradesh"
+    tier: "hc"
+    bench_code: "HPHC"
+    bench_name: "Shimla Principal Bench"
+    state_ut: "Himachal Pradesh"
+    seat_city: "Shimla"
+    hc_jurisdiction: ["Himachal Pradesh"]
+    aliases: ["HPHC", "2_5", "2~5", "Himachal Pradesh High Court"]
+
+  - court_code: "JKHC"
+    dattam_code: "1_12"
+    dattam_tilde: "1~12"
+    court_name: "High Court of Jammu & Kashmir and Ladakh"
+    tier: "hc"
+    bench_code: "JKHC"
+    bench_name: "Srinagar & Jammu Benches"
+    state_ut: "Jammu and Kashmir"
+    seat_city: "Srinagar"
+    hc_jurisdiction: ["Jammu and Kashmir", "Ladakh"]
+    aliases: ["JKHC", "1_12", "1~12", "Jammu and Kashmir High Court"]
+
+  - court_code: "JHC"
+    dattam_code: "20_7"
+    dattam_tilde: "20~7"
+    court_name: "High Court of Jharkhand"
+    tier: "hc"
+    bench_code: "JHC"
+    bench_name: "Ranchi Principal Bench"
+    state_ut: "Jharkhand"
+    seat_city: "Ranchi"
+    hc_jurisdiction: ["Jharkhand"]
+    aliases: ["JHC", "20_7", "20~7", "Jharkhand High Court"]
+
+  - court_code: "KAR"
+    dattam_code: "29_3"
+    dattam_tilde: "29~3"
+    court_name: "High Court of Karnataka"
+    tier: "hc"
+    bench_code: "KAR"
+    bench_name: "Bengaluru, Dharwad & Kalaburagi Benches"
+    state_ut: "Karnataka"
+    seat_city: "Bengaluru"
+    hc_jurisdiction: ["Karnataka"]
+    aliases: ["KAR", "29_3", "29~3", "Karnataka High Court"]
+
+  - court_code: "KER"
+    dattam_code: "32_4"
+    dattam_tilde: "32~4"
+    court_name: "High Court of Kerala"
+    tier: "hc"
+    bench_code: "KER"
+    bench_name: "Ernakulam Principal Bench"
+    state_ut: "Kerala"
+    seat_city: "Kochi"
+    hc_jurisdiction: ["Kerala", "Lakshadweep"]
+    aliases: ["KER", "32_4", "32~4", "Kerala High Court"]
+
+  - court_code: "MPHC"
+    dattam_code: "23_23"
+    dattam_tilde: "23~23"
+    court_name: "High Court of Madhya Pradesh"
+    tier: "hc"
+    bench_code: "MPHC"
+    bench_name: "Jabalpur, Indore & Gwalior Benches"
+    state_ut: "Madhya Pradesh"
+    seat_city: "Jabalpur"
+    hc_jurisdiction: ["Madhya Pradesh"]
+    aliases: ["MPHC", "MP", "23_23", "23~23", "Madhya Pradesh High Court"]
+
+  - court_code: "MAD"
+    dattam_code: "33_10"
+    dattam_tilde: "33~10"
+    court_name: "High Court of Judicature at Madras"
+    tier: "hc"
+    bench_code: "MAD"
+    bench_name: "Chennai & Madurai Benches"
+    state_ut: "Tamil Nadu"
+    seat_city: "Chennai"
+    hc_jurisdiction: ["Tamil Nadu", "Puducherry"]
+    aliases: ["MAD", "33_10", "33~10", "Madras High Court"]
+
+  - court_code: "MAN"
+    dattam_code: "14_25"
+    dattam_tilde: "14~25"
+    court_name: "High Court of Manipur"
+    tier: "hc"
+    bench_code: "MAN"
+    bench_name: "Imphal Principal Bench"
+    state_ut: "Manipur"
+    seat_city: "Imphal"
+    hc_jurisdiction: ["Manipur"]
+    aliases: ["MAN", "14_25", "14~25", "Manipur High Court"]
+
+  - court_code: "MEG"
+    dattam_code: "17_21"
+    dattam_tilde: "17~21"
+    court_name: "High Court of Meghalaya"
+    tier: "hc"
+    bench_code: "MEG"
+    bench_name: "Shillong Principal Bench"
+    state_ut: "Meghalaya"
+    seat_city: "Shillong"
+    hc_jurisdiction: ["Meghalaya"]
+    aliases: ["MEG", "17_21", "17~21", "Meghalaya High Court"]
+
+  - court_code: "ORI"
+    dattam_code: "21_11"
+    dattam_tilde: "21~11"
+    court_name: "High Court of Orissa"
+    tier: "hc"
+    bench_code: "ORI"
+    bench_name: "Cuttack Principal Bench"
+    state_ut: "Odisha"
+    seat_city: "Cuttack"
+    hc_jurisdiction: ["Odisha"]
+    aliases: ["ORI", "21_11", "21~11", "Orissa High Court", "Odisha High Court"]
+
+  - court_code: "PAT"
+    dattam_code: "10_8"
+    dattam_tilde: "10~8"
+    court_name: "High Court of Judicature at Patna"
+    tier: "hc"
+    bench_code: "PAT"
+    bench_name: "Patna Principal Bench"
+    state_ut: "Bihar"
+    seat_city: "Patna"
+    hc_jurisdiction: ["Bihar"]
+    aliases: ["PAT", "10_8", "10~8", "Patna High Court"]
+
+  - court_code: "PHC"
+    dattam_code: "3_22"
+    dattam_tilde: "3~22"
+    court_name: "High Court of Punjab and Haryana"
+    tier: "hc"
+    bench_code: "PHC"
+    bench_name: "Chandigarh Principal Bench"
+    state_ut: "Punjab"
+    seat_city: "Chandigarh"
+    hc_jurisdiction: ["Punjab", "Haryana", "Chandigarh"]
+    aliases: ["PHC", "P&H", "3_22", "3~22", "Punjab and Haryana High Court"]
+
+  - court_code: "RAJ"
+    dattam_code: "8_9"
+    dattam_tilde: "8~9"
+    court_name: "High Court of Judicature for Rajasthan"
+    tier: "hc"
+    bench_code: "RAJ"
+    bench_name: "Jodhpur & Jaipur Benches"
+    state_ut: "Rajasthan"
+    seat_city: "Jodhpur"
+    hc_jurisdiction: ["Rajasthan"]
+    aliases: ["RAJ", "8_9", "8~9", "Rajasthan High Court"]
+
+  - court_code: "SIK"
+    dattam_code: "11_24"
+    dattam_tilde: "11~24"
+    court_name: "High Court of Sikkim"
+    tier: "hc"
+    bench_code: "SIK"
+    bench_name: "Gangtok Principal Bench"
+    state_ut: "Sikkim"
+    seat_city: "Gangtok"
+    hc_jurisdiction: ["Sikkim"]
+    aliases: ["SIK", "11_24", "11~24", "Sikkim High Court"]
+
+  - court_code: "TSHC"
+    dattam_code: "36_29"
+    dattam_tilde: "36~29"
+    court_name: "High Court for the State of Telangana"
+    tier: "hc"
+    bench_code: "TSHC"
+    bench_name: "Hyderabad Principal Bench"
+    state_ut: "Telangana"
+    seat_city: "Hyderabad"
+    hc_jurisdiction: ["Telangana"]
+    aliases: ["TSHC", "36_29", "36~29", "Telangana High Court"]
+
+  - court_code: "TRI"
+    dattam_code: "16_20"
+    dattam_tilde: "16~20"
+    court_name: "High Court of Tripura"
+    tier: "hc"
+    bench_code: "TRI"
+    bench_name: "Agartala Principal Bench"
+    state_ut: "Tripura"
+    seat_city: "Agartala"
+    hc_jurisdiction: ["Tripura"]
+    aliases: ["TRI", "16_20", "16~20", "Tripura High Court"]
+
+  - court_code: "UKHC"
+    dattam_code: "5_15"
+    dattam_tilde: "5~15"
+    court_name: "High Court of Uttarakhand"
+    tier: "hc"
+    bench_code: "UKHC"
+    bench_name: "Nainital Principal Bench"
+    state_ut: "Uttarakhand"
+    seat_city: "Nainital"
+    hc_jurisdiction: ["Uttarakhand"]
+    aliases: ["UKHC", "5_15", "5~15", "Uttarakhand High Court"]
+
+  # ---------------------------------------------------------------------------
+  # 3. 15 Appellate Tribunals & Quasi-Judicial Forums
+  # ---------------------------------------------------------------------------
+  - court_code: "NCLT"
+    court_name: "National Company Law Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "NCLAT"
+    court_name: "National Company Law Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "ITAT"
+    court_name: "Income Tax Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Maharashtra"
+    seat_city: "Mumbai"
+    hc_jurisdiction: ["All India"]
+  - court_code: "NGT"
+    court_name: "National Green Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "SAT"
+    court_name: "Securities Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Maharashtra"
+    seat_city: "Mumbai"
+    hc_jurisdiction: ["All India"]
+  - court_code: "APTEL"
+    court_name: "Appellate Tribunal for Electricity"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "CAT"
+    court_name: "Central Administrative Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "CESTAT"
+    court_name: "Customs, Excise and Service Tax Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "DRT"
+    court_name: "Debts Recovery Tribunal & DRAT"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "CCI"
+    court_name: "Competition Commission of India"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "IBBI"
+    court_name: "Insolvency and Bankruptcy Board of India Disciplinary Orders"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "TDSAT"
+    court_name: "Telecom Disputes Settlement and Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "RERA"
+    court_name: "Real Estate Appellate Tribunals (State RERA/REAT)"
+    tier: "tribunal"
+    state_ut: "All States"
+    seat_city: "State Capitals"
+    hc_jurisdiction: ["All India"]
+  - court_code: "ATFP"
+    court_name: "Appellate Tribunal under SAFEMA / PMLA (ATFP)"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "GST_AAR"
+    court_name: "GST Authority for Advance Rulings & AAAR"
+    tier: "tribunal"
+    state_ut: "All States"
+    seat_city: "State Capitals"
+    hc_jurisdiction: ["All India"]
+
+  # ---------------------------------------------------------------------------
+  # 4. 12 Sectoral & Financial Regulators
+  # ---------------------------------------------------------------------------
+  - court_code: "RBI"
+    court_name: "Reserve Bank of India"
+    tier: "regulator"
+    state_ut: "Maharashtra"
+    seat_city: "Mumbai"
+    hc_jurisdiction: ["All India"]
+  - court_code: "SEBI"
+    court_name: "Securities and Exchange Board of India"
+    tier: "regulator"
+    state_ut: "Maharashtra"
+    seat_city: "Mumbai"
+    hc_jurisdiction: ["All India"]
+  - court_code: "MCA"
+    court_name: "Ministry of Corporate Affairs"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "IRDAI"
+    court_name: "Insurance Regulatory and Development Authority of India"
+    tier: "regulator"
+    state_ut: "Telangana"
+    seat_city: "Hyderabad"
+    hc_jurisdiction: ["All India"]
+  - court_code: "TRAI"
+    court_name: "Telecom Regulatory Authority of India"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "CBIC"
+    court_name: "Central Board of Indirect Taxes and Customs"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "MOEFCC"
+    court_name: "Ministry of Environment, Forest and Climate Change"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "CPCB"
+    court_name: "Central Pollution Control Board"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "DGFT"
+    court_name: "Directorate General of Foreign Trade"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "DFS"
+    court_name: "Department of Financial Services"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "LAWCOMM"
+    court_name: "Law Commission of India & Ministry of Law and Justice"
+    tier: "regulator"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+  - court_code: "STATE_GST"
+    court_name: "State Goods and Services Tax Commissioners"
+    tier: "regulator"
+    state_ut: "All States"
+    seat_city: "State Capitals"
+    hc_jurisdiction: ["All India"]
+
+  # ---------------------------------------------------------------------------
+  # 5. District & Subordinate Courts (DC)
+  # ---------------------------------------------------------------------------
+  - court_code: "DC"
+    court_name: "District and Subordinate Courts of India (eCourts / NJDG)"
+    tier: "district"
+    state_ut: "All States and Union Territories"
+    seat_city: "District Headquarters"
+    hc_jurisdiction: ["All India"]
+    aliases: ["DC", "DISTRICT", "District Court"]

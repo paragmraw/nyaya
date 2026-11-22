@@ -7,7 +7,25 @@ import sys
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+_CHAT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_MCP_ROOT = os.path.join(os.path.dirname(_CHAT_ROOT), "mcp")
+if _CHAT_ROOT not in sys.path:
+    sys.path.insert(0, _CHAT_ROOT)
+if os.path.isdir(_MCP_ROOT) and _MCP_ROOT not in sys.path:
+    sys.path.insert(0, _MCP_ROOT)
+
+try:
+    import langchain_core  # noqa: F401
+except ImportError:
+    import glob
+    import site
+
+    for _sp in (
+        os.path.join(_CHAT_ROOT, ".venv", "Lib", "site-packages"),
+        *glob.glob(os.path.join(_CHAT_ROOT, ".venv", "lib", "python*", "site-packages")),
+    ):
+        if os.path.isdir(_sp):
+            site.addsitedir(_sp)
 
 os.environ.setdefault("NVIDIA_API_KEY", "nvapi-test-key-1234567890")
 
@@ -60,7 +78,7 @@ def fake_tools(monkeypatch):
     patching.)"""
     from nyaya_chat import graph as graph_mod
     from nyaya_chat import tools_layer as tools_layer_mod
-    tools = _make_fake_tools(["semantic_query", "get_section"])
+    tools = _make_fake_tools(["search_statutes", "get_provision"])
     async def _load(_=None):
         return tools
     monkeypatch.setattr(tools_layer_mod, "load_tools", _load)
@@ -81,7 +99,7 @@ def _make_fake_tools(names):
     from pydantic import BaseModel
 
     def _result(name, kw):
-        ref = kw.get("section_number") or kw.get("section") or "1"
+        ref = kw.get("ref") or kw.get("section_number") or kw.get("section") or "1"
         return _json.dumps({
             "act": kw.get("act") or "IPC",
             "ref": ref,
@@ -94,19 +112,26 @@ def _make_fake_tools(names):
     # unset field from a supplied one.
     class _FakeArgs(BaseModel):
         act: str | None = None
+        ref: str | None = None
         section_number: str | None = None
         section: str | None = None
         query: str | None = None
+        citation: str | None = None
+        identifier: str | None = None
 
     tools = []
     for name in names:
-        def _run(act: str | None = None, section_number: str | None = None,
-                 section: str | None = None, query: str | None = None, _name=name):
-            return _result(_name, {"act": act, "section_number": section_number, "section": section})
+        def _run(act: str | None = None, ref: str | None = None,
+                 section_number: str | None = None, section: str | None = None,
+                 query: str | None = None, citation: str | None = None,
+                 identifier: str | None = None, _name=name):
+            return _result(_name, {"act": act, "ref": ref, "section_number": section_number, "section": section})
 
-        async def _arun(act: str | None = None, section_number: str | None = None,
-                        section: str | None = None, query: str | None = None, _name=name):
-            return _result(_name, {"act": act, "section_number": section_number, "section": section})
+        async def _arun(act: str | None = None, ref: str | None = None,
+                        section_number: str | None = None, section: str | None = None,
+                        query: str | None = None, citation: str | None = None,
+                        identifier: str | None = None, _name=name):
+            return _result(_name, {"act": act, "ref": ref, "section_number": section_number, "section": section})
 
         t = StructuredTool.from_function(
             _run, coroutine=_arun, name=name, description=f"fake {name}",

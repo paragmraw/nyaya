@@ -1,20 +1,20 @@
 import type { Metadata } from "next";
-import McpToolsList from "@/components/McpToolsList";
 import Breadcrumb from "@/components/Breadcrumb";
 import McpConfig from "@/components/McpConfig";
+import McpToolsList from "@/components/McpToolsList";
 import PipelineStage from "@/components/PipelineStage";
 import { FLOW, INFRA, PLANNED, SERVICES, TODAY } from "@/lib";
 import StructuredData, { architectureSchema } from "@/components/StructuredData";
-import { pageOpenGraph } from "@/lib/site";
+import { API_VERSION, pageOpenGraph } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Architecture",
   description:
-    "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
+    "How Nyaya v2.0 works: Option R2 zero-DB-ops pure-lexical pipeline (SQLite FTS5 + LanceDB BM25 + DuckDB ZSTD Parquet + direct S3 pypdfium2) serving 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
   openGraph: pageOpenGraph({
-    title: "Nyaya Architecture - Retrieval-Grounded Legal AI Pipeline",
+    title: "Nyaya v2.0 Architecture - Option R2 Pure-Lexical Legal MCP",
     description:
-      "How Nyaya answers: a four-stage pipeline (query → retrieve → rerank → cite) exposed via web, API, and MCP. Stack: pgvector, nvidia/nemotron-3-embed-1b, Nemotron-3.5 Lightning.",
+      "Baked SQLite FTS5 core, LanceDB BM25 & DuckDB ZSTD Parquet on Railway Storage Bucket, direct AWS S3 pypdfium2, and dual uvx stdio + HTTP transport.",
   }),
 };
 
@@ -27,10 +27,10 @@ export default function ArchitecturePage() {
         <div className="container">
           {/* hero */}
           <section>
-            <p className="eyebrow">Architecture</p>
-            <h1>How Nyaya answers</h1>
+            <p className="eyebrow">Architecture · Option R2 · v{API_VERSION}</p>
+            <h1>Pure lexical, zero DB ops</h1>
             <p className="lead lead-wide">
-              Query → retrieve → cite. A four-stage pipeline over an indexed legal corpus, exposed via web, API, and MCP.
+              Baked SQLite FTS5 core + LanceDB native BM25 + DuckDB ZSTD Parquet + direct S3 <code>pypdfium2</code> — serving 12 MCP tools, 8 <code>nyaya://</code> resources, 4 practitioner prompts, REST APIs, and optional <code>/chat</code> inside a single &lt;1 GB RAM container.
             </p>
           </section>
 
@@ -38,7 +38,7 @@ export default function ArchitecturePage() {
           <section className="section">
             <div className="section-head">
               <h2>Pipeline</h2>
-              <p className="sec-desc">Click a stage to expand technical detail. Each stage is a discrete service with its own contract.</p>
+              <p className="sec-desc">Click any stage to expand storage, security, and verification details.</p>
             </div>
             <PipelineStage />
           </section>
@@ -47,11 +47,11 @@ export default function ArchitecturePage() {
           <section className="section">
             <div className="section-head">
               <h2>Stack</h2>
-              <p className="sec-desc">Services and infrastructure. Tool tags are generic roles, not vendor endorsements.</p>
+              <p className="sec-desc">Option R2 components: zero managed database servers, zero dense vectors in Phase 1, and zero API keys required for MCP.</p>
             </div>
             <div className="stack-grid">
               <div className="stack-col">
-                <div className="sx-head">Services</div>
+                <div className="sx-head">Retrieval &amp; Storage Tiers</div>
                 {SERVICES.map((s) => (
                   <div className="stack-row" key={s.name}>
                     <div>
@@ -63,7 +63,7 @@ export default function ArchitecturePage() {
                 ))}
               </div>
               <div className="stack-col">
-                <div className="sx-head">Infrastructure</div>
+                <div className="sx-head">Runtime &amp; Governance</div>
                 {INFRA.map((s) => (
                   <div className="stack-row" key={s.name}>
                     <div>
@@ -81,7 +81,7 @@ export default function ArchitecturePage() {
           <section className="section">
             <div className="section-head">
               <h2>Data flow</h2>
-              <p className="sec-desc">From question to cited answer, step by step. Each step links to the pipeline stage it belongs to.</p>
+              <p className="sec-desc">From query or draft brief to verified citation output, step by step.</p>
             </div>
             <div className="flow">
               {FLOW.map((f) => (
@@ -96,9 +96,9 @@ export default function ArchitecturePage() {
           {/* MCP server */}
           <section className="section">
             <div className="section-head">
-              <h2>MCP server</h2>
+              <h2>MCP server (stdio &amp; Streamable HTTP)</h2>
               <p className="sec-desc">
-                Nyaya ships an MCP server so Claude, Cursor, and opencode can query the corpus directly from your editor. Add this config to your client:
+                Connect Claude Desktop, Cursor, opencode, or Antigravity locally over <code>stdio</code> via <code>uvx nyaya-mcp</code> (zero secrets, private client files stay on disk) or over Streamable HTTP at <code>/mcp</code>.
               </p>
             </div>
 
@@ -110,12 +110,12 @@ export default function ArchitecturePage() {
           {/* openness / roadmap */}
           <section className="section">
             <div className="section-head">
-              <h2>Openness & roadmap</h2>
-              <p className="sec-desc">What is open today and what is planned. Honest status. No fake repo links.</p>
+              <h2>Openness &amp; roadmap</h2>
+              <p className="sec-desc">Apache-2.0 server and ingestion tooling with clear licensing boundaries across public and academic datasets.</p>
             </div>
             <div className="openness">
               <div className="openness-card">
-                <div className="oc-title">Today</div>
+                <div className="oc-title">Live in v{API_VERSION}</div>
                 <div className="oc-list">
                   {TODAY.map((o) => (
                     <div className="oc-item" key={o.text}>

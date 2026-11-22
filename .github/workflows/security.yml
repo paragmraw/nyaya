@@ -23,11 +23,74 @@ jobs:
         with:
           version: "0.11.25"
 
-      - name: Export requirements and audit
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Export MCP requirements and audit
         run: |
-          uv export --frozen --no-dev --no-emit-project --no-editable --format requirements-txt > requirements.txt
-          pip install pip-audit
-          pip-audit -r requirements.txt
+          uv export --locked --no-dev --extra http --no-emit-project --no-editable --format requirements-txt > requirements.txt
+          uv venv .audit-venv
+          uv pip install --python .audit-venv/bin/python pip-audit
+          .audit-venv/bin/pip-audit -r requirements.txt
+
+  chat-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: chat
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.25"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Export chat requirements and audit
+        run: |
+          uv export --locked --no-dev --no-emit-project --no-editable --format requirements-txt > chat-requirements.txt
+          uv venv .audit-venv
+          uv pip install --python .audit-venv/bin/python pip-audit
+          .audit-venv/bin/pip-audit -r chat-requirements.txt
+
+  license-hygiene:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify lockfiles exclude banned copyleft and Postgres packages
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import sys
+          import tomllib
+
+          banned = {
+              "ecourts",
+              "pymupdf",
+              "fitz",
+              "surya-ocr",
+              "psycopg",
+              "psycopg-pool",
+              "psycopg-binary",
+              "pgvector",
+          }
+          for lock_path in ("mcp/uv.lock", "chat/uv.lock"):
+              data = tomllib.loads(pathlib.Path(lock_path).read_text(encoding="utf-8"))
+              pkgs = {str(pkg.get("name", "")).lower() for pkg in data.get("package", [])}
+              hits = sorted(pkgs & banned)
+              if hits:
+                  print(f"::error::Banned package(s) in {lock_path}: {hits}", file=sys.stderr)
+                  sys.exit(1)
+              print(f"OK: {lock_path} ({len(pkgs)} packages) clean")
+          PY
 
   npm-audit:
     runs-on: ubuntu-latest

@@ -1,90 +1,72 @@
-"""MCP tools for nyaya."""
+"""MCP v2.0 12-tool surface and fail-fast registration guard for Nyaya."""
+
+from __future__ import annotations
 
 import logging
 from typing import Any
 
-from .corpus_stats import register as _corpus_stats
+from .browse_statute import browse_statute
+from .browse_statute import register as _browse_statute
+from .compare_provisions import compare_provisions
+from .compare_provisions import register as _compare_provisions
+from .corpus_status import corpus_status
+from .corpus_status import register as _corpus_status
+from .cross_reference import cross_reference
 from .cross_reference import register as _cross_reference
-from .get_amendments_for_article import register as _get_amendments_for_article
-from .get_article import register as _get_article
+from .get_judgment import get_judgment
 from .get_judgment import register as _get_judgment
-from .get_section import register as _get_section
-from .list_acts import register as _list_acts
-from .schedules_amendments import register as _schedules_amendments
-from .semantic_query import register as _semantic_query
+from .get_provision import get_provision
+from .get_provision import register as _get_provision
+from .get_provision_history import get_provision_history
+from .get_provision_history import register as _get_provision_history
+from .judgment_analytics import judgment_analytics
+from .judgment_analytics import register as _judgment_analytics
+from .search_judgments import register as _search_judgments
+from .search_judgments import search_judgments
+from .search_statutes import register as _search_statutes
+from .search_statutes import search_statutes
+from .trace_precedent import register as _trace_precedent
+from .trace_precedent import trace_precedent
+from .verify_citations import register as _verify_citations
+from .verify_citations import verify_citations
 
 log = logging.getLogger("nyaya.tools")
 
-# (register_fn, tool_name, {tool names the module must land}) triples in
-# registration order. 9 register functions producing 16 @mcp.tool decorators
-# (list_acts registers 5: list_acts/list_chapters/list_sections/list_articles/
-# list_judgments; schedules_amendments registers 4: list_schedules/get_schedule/
-# list_amendments/get_amendment).
-#
-# The expected-name sets back the fail-fast contract in :func:`register`: if a
-# module registers a name that already exists (duplicate — FastMCP only logs a
-# warning and silently keeps the old tool) or fails to land the names it
-# claims (malformed — e.g. an exception swallowed inside FastMCP), startup
-# raises instead of serving a silently crippled tool surface.
+__all__ = [
+    "browse_statute",
+    "compare_provisions",
+    "corpus_status",
+    "cross_reference",
+    "get_judgment",
+    "get_provision",
+    "get_provision_history",
+    "judgment_analytics",
+    "register",
+    "search_judgments",
+    "search_statutes",
+    "trace_precedent",
+    "verify_citations",
+]
+
+# Exact 12 canonical v2 tools in registration order.
 _REGISTRATIONS: list[tuple[Any, str, frozenset[str]]] = [
-    (
-        _semantic_query,
-        "semantic_query",
-        frozenset({"semantic_query"}),
-    ),
-    (
-        _get_section,
-        "get_section",
-        frozenset({"get_section"}),
-    ),
-    (
-        _get_article,
-        "get_article",
-        frozenset({"get_article"}),
-    ),
-    (
-        _list_acts,
-        "list_acts",
-        frozenset({
-            "list_acts", "list_chapters", "list_sections",
-            "list_articles", "list_judgments",
-        }),
-    ),
-    (
-        _cross_reference,
-        "cross_reference",
-        frozenset({"cross_reference"}),
-    ),
-    (
-        _get_judgment,
-        "get_judgment",
-        frozenset({"get_judgment"}),
-    ),
-    (
-        _schedules_amendments,
-        "schedules_amendments",
-        frozenset({"list_schedules", "get_schedule", "list_amendments", "get_amendment"}),
-    ),
-    (
-        _corpus_stats,
-        "corpus_stats",
-        frozenset({"corpus_stats"}),
-    ),
-    (
-        _get_amendments_for_article,
-        "get_amendments_for_article",
-        frozenset({"get_amendments_for_article"}),
-    ),
+    (_search_statutes, "search_statutes", frozenset({"search_statutes"})),
+    (_get_provision, "get_provision", frozenset({"get_provision"})),
+    (_browse_statute, "browse_statute", frozenset({"browse_statute"})),
+    (_compare_provisions, "compare_provisions", frozenset({"compare_provisions"})),
+    (_cross_reference, "cross_reference", frozenset({"cross_reference"})),
+    (_get_provision_history, "get_provision_history", frozenset({"get_provision_history"})),
+    (_search_judgments, "search_judgments", frozenset({"search_judgments"})),
+    (_get_judgment, "get_judgment", frozenset({"get_judgment"})),
+    (_trace_precedent, "trace_precedent", frozenset({"trace_precedent"})),
+    (_judgment_analytics, "judgment_analytics", frozenset({"judgment_analytics"})),
+    (_verify_citations, "verify_citations", frozenset({"verify_citations"})),
+    (_corpus_status, "corpus_status", frozenset({"corpus_status"})),
 ]
 
 
 def _registered_tool_names(mcp: Any) -> set[str] | None:
-    """Return the tool names currently registered on ``mcp``, or None if the
-    running FastMCP version exposes no readable registry.
-
-    Reads FastMCP's local provider component store (sync, no event loop needed
-    — :func:`register` runs at import time). Keys look like ``tool:<name>@``.
-    """
+    """Return the tool names currently registered on ``mcp``, or None if not introspectable."""
     provider = getattr(mcp, "_local_provider", None)
     components = getattr(provider, "_components", None)
     if not isinstance(components, dict):
@@ -92,21 +74,12 @@ def _registered_tool_names(mcp: Any) -> set[str] | None:
     names: set[str] = set()
     for key in components:
         if isinstance(key, str) and key.startswith("tool:"):
-            names.add(key[len("tool:"):].split("@", 1)[0])
+            names.add(key[len("tool:") :].split("@", 1)[0])
     return names
 
 
 def register(mcp: Any) -> None:
-    """Register every tool, failing loudly on any registration problem.
-
-    Security-critical surface: a silently skipped or silently shadowed tool
-    is worse than a failed boot (matching the middleware fail-fast stance in
-    ``server.py``). Raises instead of logging-and-continuing when:
-    - a register function raises;
-    - a module would register a name that already exists (FastMCP only warns
-      and keeps the FIRST registration, so a duplicate is invisible otherwise);
-    - a module fails to land the tools it is expected to provide.
-    """
+    """Register all 12 v2 tools, failing loudly on any registration problem."""
     for reg_fn, name, expected in _REGISTRATIONS:
         before = _registered_tool_names(mcp)
         try:
@@ -118,7 +91,7 @@ def register(mcp: Any) -> None:
             ) from exc
         after = _registered_tool_names(mcp)
         if before is None or after is None:
-            continue  # registry not introspectable; the raise above is our guard
+            continue
         duplicates = sorted(expected & before)
         if duplicates:
             raise RuntimeError(

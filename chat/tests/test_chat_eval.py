@@ -1,11 +1,11 @@
 """Pytest wrapper for the merged SSE eval harness (``eval/chat_eval.py``).
 
 These are LIVE-server integration tests under the ``eval`` pytest marker:
-they need a running nyaya stack (Postgres + NVIDIA API key + the server up).
+they need a running nyaya v2 server + NVIDIA API key.
 Set ``NYAYA_EVAL_HOST`` to opt in::
 
     cd chat
-    NYAYA_EVAL_HOST=http://localhost:8001 uv run pytest -m eval
+    NYAYA_EVAL_HOST=http://localhost:8000 uv run pytest -m eval
 
 Without ``NYAYA_EVAL_HOST`` every test here skips, so the default offline
 pytest run stays hermetic (``--strict-markers`` is satisfied: ``eval`` is

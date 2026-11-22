@@ -64,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     s = settings or get_settings()
     app = FastAPI(
         title="nyaya-chat",
-        version="0.1.0",
+        version="2.0.0",
         description="LangGraph + NVIDIA Nemotron chat backend (sub-app of nyaya).",
         lifespan=lifespan,
         docs_url="/docs",
@@ -178,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/")
     async def root() -> dict[str, str]:
-        return {"service": "nyaya-chat", "version": "0.1.0", "turn": "POST /chat/turn", "health": "GET /chat/health"}
+        return {"service": "nyaya-chat", "version": "2.0.0", "turn": "POST /chat/turn", "health": "GET /chat/health"}
 
     return app
 

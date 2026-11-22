@@ -1,258 +1,65 @@
-"""nyaya MCP server: FastMCP app, lifespan, /health, entrypoint."""
+"""Compatibility shim for ``nyaya.server`` delegating to ``mcp_app``, ``http_app``, and ``cli``.
+
+Importing this module does not call ``get_settings()`` at import time; ``app``
+and ``mcp_instance`` are constructed lazily on first attribute access so
+``from nyaya.server import app`` continues to work in tests and ASGI servers.
+"""
 
 from __future__ import annotations
 
-import logging
-import os
-import uuid
-from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastmcp import FastMCP
-from fastmcp.server.lifespan import lifespan as lifespan_decorator
-from starlette.datastructures import MutableHeaders
-from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.staticfiles import StaticFiles
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
-from . import __version__, db
-from . import config as _config
-from .config import get_settings
-from .exceptions import DatabaseUnavailable
-from .ratelimit import register_rate_limiting
-from .security_headers import SecurityHeadersMiddleware
-
-log = logging.getLogger("nyaya")
-
-# Allowed CORS origins. Edit this list to add domains.
-# In production, restrict to known origins only.
-_ALLOWED_ORIGINS = ["https://nyaya.parag.tech"]
-
-
-@lifespan_decorator
-async def nyaya_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
-    # Pre-warm: build the chat graph at startup so the first request doesn't
-    # pay the tool-loading + graph-compilation cost. The graph is built
-    # lazily by get_graph() if this fails (e.g. DB unavailable at startup).
-    #
-    # Failure modes are distinct and deliberate:
-    #   • nyaya_chat not installed (slim MCP-only image) → info, continue
-    #   • build failed (DB down, bad key) → warning + traceback, continue;
-    #     the first /turn retries the build, so swallowing this is correct
-    # The old triple-nested try/except/pass hid genuine bugs (e.g. a typo in
-    # the import path) as a silent skip; the traceback keeps them visible.
-    if not os.environ.get("NVIDIA_API_KEY"):
-        log.info("NVIDIA_API_KEY not set; chat graph not pre-warmed")
-    else:
-        try:
-            from nyaya_chat.graph import get_graph as _get_chat_graph
-            await _get_chat_graph()
-            log.info("chat graph pre-warmed at startup")
-        except ImportError:
-            log.info("nyaya_chat package not installed; chat graph not pre-warmed")
-        except Exception:
-            log.warning("chat graph pre-warm failed (will retry on first request)", exc_info=True)
-    try:
-        yield {}
-    finally:
-        db.close_db()
-
-
-def _build_mcp() -> FastMCP:
-    mcp = FastMCP(
-        name="nyaya",
-        instructions=(
-            "nyaya is an Indian law MCP server. Use list_acts first to discover the corpus, "
-            "then get_section / get_article to read specific provisions, semantic_query for "
-            "semantic search (embedding retrieval + reranking), and cross_reference to find "
-            "related provisions (especially the bidirectional IPC<->BNS mapping). "
-            "Every result includes source/license provenance — cite it when answering."
-        ),
-        lifespan=nyaya_lifespan,
-    )
-
-    from .resources import register as register_resources
-    from .tools import register as register_tools
-
-    register_tools(mcp)
-    register_resources(mcp)
-
-    @mcp.custom_route("/health", methods=["GET"])
-    async def health(_request: Request) -> JSONResponse:
-        try:
-            stats = db.corpus_stats()
-            status = "healthy"
-        except DatabaseUnavailable:
-            stats = {}
-            status = "degraded"
-        return JSONResponse(
-            {
-                "status": status,
-                "service": "nyaya",
-                "version": __version__,
-                "counts": stats,
-            }
-        )
-
-    return mcp
-
-
-mcp_instance = _build_mcp()
-app = mcp_instance.http_app(stateless_http=True, path="/mcp")
-
-
-class RequestIdMiddleware:
-    """Generate a UUID per request for log correlation and expose it as
-    X-Request-ID (pure ASGI: no BaseHTTPMiddleware response task/buffering,
-    so the chat SSE stream passes through untouched).
-
-    Stashes the id on ``scope["state"]`` so inner routes/middleware read it
-    via ``request.state.request_id`` exactly as before.
-    """
-
-    def __init__(self, app: ASGIApp) -> None:
-        self.app = app
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-        request_id = str(uuid.uuid4())
-        scope.setdefault("state", {})["request_id"] = request_id
-
-        async def send_with_request_id(message: Message) -> None:
-            if message["type"] == "http.response.start":
-                MutableHeaders(scope=message)["X-Request-ID"] = request_id
-            await send(message)
-
-        await self.app(scope, receive, send_with_request_id)
-
-
-# Register middleware. These are security-critical — if any fails to import
-# or initialise, we want the server to fail fast rather than silently start
-# without protection. No bare ``except Exception`` here.
-#
-# Final middleware order (Starlette: last-added = OUTERMOST). Runtime order,
-# request in:
-#   CORS -> SecurityHeaders -> RequestId -> RateLimit -> BodySizeLimit -> app
-#
-# Rationale:
-# - CORS is outermost (added last, per the Task 5 ruling) so 429/413 short
-#   responses generated by the rate limiter / body-cap carry
-#   Access-Control-Allow-* — browsers previously saw opaque CORS failures on
-#   429s.
-# - SecurityHeaders sits just inside CORS so its headers (CSP, X-Frame-Options,
-#   ...) are stamped on EVERY response, including 429/413/503 generated by the
-#   inner middleware and SPA fallbacks. This is why SecurityHeaders is not
-#   outermost: outermost would sit below CORS, whose preflight/short responses
-#   would bypass it — the tradeoff is that CORS OPTIONS preflights are handled
-#   before security headers can be stamped (unchanged from the old order).
-# - Rate limiting runs inside request-id stamping, so 429s still carry
-#   X-Request-ID, and inside the security/CORS wrappers as above.
-register_rate_limiting(app)  # adds BodySizeLimit (inner), then RateLimit
-app.add_middleware(RequestIdMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_ALLOWED_ORIGINS,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Accept"],
-    allow_credentials=False,
+from .cli import main as _cli_main
+from .http_app import (
+    RequestIdMiddleware,
+    _CachedStaticFiles,
+    create_http_app,
 )
+from .mcp_app import create_mcp
 
-# REST endpoints for the web frontend (see rest.py). Mounted before the
-# static catch-all so /api/* takes precedence over SPA routes.
-from . import rest as _rest  # noqa: E402
+if TYPE_CHECKING:
+    app: Any
+    mcp: Any
+    mcp_instance: Any
 
-_rest.register(app, mcp_instance)
+__all__ = [
+    "RequestIdMiddleware",
+    "_CachedStaticFiles",
+    "app",
+    "create_app",
+    "create_http_app",
+    "create_mcp",
+    "main",
+    "mcp",
+    "mcp_instance",
+]
 
+create_app = create_http_app
 
-# Chat sub-app: a FastAPI app (chat/nyaya_chat) hosting the LangGraph + NVIDIA
-# Nemotron retrieval-grounded assistant, mounted at /chat so the SPA, REST,
-# MCP, and chat endpoints share one origin, one healthcheck, and one Railway
-# service. The mount is optional: if the chat package is not installed (e.g.
-# the slim MCP-only image) or NVIDIA_API_KEY is not configured, the import is
-# skipped and /chat 404s rather than crashing the server. Cross-cutting
-# middleware (CORS, security headers, request-id, rate limiting, body-size
-# cap) is already handled by this host app; the sub-app owns only chat-specific
-# concerns (the agent, the LLM, the SSE encoder).
-def _maybe_mount_chat() -> None:
-    if not os.environ.get("NVIDIA_API_KEY"):
-        log.info("NVIDIA_API_KEY not set; chat sub-app not mounted (/chat will 404)")
-        return
-    try:
-        from nyaya_chat.server import create_app as _create_chat_app
-    except ImportError:
-        log.info("nyaya_chat package not installed; chat sub-app not mounted (/chat will 404)")
-        return
-    # Build the sub-app now (registers routes) with no pre-built agent; the
-    # host lifespan injects the built agent into app.state after startup.
-    # Mounted sub-app lifespans don't run under Starlette, so the host owns
-    # the build + state injection.
-    chat_app = _create_chat_app()
-    app.mount("/chat", chat_app, name="chat")
-    log.info("chat sub-app mounted at /chat (agent built at startup)")
+_cached_mcp: Any = None
+_cached_app: Any = None
 
 
-_maybe_mount_chat()
+def _get_or_build() -> tuple[Any, Any]:
+    global _cached_mcp, _cached_app
+    if _cached_app is None:
+        _cached_mcp = create_mcp()
+        _cached_app = create_http_app(mcp=_cached_mcp)
+    return _cached_mcp, _cached_app
 
 
-# Serve the built Next.js static export (web/out/) from the same origin so
-# the SPA, REST, and MCP endpoints share one domain and one healthcheck. The
-# mount is optional: local nyaya dev without a built SPA still works — the
-# route simply 404s. In the Railway image the Dockerfile copies web/out/ here.
-_WEB_OUT = _config.WEB_OUT
-
-
-class _CachedStaticFiles(StaticFiles):
-    """StaticFiles with content-addressed caching semantics.
-
-    Next.js assets under ``/_next/static/`` are content-hashed — their URL
-    changes whenever content does — so they are served with a 1-year
-    ``immutable`` Cache-Control. Everything else (HTML, robots.txt, sitemap,
-    other hashed-but-re-deployable files) is served with ``no-cache`` so the
-    browser revalidates and picks up new deploys immediately.
-    """
-
-    _IMMUTABLE_PREFIX = "_next/static/"
-    _IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
-    _NO_CACHE = "no-cache"
-
-    async def get_response(self, path: str, scope: Scope) -> Any:
-        response = await super().get_response(path, scope)
-        # StaticFiles hands us an OS-normalized path (backslashes on Windows);
-        # normalize so the URL-space prefix matches on every platform.
-        normalized = path.replace("\\", "/").lstrip("/")
-        if normalized.startswith(self._IMMUTABLE_PREFIX):
-            response.headers["Cache-Control"] = self._IMMUTABLE_CACHE_CONTROL
-        else:
-            # Also stamps the 404.html / other non-asset responses (harmless).
-            response.headers["Cache-Control"] = self._NO_CACHE
-        return response
-
-
-if os.path.isdir(_WEB_OUT):
-    # html=True enables SPA-style fallback: /corpus resolves to
-    # /corpus/index.html; unknown paths resolve to /404.html (or a 404).
-    app.mount("/", _CachedStaticFiles(directory=_WEB_OUT, html=True), name="web")
+def __getattr__(name: str) -> Any:
+    if name in ("mcp", "mcp_instance"):
+        mcp_inst, _ = _get_or_build()
+        return mcp_inst
+    if name == "app":
+        _, http_app = _get_or_build()
+        return http_app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def main() -> None:
-    import uvicorn
-
-    settings = get_settings()
-    logging.basicConfig(level=settings.log_level)
-    log.info("Starting nyaya: %s", settings.as_dict())
-    uvicorn.run(
-        "nyaya.server:app",
-        host="0.0.0.0",
-        port=settings.port,
-        log_level=settings.log_level.lower(),
-        timeout_keep_alive=30,
-        limit_concurrency=64,
-    )
+    raise SystemExit(_cli_main(["--transport", "http"]))
 
 
 if __name__ == "__main__":

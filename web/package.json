@@ -8,10 +8,10 @@
     "build": "npm run generate:corpus-stats && next build && npx next-sitemap --config next-sitemap.config.cjs out/",
     "generate:corpus-stats": "tsx scripts/generate-corpus-stats.ts",
     "lint": "eslint .",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "npm run generate:corpus-stats && tsx --test tests/*.test.ts"
   },
   "dependencies": {
-    "next": "^16.3.5",
+    "next": "^16.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",

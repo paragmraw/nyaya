@@ -8,25 +8,20 @@ import { RetryButton } from "./ErrorRow";
 import { createAutoScroller, type AutoScroller } from "@/lib/chat/auto-scroll";
 import { useChat } from "@/lib";
 
-// ChatPanel: the live Nyaya assistant. Streams tokens from the FastAPI chat
-// backend (chat/nyaya_chat) over SSE, renders citation chips for grounded
-// answers, and shows tool-call progress. Can be disabled via feature flag.
+// ChatPanel: optional conversational assistant over /chat/turn (mounted when
+// NVIDIA_API_KEY is configured). Streams SSE tokens, tool events, and grounded
+// citation chips verified against shared nyaya.citations.
 const GREETING =
-  "Hello. I'm Nyaya. I answer questions on the Constitution, CrPC, IPC/BNS and case law. Ask in plain English or legalese; I'll cite the exact provision.";
+  "Hello. I'm Nyaya v2.0. I verify statutes, BNS/BNSS/BSA transitions, 12 regulators, 15 tribunals, and Supreme Court / High Court precedents. Ask in plain English or legalese; I'll cite exact provisions and neutral citations.";
 
 // Fallback model display info (used before /chat/health responds)
 const FALLBACK_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";
 const FALLBACK_MODEL_NAME = "Nemotron-3.5 Lightning 30B";
 
-// Suggested opening questions, lifted from the eval scenario patterns
-// (chat/eval/golden.jsonl): one statute question, one constitutional, one
-// comparison (which exercises the multi-tool path). Chips are only shown on
-// the empty state — once the user has typed their own first message they're
-// noise.
 const SUGGESTED_PROMPTS = [
-  "What is the punishment for murder under IPC?",
-  "What does Article 21 of the Constitution guarantee?",
-  "Compare IPC section 302 with its BNS equivalent.",
+  "Compare IPC section 420 with its BNS equivalent and BNSS s.531 transition.",
+  "Is Section 66A of the IT Act still in force? Cite the Supreme Court judgment.",
+  "Search SC & Delhi High Court precedent on electronic evidence under IEA s.65B(4) / BSA s.63.",
 ];
 
 interface ChatPanelProps {
@@ -39,17 +34,12 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
   const [modelId, setModelId] = useState(FALLBACK_MODEL_ID);
   const [modelName, setModelName] = useState(FALLBACK_MODEL_NAME);
 
-  // Fetch model info from /chat/health for dynamic display (fixes drift risk)
   useEffect(() => {
     fetch("/chat/health")
       .then((r) => r.json())
       .then((data) => {
         if (data.model) {
           setModelId(data.model);
-          // Derive a display name from the model id. Only lowercase letters at
-          // a word boundary capitalize: digit-initial tokens ("30b", "3.5")
-          // keep their lowercase letter ("30b", not "30B") — \b[a-z] doesn't
-          // match inside a digit-run.
           const parts = data.model.split("/");
           const short = parts[parts.length - 1] || data.model;
           setModelName(short.replace(/-/g, " ").replace(/\b[a-z]/g, (c: string) => c.toUpperCase()));
@@ -64,15 +54,8 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
   const canReset = messages.length > 0 || !!error;
   const canRetry = !!error && !isStreaming;
   const modelUrl = `https://build.nvidia.com/${modelId}`;
-  // Unavailability (5xx / agent_unavailable → humanizeError's "temporarily
-  // unavailable" copy) gets its own composer placeholder so the input signals
-  // the outage rather than inviting a submit that will likely fail again.
   const unavailable = !!error && /temporarily unavailable/i.test(error);
 
-  // The streaming tail's announcement text for screen readers. Kept in its own
-  // aria-live region (below) so token-by-token updates don't re-read the whole
-  // conversation log, and phase changes / completion / failure are announced
-  // in plain language.
   const lastMsg = messages[messages.length - 1];
   const liveText = isStreaming
     ? (lastMsg?.role === "assistant" && lastMsg.status ? phaseLabel(lastMsg.status) : "Nyaya is responding…")
@@ -80,11 +63,6 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
       ? "Response complete."
       : "";
 
-  // Auto-scroll as the answer streams. A passive scroll listener maintains the
-  // near-bottom flag once (no layout reads per flush); onContentChanged only
-  // WRITES scrollTop when the user is at the bottom — the old per-flush
-  // effect read scrollHeight on every message patch, forcing synchronous
-  // layout each animation frame.
   const scrollerRef = useRef<AutoScroller | null>(null);
   useEffect(() => {
     const el = bodyRef.current;
@@ -135,16 +113,15 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
         </div>
       </div>
 
-      {/* The transcript itself is NOT a live region (role="log" was): each
-          token made screen readers re-read the whole log. Announcements are
-          handled by the streaming-tail live region below. */}
       <div className="chat-body" id="chatBody" ref={bodyRef} aria-label="Chat conversation">
         {showGreeting ? (
           <div className="msg bot">
             <div className="avatar" aria-hidden="true"><BalanceIcon /></div>
             <div className="bubble">
               {GREETING}
-              <span className="cite"><strong>Coverage:</strong> Constitution · CrPC 1973 · IPC · BNS/BNSS 2023 · SC judgments</span>
+              <span className="cite">
+                <strong>Coverage:</strong> Constitution (106 Amds) · BNS/BNSS/BSA ↔ IPC/CrPC/IEA · 37 Legislatures · 12 Regulators · 15 Tribunals · SC &amp; 25 HCs
+              </span>
               {!disabled && (
                 <div
                   className="suggest-row"

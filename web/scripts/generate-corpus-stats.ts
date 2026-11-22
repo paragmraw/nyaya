@@ -1,85 +1,91 @@
 #!/usr/bin/env node
-// Build-time script to generate corpus-stats.json.
+// Build-time script to generate corpus-stats.json (Nyaya v2.0 CorpusStatusResponse).
 //
 // Run via:  npm run generate:corpus-stats  (also runs as part of `npm run build`)
+// Optional: tsx scripts/generate-corpus-stats.ts --from-manifest path/to/corpus-status.json
 //
-// Single source of truth: CURATED in src/lib/data.ts. This script derives the
-// acts table AND the headline counts from it (parsing "All N articles/sections"
-// style coverage strings), writes the static JSON that
-//  - useCorpusStats() (src/lib/swr.ts) uses as the SWR fallbackData, and
-//  - the /corpus page (src/app/corpus/page.tsx) renders at build time,
-// so no stat number is maintained in more than one place.
+// Single source of truth: BASELINE_COUNTS & CURATED in src/lib/data.ts +
+// API_VERSION in src/lib/site.ts. Emits the static JSON snapshot that
+// useCorpusStatus() (src/lib/swr.ts) uses as fallbackData and that / and
+// /corpus/ render at build time.
 
-import { writeFileSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { CURATED } from "../src/lib/data";
-import type { CorpusCounts, CorpusStats } from "../src/lib/api";
+import { BASELINE_COUNTS, CURATED } from "../src/lib/data";
+import type { CorpusCounts, CorpusStatusResponse } from "../src/lib/api";
+import { API_VERSION } from "../src/lib/site";
 
 const SRC_DATA_DIR = join(process.cwd(), "src", "data");
 const PUBLIC_DIR = join(process.cwd(), "public");
 
-// Pull "464" out of "All 464 articles + 12 schedules", the first number of
-// "5 curated judgments (Kesavananda, …)", etc.
-const RE_ARTICLES = /All\s+(\d+)\s+articles/i;
-const RE_SCHEDULES = /All\s+(\d+)\s+articles\s+\+\s+(\d+)\s+schedules/i;
-const RE_SECTIONS = /All\s+(\d+)\s+sections/i;
-const RE_JUDGMENTS = /(\d+)\s+curated\s+judgments/i;
-
-function countFrom(coverage: string, re: RegExp): number | undefined {
-  const m = re.exec(coverage);
-  // Use the LAST capture group so multi-group patterns (e.g. the schedules
-  // regex) yield the number they were written for.
-  return m ? parseInt(m[m.length - 1], 10) : undefined;
+function parseManifestArg(argv: string[]): Partial<CorpusStatusResponse> | null {
+  const idx = argv.indexOf("--from-manifest");
+  if (idx === -1 || !argv[idx + 1]) return null;
+  const target = argv[idx + 1];
+  if (!existsSync(target)) {
+    console.warn(`--from-manifest path not found (${target}); using curated defaults.`);
+    return null;
+  }
+  try {
+    return JSON.parse(readFileSync(target, "utf8")) as Partial<CorpusStatusResponse>;
+  } catch (err) {
+    console.warn(`Failed to parse ${target}; using curated defaults:`, err);
+    return null;
+  }
 }
 
-const acts = CURATED.map((c) => {
-  const row: {
-    short_name: string;
-    name: string;
-    type: string;
-    coverage: string;
-    status: string;
-    fallback_date?: string;
-    count?: number;
-  } = {
-    short_name: c.short_name,
-    name: c.name,
-    type: c.type,
-    coverage: c.coverage,
-    status: c.status,
-  };
-  if (c.fallback_date) row.fallback_date = c.fallback_date;
-  // Parseable per-act counts (articles for the Constitution, sections for
-  // statutes, judgments for the landmark set) power the /corpus StatCards.
-  const count =
-    countFrom(c.coverage, RE_ARTICLES) ??
-    countFrom(c.coverage, RE_SECTIONS) ??
-    countFrom(c.coverage, RE_JUDGMENTS);
-  if (count !== undefined) row.count = count;
-  return row;
-});
-
-function sumOf(re: RegExp): number {
-  return CURATED.reduce((total, c) => total + (countFrom(c.coverage, re) ?? 0), 0);
-}
+const override = parseManifestArg(process.argv.slice(2));
 
 const counts: CorpusCounts = {
-  acts: CURATED.filter((c) => c.status === "live" && c.short_name).length,
-  articles: countFrom(CURATED[0]?.coverage ?? "", RE_ARTICLES) ?? 0,
-  // Only sections/articles whose counts are printed in the CURATED coverage
-  // strings are aggregated; laws whose coverage omits a number are not counted
-  // rather than guessed.
-  sections: sumOf(RE_SECTIONS),
-  judgments: countFrom(CURATED.find((c) => c.type === "Case law" && c.status === "live")?.coverage ?? "", RE_JUDGMENTS) ?? 0,
-  schedules: countFrom(CURATED[0]?.coverage ?? "", RE_SCHEDULES) ?? 0,
-  amendments: 0,
-  chapters: 0,
-  cross_refs: 0,
+  ...BASELINE_COUNTS,
+  ...(override?.counts ?? {}),
 };
 
-const stats: CorpusStats & { acts: typeof acts } = {
+const acts = CURATED.map((c) => ({
+  short_name: c.short_name,
+  aliases: c.aliases,
+  name: c.name,
+  type: c.type,
+  category: c.category,
+  tier: c.tier,
+  coverage: c.coverage,
+  status: c.status,
+  license_spdx: c.license_spdx,
+  commercial_safe: c.commercial_safe,
+  source: c.source,
+  ...(c.fallback_date ? { fallback_date: c.fallback_date } : {}),
+}));
+
+const sources = CURATED.map((c) => ({
+  source_id: (c.short_name || c.name).toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+  short_name: c.short_name,
+  name: c.name,
+  category: c.category,
+  coverage: c.coverage,
+  license_spdx: c.license_spdx,
+  commercial_safe: c.commercial_safe,
+  as_of: c.fallback_date || null,
+}));
+
+const statusPayload: CorpusStatusResponse & { acts: typeof acts } = {
+  version: API_VERSION,
+  service_version: API_VERSION,
+  retrieval_mode: "lexical_metadata_graph",
+  commercial_safe_locked: override?.commercial_safe_locked ?? false,
+  as_of: override?.as_of ?? new Date().toISOString().slice(0, 10),
+  tiers: override?.tiers ?? {
+    sqlite_core: "baked_readonly_fts5",
+    lance_fts: "railway_bucket_rust_bm25",
+    parquet_cold: "duckdb_zstd_parquet",
+    s3_pdf: "aws_opendata_pypdfium2",
+  },
   counts,
-  as_of: new Date().toISOString().slice(0, 10),
+  licensing: override?.licensing ?? {
+    code_license: "Apache-2.0",
+    commercial_safe_default: false,
+    nc_datasets: ["ddl_district_courts", "ildc_research"],
+  },
+  sources: override?.sources ?? sources,
   acts,
 };
 
@@ -87,13 +93,13 @@ function main() {
   try {
     mkdirSync(PUBLIC_DIR, { recursive: true });
     mkdirSync(SRC_DATA_DIR, { recursive: true });
-    const json = JSON.stringify(stats, null, 2);
+    const json = JSON.stringify(statusPayload, null, 2);
     const srcDataFile = join(SRC_DATA_DIR, "corpus-stats.json");
     writeFileSync(srcDataFile, `${json}\n`);
-    writeFileSync(join(PUBLIC_DIR, "corpus-stats.json"), json);
-    console.log(`Generated ${srcDataFile}`);
+    writeFileSync(join(PUBLIC_DIR, "corpus-stats.json"), `${json}\n`);
+    console.log(`Generated ${srcDataFile} (v${API_VERSION})`);
     console.log(
-      `  acts=${counts.acts} articles=${counts.articles} sections=${counts.sections} judgments=${counts.judgments} schedules=${counts.schedules}`,
+      `  jurisdictions=${counts.legislation_jurisdictions} central=${counts.central_acts} regulators=${counts.regulators} tribunals=${counts.tribunals} sc=${counts.sc_judgments} hc=${counts.hc_judgments} ddl=${counts.district_court_records}`,
     );
   } catch (error) {
     console.error("Failed to generate corpus-stats.json:", error);

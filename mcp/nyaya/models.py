@@ -1,11 +1,4 @@
-"""Typed data models returned by MCP tools and resources.
-
-The v0.2 schema collapses the old per-kind tables (sections, articles, judgments,
-schedules, amendments, chapters) into a single ``documents`` table with a ``kind``
-discriminator and ``metadata jsonb`` for per-kind fields. These models mirror that
-structure: one ``Document`` model covers all kinds, with ``metadata`` carrying
-kind-specific fields (chapter_num, chapter_title, part, court, date, etc.).
-"""
+"""Canonical Pydantic v2 models, enums, query schemas, and tool responses for Nyaya MCP v2.0."""
 
 from __future__ import annotations
 
@@ -14,135 +7,745 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-Kind = Literal["section", "article", "judgment", "schedule", "amendment"]
-# Same corpus buckets, used where a search hit reports what it matched.
-# (Alias, not a second union: one definition, one place to extend.)
-HitKind = Kind
+# ---------------------------------------------------------------------------
+# Canonical Cross-Module Enums (Single Source of Truth)
+# ---------------------------------------------------------------------------
 
-# Direction of a cross-reference lookup: outgoing (from the source section),
-# incoming (to it), or both.
+TermsStatus = Literal[
+    "cleared",
+    "attribution_required",
+    "non_commercial_only",
+    "upstream_unknown",
+]
+
+CourtTier = Literal[
+    "supreme_court",
+    "high_court",
+    "tribunal",
+    "district_court",
+    "all",
+]
+
+AnalyticsTier = Literal[
+    "supreme_court",
+    "high_court",
+    "tribunal",
+    "district_court",
+    "regulator",
+    "all",
+]
+
+ProvisionKind = Literal[
+    "section",
+    "article",
+    "schedule",
+    "amendment",
+    "order_rule",
+    "preamble",
+    "regulation",
+    "circular",
+    "rule",
+    "cad_debate",
+]
+
+StatuteStatus = Literal[
+    "in_force",
+    "repealed",
+    "omitted",
+    "struck_down",
+    "read_down",
+    "partially_struck_down",
+    "kept_in_abeyance",
+    "substituted",
+    "unverified",
+]
+
+ActStatus = Literal[
+    "in_force",
+    "repealed",
+    "partially_repealed",
+    "not_yet_commenced",
+    "superseded",
+]
+
+MappingType = Literal[
+    "one_to_one",
+    "one_to_many",
+    "many_to_one",
+    "omitted",
+    "newly_inserted",
+]
+
+ComparisonMappingType = Literal[
+    "one_to_one",
+    "one_to_many",
+    "many_to_one",
+    "omitted",
+    "newly_inserted",
+    "manual_comparison",
+]
+
+TraceDirection = Literal["cited_by", "cites", "both"]
 CrossRefDirection = Literal["from", "to", "both"]
 
+AuthorityLevel = Literal[
+    "binding_sc",
+    "binding_home_hc",
+    "persuasive_other_hc",
+    "tribunal",
+    "district",
+    "unspecified",
+]
 
-class Provenance(BaseModel):
-    source: str = Field(
-        description="Where this text was sourced from, e.g. 'PRS (CC BY 4.0)' "
-        "or 'indianconstitution PyPI (Apache-2.0)'."
-    )
-    source_license: str | None = Field(
-        default=None,
-        description="License under which the source was redistributed, if known.",
-    )
-    as_of: Date | None = Field(
-        default=None,
-        description="Date the corpus snapshot was taken. Use this when citing currency.",
-    )
+TextAvailability = Literal[
+    "indexed_bm25",
+    "on_demand_s3_pdf",
+    "metadata_only",
+]
+
+AuditStatus = Literal[
+    "VERIFIED",
+    "VERIFIED_REPEALED",
+    "VERIFIED_STRUCK_DOWN_OR_READ_DOWN",
+    "NOT_FOUND_IN_CORPUS",
+    "INVALID_STATUTORY_REF",
+    "AMBIGUOUS",
+    "QUOTE_VERIFIED",
+    "QUOTE_MISMATCH",
+    "COMMERCIAL_LICENSE_BLOCKED",
+]
+
+# ---------------------------------------------------------------------------
+# Provenance, Statutory Validity & Graph Links
+# ---------------------------------------------------------------------------
 
 
-class Act(BaseModel):
-    short_name: str = Field(description="Stable short identifier, e.g. 'IPC', 'BNS', 'Constitution'.")
-    full_name: str = Field(description="Official long name, e.g. 'The Indian Penal Code, 1860'.")
-    year: int | None = None
-    citation: str | None = Field(default=None, description="Canonical citation form, e.g. 'Act No. 45 of 1860'.")
-    kind: Literal["constitution", "criminal", "civil", "commercial", "judgment"] = Field(
-        description="Corpus bucket the act belongs to."
-    )
-    source: str
-    source_license: str | None = None
-    as_of: Date | None = None
+class SourceProvenance(BaseModel):
+    source_id: str
+    source_name: str
+    source_url: str
+    license_spdx: str
+    commercial_safe: bool
+    terms_status: TermsStatus
+    as_of: Date
+    content_sha256: str | None = None
 
 
-class Document(Provenance):
-    """A single document in the unified ``documents`` table.
-
-    ``kind`` discriminates between sections, articles, judgments, schedules, and
-    amendments. ``metadata`` carries kind-specific fields:
-    - sections: ``chapter_num``, ``chapter_title``, ``act_full``, ``act_year``, ``act_kind``
-    - articles: ``part``
-    - judgments: ``court``, ``date``, ``summary``, ``citation``
-    - schedules: ``number``
-    - amendments: ``number``, ``year``, ``date``, ``articles_affected``
-    """
-
-    kind: Kind
-    ref: str = Field(description="Section/article/citation/schedule/amendment identifier, e.g. '302', '21', 'AIR 1973 SC 1461'.")
-    act: str | None = Field(default=None, description="Act short name, e.g. 'IPC'. Null for standalone kinds (judgments, schedules, amendments).")
+class ProvisionRef(BaseModel):
+    act: str
+    jurisdiction: str = "Central"
+    ref: str
     title: str | None = None
-    text: str = Field(max_length=200_000)
+    kind: ProvisionKind = "section"
+
+
+class InvalidatingJudgment(BaseModel):
+    citation: str
+    neutral_citation: str | None = None
+    case_id: str | None = None
+    case_name: str
+    decision_date: Date | None = None
+    coram_size: int | None = None
+    effect: Literal["struck_down", "read_down", "partially_struck_down", "kept_in_abeyance"]
+    holding_summary: str
+
+
+class StatutoryValidity(BaseModel):
+    status: StatuteStatus = "in_force"
+    commencement_date: Date | None = None
+    repeal_date: Date | None = None
+    replaced_by: list[ProvisionRef] = Field(default_factory=list)
+    replaces: list[ProvisionRef] = Field(default_factory=list)
+    invalidating_judgment: InvalidatingJudgment | None = None
+    transitional_note: str | None = None
+    amendment_count: int = 0
+    verified_as_of: Date | None = None
+
+
+class StatutoryLink(BaseModel):
+    from_ref: ProvisionRef
+    to_ref: ProvisionRef
+    relation_kind: str
+    context_note: str | None = None
+    provenance: SourceProvenance | None = None
+
+
+# ---------------------------------------------------------------------------
+# Backend Storage Records
+# ---------------------------------------------------------------------------
+
+
+class ActInfo(BaseModel):
+    act_id: str
+    short_name: str
+    full_name: str
+    year: int | None = None
+    act_number: str | None = None
+    jurisdiction: str = "Central"
+    category: str = "central_act"
+    status: ActStatus = "in_force"
+    commencement_date: Date | None = None
+    repeal_date: Date | None = None
+    replaced_by_act: str | None = None
+    storage_tier: Literal["sqlite_core", "lance_bucket"] = "sqlite_core"
+    provision_count: int = 0
+    provenance: SourceProvenance
+
+
+class ActSummary(BaseModel):
+    short_name: str
+    full_name: str
+    jurisdiction: str = "Central"
+    category: str = "central_act"
+    year: int | None = None
+    status: ActStatus = "in_force"
+    provision_count: int = 0
+    provenance: SourceProvenance
+
+
+class ProvisionRecord(BaseModel):
+    doc_id: str
+    act_id: str
+    act: str
+    act_full_name: str
+    jurisdiction: str = "Central"
+    kind: ProvisionKind = "section"
+    ref: str
+    ref_norm: str
+    chapter_num: str | None = None
+    chapter_title: str | None = None
+    part: str | None = None
+    title: str | None = None
+    text: str
+    validity: StatutoryValidity
+    top_links: list[StatutoryLink] = Field(default_factory=list)
+    provenance: SourceProvenance
+    text_sha256: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class CrossRef(BaseModel):
-    from_act: str
-    from_section: str
-    to_act: str
-    to_section: str
-    kind: Literal["repeals", "replaced_by", "references", "corresponds_to", "amends"] = Field(
-        description="How the source relates to the target."
-    )
+class TocEntry(BaseModel):
+    chapter_num: str | None = None
+    chapter_title: str | None = None
+    part: str | None = None
+    kind: ProvisionKind | None = None
+    provision_count: int = 0
+    ref_start: str | None = None
+    ref_end: str | None = None
 
 
-class SearchResult(BaseModel):
+class ProvisionIndexEntry(BaseModel):
+    doc_id: str
     act: str
-    ref: str = Field(description="Section/article identifier, e.g. 's. 302' or 'art. 21'.")
+    jurisdiction: str = "Central"
+    kind: ProvisionKind = "section"
+    ref: str
     title: str | None = None
-    snippet: str = Field(description="Relevance-ordered snippet of the matching text.")
-    rank: float = Field(description="Relevance score. Higher = more relevant.")
-    citation: str | None = None
-    kind: HitKind | None = Field(
-        default=None,
-        description="Whether this hit is a section, article, judgment, schedule, or amendment.",
-    )
+    status: StatuteStatus = "in_force"
+    snippet: str | None = None
+    provenance: SourceProvenance | None = None
 
 
-class SearchResponse(BaseModel):
+class BrowseResult(BaseModel):
+    mode: Literal["catalog", "toc", "provisions"]
+    act_info: ActInfo | None = None
+    acts: list[ActInfo] = Field(default_factory=list)
+    chapters_or_parts: list[TocEntry] = Field(default_factory=list)
+    provisions: list[ProvisionIndexEntry] = Field(default_factory=list)
+    total: int = 0
+    returned: int = 0
+
+
+class ConcordanceEntry(BaseModel):
+    old_doc_id: str
+    old_ref: ProvisionRef
+    new_doc_id: str | None = None
+    new_ref: ProvisionRef | None = None
+    mapping_type: MappingType
+    substantive_delta: str
+    punishment_delta: str | None = None
+    procedural_delta: str | None = None
+    savings_note: str | None = None
+    verified_by: str
+    provenance: SourceProvenance
+
+
+class AmendmentRecord(BaseModel):
+    amendment_id: str
+    number: int | None = None
+    title: str
+    act: str
+    year: int | None = None
+    enactment_date: Date | None = None
+    effective_date: Date | None = None
+    action: str = "amended"
+    provisions_affected: list[str] = Field(default_factory=list)
+    summary: str
+    provenance: SourceProvenance
+
+
+class ProvisionHistory(BaseModel):
+    act: str
+    ref: str | None = None
+    amendments: list[AmendmentRecord] = Field(default_factory=list)
+    judicial_validity_events: list[InvalidatingJudgment] = Field(default_factory=list)
+    total: int = 0
+
+
+class JudgmentMeta(BaseModel):
+    case_id: str
+    court_tier: CourtTier
+    court_code: str
+    court_name: str
+    bench: str | None = None
+    cnr: str | None = None
+    neutral_citation: str | None = None
+    air_citation: str | None = None
+    scc_citation: str | None = None
+    scr_citation: str | None = None
+    reporter_citations: list[str] = Field(default_factory=list)
+    title: str
+    petitioner: str | None = None
+    respondent: str | None = None
+    decision_date: Date | None = None
+    year: int | None = None
+    coram: list[str] = Field(default_factory=list)
+    author_judge: str | None = None
+    bench_strength: int | None = None
+    disposal_nature: str | None = None
+    case_type: str | None = None
+    acts_cited: list[str] = Field(default_factory=list)
+    is_reportable: bool = False
+    pdf_s3_bucket: str | None = None
+    pdf_s3_key: str | None = None
+    source_url: str | None = None
+    has_lance_text: bool = False
+    cited_by_count: int = 0
+    text_sha256: str = ""
+    provenance: SourceProvenance
+    snippet: str | None = None
+    docket_extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class JudgmentCard(BaseModel):
+    case_id: str
+    cnr: str | None = None
+    neutral_citation: str | None = None
+    reporter_citations: list[str] = Field(default_factory=list)
+    title: str
+    court: str
+    court_code: str | None = None
+    court_tier: CourtTier
+    bench: str | None = None
+    decision_date: Date | None = None
+    coram: list[str] = Field(default_factory=list)
+    bench_strength: int | None = None
+    author_judge: str | None = None
+    disposal_nature: str | None = None
+    case_type: str | None = None
+    authority_level: AuthorityLevel = "unspecified"
+    acts_cited: list[str] = Field(default_factory=list)
+    matched_via: Literal["direct", "pari_materia_equivalent", "metadata"] = "direct"
+    cited_by_count: int | None = None
+    snippet: str | None = None
+    text_availability: TextAvailability = "metadata_only"
+    provenance: SourceProvenance
+
+
+class JudgmentExcerpt(BaseModel):
+    para_num: int | None = None
+    page_num: int | None = None
+    text: str
+    score: float | None = None
+
+
+class CaseDocket(BaseModel):
+    cnr: str | None = None
+    case_number: str | None = None
+    case_type: str | None = None
+    filing_date: Date | None = None
+    registration_date: Date | None = None
+    decision_date: Date | None = None
+    disposal_nature: str | None = None
+    petitioner: str | None = None
+    respondent: str | None = None
+    petitioner_advocates: list[str] = Field(default_factory=list)
+    respondent_advocates: list[str] = Field(default_factory=list)
+    acts_sections: list[str] = Field(default_factory=list)
+    hearing_count: int | None = None
+    sibling_order_ids: list[str] = Field(default_factory=list)
+
+
+class JudgmentContent(BaseModel):
+    case_id: str
+    mode: Literal["overview", "paragraphs", "pages", "search_within", "docket"]
+    extraction_quality: Literal["verified", "scanned_image_only", "truncated", "metadata_only"]
+    extraction_method: Literal["indexed_text", "pypdfium2_s3_pdf", "metadata_only"]
+    excerpts: list[JudgmentExcerpt] = Field(default_factory=list)
+    total_paragraphs: int | None = None
+    total_pages: int | None = None
+    chars_per_page: float | None = None
+    has_more: bool = False
+    next_para: int | None = None
+    next_page: int | None = None
+    pdf_url: str | None = None
+    warning: str | None = None
+    content_sha256: str | None = None
+
+
+class CitationEdgeRecord(BaseModel):
+    from_id: str
+    from_kind: Literal["provision", "judgment"]
+    to_id: str
+    to_kind: Literal["provision", "judgment"]
+    relation: str
+    para_ref: str | None = None
+    quoting_excerpt: str | None = None
+    from_year: int | None = None
+    from_bench_strength: int | None = None
+    precedent_status: Literal["verified_curated", "unverified_automated"] = "unverified_automated"
+    from_ref: ProvisionRef | None = None
+    to_ref: ProvisionRef | None = None
+    related_case: JudgmentCard | None = None
+    direction: Literal["cited_by", "cites", "from", "to"] | None = None
+    bench_comparison: Literal[
+        "larger_bench",
+        "co_equal_bench",
+        "smaller_bench",
+        "higher_court",
+        "lower_court",
+        "unknown",
+    ] = "unknown"
+    citing_para_num: int | None = None
+    provenance: SourceProvenance | None = None
+
+
+class PrecedentTrace(BaseModel):
+    target: JudgmentCard
+    precedent_status: Literal["unverified_automated"] = "unverified_automated"
+    verification_notice: str
+    cited_by_total: int = 0
+    cites_total: int = 0
+    cited_by_larger_bench_count: int = 0
+    edges: list[CitationEdgeRecord] = Field(default_factory=list)
+    total: int = 0
+
+
+class CourtInfo(BaseModel):
+    court_code: str
+    court_name: str
+    tier: Literal["sc", "hc", "district", "tribunal", "regulator"]
+    bench_code: str | None = None
+    bench_name: str | None = None
+    state_ut: str
+    seat_city: str | None = None
+    hc_jurisdiction: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Typed Search Queries & Tool Responses
+# ---------------------------------------------------------------------------
+
+
+class StatuteSearchQuery(BaseModel):
     query: str
-    total: int = Field(description="Total number of matches found (before limit/offset).")
-    returned: int = Field(default=0, description="Number of results returned in this response (<= limit).")
-    offset: int = Field(default=0, description="Offset of the first result. 0 for the first page.")
-    results: list[SearchResult]
-    source: str = "nyaya"
-    as_of: Date | None = None
-    limit: int = Field(default=10, description="The limit applied to this query.")
-    fallback_reason: str | None = Field(
-        default=None,
-        description="Set when a search component failed and the response degraded to a fallback.",
+    act: str | None = None
+    jurisdiction: str | None = None
+    kind: ProvisionKind | None = None
+    category: str | None = None
+    status: Literal["in_force", "repealed", "all"] = "all"
+    query_mode: Literal["bm25", "exact_phrase"] = "bm25"
+    promote_definitions: bool = False
+    commercial_safe_only: bool | None = None
+    limit: int = 10
+    offset: int = 0
+    cursor: str | None = None
+
+
+class JudgmentSearchQuery(BaseModel):
+    query: str | None = None
+    query_mode: Literal["auto", "bm25", "metadata"] = "auto"
+    court_tier: CourtTier | None = None
+    court: str | list[str] | None = None
+    bench: str | None = None
+    binding_for_court: str | None = None
+    min_bench_strength: int | None = None
+    judge: str | None = None
+    author_judge: str | None = None
+    party: str | None = None
+    act: str | None = None
+    section: str | None = None
+    include_equivalent_provisions: bool = True
+    disposal_nature: str | None = None
+    case_type: str | None = None
+    date_from: Date | None = None
+    date_to: Date | None = None
+    year_from: int | None = None
+    year_to: int | None = None
+    reportable_only: bool = False
+    sort_by: Literal[
+        "authority_relevance",
+        "relevance",
+        "date_desc",
+        "date_asc",
+        "bench_strength_desc",
+        "most_cited",
+    ] = "authority_relevance"
+    commercial_safe_only: bool | None = None
+    limit: int = 10
+    offset: int = 0
+    cursor: str | None = None
+
+
+class StatuteHit(BaseModel):
+    doc_id: str
+    act: str
+    jurisdiction: str = "Central"
+    kind: ProvisionKind = "section"
+    ref: str
+    title: str | None = None
+    status: StatuteStatus = "in_force"
+    replaced_by: list[ProvisionRef] = Field(default_factory=list)
+    snippet: str
+    bm25_score: float = 0.0
+    provenance: SourceProvenance
+
+
+class StatuteSearchResponse(BaseModel):
+    query: str
+    query_mode: Literal["bm25", "exact_phrase"] = "bm25"
+    total: int
+    returned: int
+    next_cursor: str | None = None
+    has_more: bool = False
+    results: list[StatuteHit] = Field(default_factory=list)
+    degraded_sources: list[str] = Field(default_factory=list)
+
+
+class JudgmentSearchResponse(BaseModel):
+    query: str | None = None
+    total: int | None = None
+    total_is_estimate: bool = False
+    returned: int = 0
+    next_cursor: str | None = None
+    has_more: bool = False
+    expanded_provisions: list[str] = Field(default_factory=list)
+    results: list[JudgmentCard] = Field(default_factory=list)
+    coverage_note: str = ""
+    degraded_sources: list[str] = Field(default_factory=list)
+
+
+class ProvisionResponse(BaseModel):
+    act: str
+    act_full_name: str
+    jurisdiction: str = "Central"
+    kind: ProvisionKind = "section"
+    ref: str
+    requested_sub_ref: str | None = None
+    sub_ref_found: bool | None = None
+    title: str | None = None
+    chapter_num: str | None = None
+    chapter_title: str | None = None
+    part: str | None = None
+    text: str
+    validity: StatutoryValidity
+    top_links: list[StatutoryLink] = Field(default_factory=list)
+    provenance: SourceProvenance
+
+
+class StatuteBrowseResponse(BaseModel):
+    mode: Literal["catalog", "toc", "provisions"]
+    total: int
+    returned: int
+    next_cursor: str | None = None
+    has_more: bool = False
+    acts: list[ActSummary] = Field(default_factory=list)
+    act_info: ActSummary | None = None
+    chapters_or_parts: list[TocEntry] = Field(default_factory=list)
+    provisions: list[ProvisionIndexEntry] = Field(default_factory=list)
+
+
+class ClauseDiff(BaseModel):
+    op: Literal["added", "removed", "modified"]
+    source_excerpt: str | None = None
+    target_excerpt: str | None = None
+
+
+class ProvisionComparisonResponse(BaseModel):
+    mapping_type: ComparisonMappingType
+    source_provision: ProvisionResponse
+    target_provisions: list[ProvisionResponse] = Field(default_factory=list)
+    diff_summary: str | None = None
+    clause_diffs: list[ClauseDiff] = Field(default_factory=list)
+    punishment_delta: str | None = None
+    procedural_delta: str | None = None
+    transitional_rule: str | None = None
+    provenance: SourceProvenance
+
+
+class ProvisionHistoryResponse(BaseModel):
+    act: str
+    ref: str | None = None
+    total: int
+    returned: int
+    next_cursor: str | None = None
+    has_more: bool = False
+    amendments: list[AmendmentRecord] = Field(default_factory=list)
+    judicial_validity_events: list[InvalidatingJudgment] = Field(default_factory=list)
+
+
+class CrossRefResponse(BaseModel):
+    source: ProvisionRef
+    direction: CrossRefDirection
+    total: int
+    returned: int
+    next_cursor: str | None = None
+    has_more: bool = False
+    links: list[StatutoryLink] = Field(default_factory=list)
+
+
+class JudgmentViewResponse(BaseModel):
+    card: JudgmentCard
+    view: Literal["overview", "paragraphs", "pages", "search_within", "docket"]
+    excerpts: list[JudgmentExcerpt] = Field(default_factory=list)
+    docket: CaseDocket | None = None
+    total_paragraphs: int | None = None
+    total_pages: int | None = None
+    has_more: bool = False
+    next_para: int | None = None
+    next_page: int | None = None
+    extraction_method: Literal["indexed_text", "pypdfium2_s3_pdf", "metadata_only"] = (
+        "metadata_only"
     )
+    chars_per_page: float | None = None
+    provenance: SourceProvenance
 
 
-class ActsList(BaseModel):
-    acts: list[Act]
+class PrecedentEdge(BaseModel):
+    direction: Literal["cited_by", "cites"]
+    related_case: JudgmentCard
+    bench_comparison: Literal[
+        "larger_bench",
+        "co_equal_bench",
+        "smaller_bench",
+        "higher_court",
+        "lower_court",
+        "unknown",
+    ] = "unknown"
+    citing_para_num: int | None = None
+    quoting_excerpt: str | None = None
+    provenance: SourceProvenance
 
 
-class CrossRefList(BaseModel):
-    from_act: str
-    from_section: str
-    references: list[CrossRef]
-    direction: CrossRefDirection = Field(
-        default="both", description="Whether the references are outgoing (from), incoming (to), or both."
-    )
+class PrecedentTraceResponse(BaseModel):
+    target: JudgmentCard
+    precedent_status: Literal["unverified_automated"] = "unverified_automated"
+    verification_notice: str
+    cited_by_total: int = 0
+    cites_total: int = 0
+    cited_by_larger_bench_count: int = 0
+    edges: list[PrecedentEdge] = Field(default_factory=list)
+    total: int = 0
+    returned: int = 0
+    next_cursor: str | None = None
+    has_more: bool = False
 
 
-class DocumentsList(BaseModel):
-    """A paginated list of documents, returned by list_sections/list_articles/etc."""
-
-    documents: list[Document]
-    total: int = Field(default=0, description="Total documents matching (before limit/offset).")
-    offset: int = Field(default=0)
-    limit: int = Field(default=100)
-    # When list_sections is filtered by chapter, these are set to the chapter metadata.
-    chapter_title: str | None = Field(default=None, description="Title of the chapter when filtered by chapter.")
-    chapter_number: int | None = Field(default=None, description="Chapter number when filtered by chapter.")
+class AnalyticsBucket(BaseModel):
+    key: str
+    count: int
+    share_pct: float
+    samples: list[JudgmentCard] = Field(default_factory=list)
 
 
-class CorpusStats(BaseModel):
-    """Corpus counts returned by the corpus_stats tool."""
+class AnalyticsResult(BaseModel):
+    dataset: str
+    group_by: str
+    total_matched: int
+    buckets: list[AnalyticsBucket] = Field(default_factory=list)
+    completeness_caveat: str = ""
+    provenances: list[SourceProvenance] = Field(default_factory=list)
 
-    acts: int
-    sections: int
-    articles: int
-    judgments: int
-    amendments: int
-    schedules: int
-    cross_refs: int
+
+class JudgmentAnalyticsResponse(BaseModel):
+    group_by: str
+    court_tier: AnalyticsTier
+    total_matched: int
+    buckets: list[AnalyticsBucket] = Field(default_factory=list)
+    completeness_caveat: str
+    provenances: list[SourceProvenance] = Field(default_factory=list)
+
+
+class QuoteCheckInput(BaseModel):
+    citation: str
+    quote: str
+
+
+class AuditFinding(BaseModel):
+    raw_citation: str
+    span: tuple[int, int] | None = None
+    parsed: dict[str, Any] | None = None
+    status: AuditStatus
+    canonical_record: dict[str, Any] | None = None
+    validity: StatutoryValidity | None = None
+    cited_by_count: int | None = None
+    cited_by_larger_bench_count: int | None = None
+    matched_para_num: int | None = None
+    matched_excerpt: str | None = None
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    coverage_note: str = ""
+    provenance: SourceProvenance | None = None
+
+
+class CitationAuditResponse(BaseModel):
+    checked_as_of: Date
+    precedent_status: Literal["unverified_automated"] = "unverified_automated"
+    summary: dict[str, int] = Field(default_factory=dict)
+    findings: list[AuditFinding] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Shared Corpus Status Model (MCP corpus_status + REST /api/corpus-status)
+# ---------------------------------------------------------------------------
+
+
+class CorpusCounts(BaseModel):
+    legislation_jurisdictions: int = 0
+    central_acts: int = 0
+    state_acts: int = 0
+    regulators: int = 0
+    tribunals: int = 0
+    provisions: int = 0
+    articles: int = 0
+    schedules: int = 0
+    amendments: int = 0
+    concordance_mappings: int = 0
+    judicial_invalidations: int = 0
+    sc_judgments: int = 0
+    hc_judgments: int = 0
+    tribunal_orders: int = 0
+    district_court_records: int = 0
+    citation_edges: int = 0
+
+
+class SourceStatusEntry(BaseModel):
+    source_id: str
+    record_count: int = 0
+    year_coverage: str | None = None
+    text_availability: str = "indexed_bm25"
+    provenance: SourceProvenance
+
+
+class CorpusStatusResponse(BaseModel):
+    service_version: str = "2.0.0"
     as_of: Date | None = None
+    retrieval_mode: Literal["lexical_metadata_graph"] = "lexical_metadata_graph"
+    commercial_safe_locked: bool = False
+    tiers: dict[str, str] = Field(default_factory=dict)
+    counts: CorpusCounts = Field(default_factory=CorpusCounts)
+    sources: list[SourceStatusEntry] = Field(default_factory=list)
+    licensing: dict[str, Any] = Field(default_factory=dict)
+    court_detail: dict[str, Any] | None = None
+
+
+CorpusStatus = CorpusStatusResponse

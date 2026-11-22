@@ -1,0 +1,79 @@
+Nyaya MCP (nyaya-mcp)
+Copyright 2026 nyaya contributors
+
+This product includes software developed by the nyaya contributors, licensed
+under the Apache License, Version 2.0 (see LICENSE).
+
+================================================================================
+Third-Party Legal Corpus & Dependency Attributions (Apache-2.0 Section 4(d))
+================================================================================
+
+Nyaya's source code (mcp/, chat/, web/) is licensed under the Apache License,
+Version 2.0. Ingested and dual-published legal datasets retain the licenses
+and statutory permissions of their respective upstream sources, tracked per
+record in `provenance` (`license_spdx`, `commercial_safe`, `terms_status`).
+
+1. Primary Legal Data & Statutory Basis (India)
+   - Indian Copyright Act, 1957, Section 52(1)(q)
+     * Section 52(1)(q)(ii): Acts of Legislature, Rules, and Regulations.
+     * Section 52(1)(q)(iv): Judgments and orders of Courts, Tribunals, and
+       other judicial authorities.
+   - Eastern Book Company & Ors. v. D.B. Modak & Anr., (2008) 1 SCC 1
+     Primary judicial text is reproducible under s. 52(1)(q)(iv); commercial
+     reporter editorial headnotes, paragraph numbering, and digests remain
+     copyrighted and are strictly excluded from Nyaya.
+   - Statutory Non-Publication Exclusions
+     Sealed, in-camera, and identity-protected orders (including IPC s. 228A /
+     BNS s. 72, POCSO Act ss. 23 & 33(7), Juvenile Justice Act s. 74, and
+     HIV/AIDS Act s. 34) are excluded from publication and indexing.
+
+2. Commercial-Safe Open Legal Data Compilations (CC-BY-4.0 / Statutory)
+   - Dattam Labs — Indian Supreme Court & High Court Judgments
+     License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/)
+     Sources: s3://indian-supreme-court-judgments, s3://indian-high-court-judgments
+     Attribution: Dattam Labs Open Data; original public records of the Supreme
+     Court of India and High Courts of India.
+   - Vaquill Open India Law (v2026.08.1)
+     License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/)
+     Source: https://oss-data-in.vaquill.ai/v2026.08.1/
+     Attribution: Vaquill AI Open India Law; Central/State/UT legislation,
+     regulatory instruments, tribunals, and judgment compilations sourced from
+     India Code / Legislative Department and official portals.
+   - PRS Legislative Research
+     License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/)
+     Source: https://prsindia.org
+     Attribution: PRS Legislative Research (BNS, BNSS, BSA 2023 & legislative
+     updates).
+   - Legislative Department, Ministry of Law & Justice / Sansad Digital Library
+     Basis: Indian Copyright Act, 1957, s. 52(1)(q) / s. 28
+     Sources: https://legislative.gov.in (Constitution of India),
+     https://eparlib.sansad.in (Constituent Assembly Debates).
+   - Justice Hub / KHOJ High Court Judges Dataset (CC-BY-4.0 subset)
+     License: CC-BY-4.0
+     Source: https://justicehub.in
+
+3. Non-Commercial Research Datasets (Bundled with commercial_safe=false)
+   The following datasets are included in the default academic/research-inclusive
+   corpus pack and are strictly tagged `commercial_safe=false`. Commercial
+   operators MUST set `NYAYA_COMMERCIAL_SAFE_ONLY=1` or pass
+   `commercial_safe_only=true` to exclude them:
+   - Development Data Lab (DDL) — Indian Judicial Dataset (2010–2018)
+     License: CC-BY-NC-SA-4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+     Source: https://www.devdatalab.org/judicial-data
+     Attribution: Elliott Ash, Sam Asher, Aditi Bhowmick, Sandeep Bhupatiraju,
+     Daniel L. Chen, Tanaya Devi, Christoph Goessmann, Paul Novosad, Bilal
+     Siddiqi (Development Data Lab) — Non-Commercial, ShareAlike Use Only.
+     (Predicted religion/caste columns are stripped at ingest time.)
+   - Indian Legal Documents Corpus (ILDC) Research Annotations
+     License: CC-BY-NC-4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
+     Attribution: Vijit Malik, Rishabh Sanjay, Shubham Kumar Nigam, Kripabandhu
+     Ghosh, Shouvik Kumar Guha, Arnab Bhattacharya, Ashutosh Modi —
+     Non-Commercial Research Use Only.
+
+4. Key Open-Source Runtime Components
+   - pypdfium2 & PDFium — Apache-2.0 / BSD-3-Clause
+     (Used for direct PDF text extraction; copyleft PDF/OCR libraries such as
+     PyMuPDF/fitz, ecourts, and surya-ocr are intentionally excluded.)
+   - DuckDB & httpfs extension — MIT License
+   - LanceDB — Apache-2.0
+   - FastMCP — Apache-2.0

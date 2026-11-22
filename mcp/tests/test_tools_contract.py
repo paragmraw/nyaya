@@ -1,56 +1,70 @@
-"""Per-tool contract tests + tool-registration fail-fast tests.
+"""Per-tool contract tests + tool-registration fail-fast tests for Nyaya MCP v2.0.
 
-Two layers:
-
-1. **Registration contract** — every register module lands exactly the tools
-   it claims, with descriptions and read-only annotations, on a real FastMCP
-   instance (no live DB: registration only inspects function signatures).
-
-2. **Behavioural contract** — tool functions return structured error
-   ``ToolResult``s for domain failures (``@structured_errors``) and pass raw
-   arguments through to the db layer (faked via monkeypatch).
-
-Also covers the Task 11 fail-fast stance in ``tools/__init__.py``: duplicate
-or malformed registration raises instead of being silently skipped or
-silently shadowed (FastMCP itself only logs a warning on duplicates and keeps
-the FIRST registration), plus the Task 11 dedupe/removal contracts.
+Covers:
+1. Exact 12 canonical v2 tools registered with descriptions and read-only annotations.
+2. Exact openWorldHint split: 5 local SQLite tools (openWorldHint=False) vs 7 Bucket/S3 tools (openWorldHint=True).
+3. Fail-fast registration contract in tools/__init__.py (duplicates, raising modules, missing tools).
+4. Behavioural contracts for all 12 tools against InMemoryCorpusBackend / mini_corpus fixture:
+   - OWASP LLM01 <corpus_text ...> wrapping on every primary text field
+   - commercial_safe_only=True blocking non-commercial records (CommercialLicenseBlocked)
+   - trace_precedent mandatory precedent_status="unverified_automated"
+   - get_judgment views (overview, paragraphs, search_within, docket) & publication ban enforcement
+   - verify_citations deterministic audit statuses (VERIFIED, VERIFIED_REPEALED, VERIFIED_STRUCK_DOWN_OR_READ_DOWN, NOT_FOUND_IN_CORPUS, QUOTE_VERIFIED, QUOTE_MISMATCH)
 """
 
 from __future__ import annotations
 
-import inspect
+from datetime import date as Date
 from typing import Any
 
 import pytest
 from fastmcp import FastMCP
 
-from nyaya import db
+from nyaya import storage
 from nyaya import tools as tools_pkg
-from nyaya.models import Act, CrossRef, Document
-from nyaya.tools import (
-    cross_reference,
-    get_amendments_for_article,
-    get_section,
-    schedules_amendments,
+from nyaya.models import (
+    AmendmentRecord,
+    CitationEdgeRecord,
+    ConcordanceEntry,
+    InvalidatingJudgment,
+    JudgmentContent,
+    JudgmentExcerpt,
+    JudgmentMeta,
+    ProvisionRecord,
+    ProvisionRef,
+    SourceProvenance,
+    StatutoryValidity,
 )
-from nyaya.tools import list_acts as list_acts_tool
-from nyaya.tools._error import structured_errors
+from nyaya.storage.memory_backend import InMemoryCorpusBackend
 
-# ---------------------------------------------------------------------------
-# 1. Registration contract
-# ---------------------------------------------------------------------------
-
-EXPECTED_TOOLS = {
-    "semantic_query", "get_section", "get_article", "get_judgment",
-    "list_acts", "list_chapters", "list_sections", "list_articles",
-    "list_judgments", "cross_reference", "list_schedules", "get_schedule",
-    "list_amendments", "get_amendment", "get_amendments_for_article",
-    "corpus_stats",
+EXPECTED_12_TOOLS = {
+    "search_statutes",
+    "get_provision",
+    "browse_statute",
+    "compare_provisions",
+    "get_provision_history",
+    "cross_reference",
+    "search_judgments",
+    "get_judgment",
+    "trace_precedent",
+    "verify_citations",
+    "judgment_analytics",
+    "corpus_status",
 }
+
+LOCAL_SQLITE_TOOLS = {
+    "compare_provisions",
+    "cross_reference",
+    "get_provision_history",
+    "trace_precedent",
+    "corpus_status",
+}
+
+OPEN_WORLD_TOOLS = EXPECTED_12_TOOLS - LOCAL_SQLITE_TOOLS
 
 
 def _fresh_mcp() -> FastMCP:
-    mcp = FastMCP(name="test")
+    mcp = FastMCP(name="test-nyaya-v2")
     tools_pkg.register(mcp)
     return mcp
 
@@ -59,77 +73,165 @@ async def _tool_map(mcp: FastMCP) -> dict[str, Any]:
     return {t.name: t for t in await mcp.list_tools()}
 
 
-async def test_all_16_tools_register_with_expected_names():
-    mcp = _fresh_mcp()
-    assert {t.name for t in await mcp.list_tools()} == EXPECTED_TOOLS
+def _build_rich_memory_backend() -> InMemoryCorpusBackend:
+    backend = InMemoryCorpusBackend.from_sample_data()
+    prov_safe = next(iter(backend.acts.values())).provenance
+    prov_nc = SourceProvenance(
+        source_id="ildc_research",
+        source_name="ILDC Research Corpus",
+        source_url="https://example.invalid/ildc",
+        license_spdx="CC-BY-NC-4.0",
+        commercial_safe=False,
+        terms_status="non_commercial_only",
+        as_of=Date(2026, 11, 22),
+    )
 
+    # Add struck-down IT Act s.66A
+    p_66a = ProvisionRecord(
+        doc_id="it-2000:66A",
+        act_id="it-2000",
+        act="ITAct",
+        act_full_name="The Information Technology Act, 2000",
+        ref="66A",
+        ref_norm="66A",
+        title="Punishment for sending offensive messages",
+        text="Any person who sends, by means of a computer resource, any information that is grossly offensive...",
+        validity=StatutoryValidity(
+            status="struck_down",
+            invalidating_judgment=InvalidatingJudgment(
+                citation="(2015) 5 SCC 1",
+                neutral_citation="2015 INSC 248",
+                case_id="sc:2015:shreya_singhal",
+                case_name="Shreya Singhal v. Union of India",
+                decision_date=Date(2015, 3, 24),
+                coram_size=2,
+                effect="struck_down",
+                holding_summary="Section 66A struck down in its entirety as violative of Article 19(1)(a).",
+            ),
+        ),
+        provenance=prov_safe,
+    )
+    backend.provisions[p_66a.doc_id] = p_66a
 
-async def test_every_tool_has_description_and_read_only_annotation():
-    for t in (await _tool_map(_fresh_mcp())).values():
-        assert t.description, f"tool {t.name} has no description"
-        annotations = t.annotations
-        assert annotations is not None and annotations.readOnlyHint is True, (
-            f"tool {t.name} must be annotated readOnlyHint=True (read-only corpus)"
+    # Add concordance entry IPC 302 -> BNS 103
+    backend.concordance.append(
+        ConcordanceEntry(
+            old_doc_id="ipc-1860:302",
+            old_ref=ProvisionRef(act="IPC", ref="302", title="Punishment for murder"),
+            new_doc_id="bns-2023:103",
+            new_ref=ProvisionRef(act="BNS", ref="103", title="Punishment for murder"),
+            mapping_type="one_to_one",
+            substantive_delta="Restructured into sub-section (1) for murder and sub-section (2) for mob lynching.",
+            punishment_delta="Added mob lynching clause in 103(2).",
+            procedural_delta="Cognizable, non-bailable, triable by Court of Session.",
+            savings_note="BNSS s.531: offences prior to 2024-07-01 continue under IPC.",
+            verified_by="PRS Legislative Research",
+            provenance=prov_safe,
         )
-        assert annotations.openWorldHint is False, f"tool {t.name} must declare openWorldHint=False"
+    )
 
+    # Add Constitutional Amendment 42
+    backend.amendments.append(
+        AmendmentRecord(
+            amendment_id="const-amend-42",
+            number=42,
+            title="The Constitution (Forty-second Amendment) Act, 1976",
+            act="Constitution",
+            year=1976,
+            enactment_date=Date(1976, 12, 18),
+            effective_date=Date(1977, 1, 3),
+            action="amended",
+            provisions_affected=["Preamble", "31C", "368"],
+            summary="Inserted Socialist, Secular, and Integrity into the Preamble and amended Article 368.",
+            provenance=prov_safe,
+        )
+    )
 
-async def test_cross_reference_direction_is_a_closed_enum_in_the_schema():
-    """direction must be a Literal enum in the tool's input schema, so invalid
-    values are rejected by schema validation instead of reaching the db layer."""
-    tools = await _tool_map(_fresh_mcp())
-    enum = tools["cross_reference"].parameters["properties"]["direction"].get("enum")
-    assert enum == ["from", "to", "both"]
+    # Add cross-reference edge
+    backend.edges.append(
+        CitationEdgeRecord(
+            from_id="ipc-1860:302",
+            from_kind="provision",
+            to_id="bns-2023:103",
+            to_kind="provision",
+            relation="replaced_by",
+            quoting_excerpt="IPC s.302 is replaced by BNS s.103(1).",
+            from_ref=ProvisionRef(act="IPC", ref="302", title="Punishment for murder"),
+            to_ref=ProvisionRef(act="BNS", ref="103", title="Punishment for murder"),
+            provenance=prov_safe,
+        )
+    )
 
-
-async def test_list_tools_include_text_params_are_documented():
-    """The include_text / snippet_chars params exist on the list-style tools
-    (documented surface — see mcp/README.md)."""
-    tools = await _tool_map(_fresh_mcp())
-    for name in ("list_sections", "list_articles", "list_judgments"):
-        props = tools[name].parameters["properties"]
-        assert props["include_text"]["type"] == "boolean", name
-        assert props["include_text"].get("default") is False, name
-        assert props["snippet_chars"]["type"] == "integer", name
+    # Add non-commercial ILDC judgment
+    jm_nc = JudgmentMeta(
+        case_id="ildc:2021:sample",
+        court_tier="supreme_court",
+        court_code="SCI",
+        court_name="Supreme Court of India",
+        neutral_citation="2021 INSC 999",
+        reporter_citations=["2021 INSC 999"],
+        title="Sample NC Research Case v. Union of India",
+        decision_date=Date(2021, 5, 10),
+        year=2021,
+        bench_strength=3,
+        snippet="Research-only judgment excerpt under CC-BY-NC-4.0.",
+        provenance=prov_nc,
+    )
+    backend.judgments[jm_nc.case_id] = jm_nc
+    return backend
 
 
 # ---------------------------------------------------------------------------
-# 2. Registration fail-fast
+# 1. Registration & Annotations Contract
 # ---------------------------------------------------------------------------
 
-def _mcp_with_tool(name: str) -> FastMCP:
-    mcp = FastMCP(name="test")
 
-    @mcp.tool(name=name)
-    def _colliding() -> str:  # pragma: no cover - registration only
-        return "x"
+async def test_all_12_v2_tools_register_with_expected_names():
+    mcp = _fresh_mcp()
+    assert {t.name for t in await mcp.list_tools()} == EXPECTED_12_TOOLS
 
-    return mcp
+
+async def test_every_tool_has_description_and_exact_annotations_split():
+    tools = await _tool_map(_fresh_mcp())
+    assert set(tools) == EXPECTED_12_TOOLS
+    for name, t in tools.items():
+        assert t.description, f"tool {name} has no description"
+        ann = t.annotations
+        assert ann is not None, f"tool {name} missing annotations"
+        assert ann.readOnlyHint is True, f"tool {name} must set readOnlyHint=True"
+        assert ann.destructiveHint is False, f"tool {name} must set destructiveHint=False"
+        assert ann.idempotentHint is True, f"tool {name} must set idempotentHint=True"
+        if name in LOCAL_SQLITE_TOOLS:
+            assert ann.openWorldHint is False, f"local tool {name} must set openWorldHint=False"
+        else:
+            assert name in OPEN_WORLD_TOOLS
+            assert ann.openWorldHint is True, f"bucket/S3 tool {name} must set openWorldHint=True"
+
+
+# ---------------------------------------------------------------------------
+# 2. Registration Fail-Fast Contract
+# ---------------------------------------------------------------------------
 
 
 def test_duplicate_tool_registration_raises():
-    """Registering over a colliding name must raise: FastMCP itself only logs
-    a warning and silently keeps the FIRST registration, so a duplicate would
-    otherwise be invisible (a crippled-but-booting server)."""
-    mcp = _mcp_with_tool("semantic_query")
+    mcp = FastMCP(name="test")
+
+    @mcp.tool(name="search_statutes")
+    def _colliding() -> str:
+        return "x"
+
     with pytest.raises(RuntimeError, match="would overwrite"):
         tools_pkg.register(mcp)
-    # The colliding module's registration never went through un-flagged: the
-    # pre-existing tool is still the one registered (first wins is irrelevant
-    # because we refuse to boot).
 
 
 def test_duplicate_module_registration_raises_for_whole_loop():
-    """register() over a full second pass must fail on the first duplicate."""
     mcp = _fresh_mcp()
     with pytest.raises(RuntimeError, match="would overwrite"):
         tools_pkg.register(mcp)
 
 
-def test_raising_register_module_raises_runtime_error(monkeypatch):
-    """A register function that raises fails the whole registration (no
-    log-and-continue), wrapping the original error."""
-    def _boom(_mcp):
+def test_raising_register_module_raises_runtime_error():
+    def _boom(_mcp: Any) -> None:
         raise ValueError("broken tool module")
 
     saved = tools_pkg._REGISTRATIONS[:]
@@ -141,17 +243,12 @@ def test_raising_register_module_raises_runtime_error(monkeypatch):
         tools_pkg._REGISTRATIONS[:] = saved
 
 
-def test_malformed_registration_missing_tools_raises(monkeypatch):
-    """A module that lands fewer tools than it claims (malformed) must raise."""
-
-    def register(_mcp):  # registers NOTHING
+def test_malformed_registration_missing_tools_raises():
+    def _noop(_mcp: Any) -> None:
         return None
 
     saved = tools_pkg._REGISTRATIONS[:]
-    tools_pkg._REGISTRATIONS[:] = [(register, "list_acts", frozenset({
-        "list_acts", "list_chapters", "list_sections",
-        "list_articles", "list_judgments",
-    }))]
+    tools_pkg._REGISTRATIONS[:] = [(_noop, "search_statutes", frozenset({"search_statutes"}))]
     try:
         with pytest.raises(RuntimeError, match="did not land"):
             tools_pkg.register(FastMCP(name="t"))
@@ -159,235 +256,191 @@ def test_malformed_registration_missing_tools_raises(monkeypatch):
         tools_pkg._REGISTRATIONS[:] = saved
 
 
-def test_registry_introspection_is_none_without_fastmcp_internals():
-    """On an object without the (private) component store the helper returns
-    None and register() degrades to exception-only fail-fast."""
-
-    class _OpaqueMCP:
-        pass  # no _local_provider
-
-    assert tools_pkg._registered_tool_names(_OpaqueMCP()) is None
-
-
-def test_registration_helper_reads_fastmcp_component_store():
-    mcp = FastMCP(name="t")
-    get_section.register(mcp)
-    assert tools_pkg._registered_tool_names(mcp) == {"get_section"}
-
-
 # ---------------------------------------------------------------------------
-# 3. Behavioural contract (db faked)
+# 3. Behavioural Contracts Across the 12 Tools
 # ---------------------------------------------------------------------------
 
-def _doc(kind: str = "section") -> Document:
-    return Document(
-        kind=kind, ref="302", act="IPC", title="Punishment for murder",
-        text="Whoever commits murder shall be punished with death or imprisonment for life.",
-        metadata={}, source="PRS (CC BY 4.0)",
+
+async def test_search_statutes_frames_snippets_and_returns_hits():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["search_statutes"].fn(query="murder")
+    assert res.total >= 1
+    assert res.results[0].act in {"IPC", "BNS"}
+    assert res.results[0].snippet.startswith("<corpus_text ")
+    assert res.results[0].snippet.endswith("</corpus_text>")
+
+
+async def test_get_provision_parses_citation_and_frames_text():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["get_provision"].fn(citation="IPC s.302")
+    assert res.act == "IPC"
+    assert res.ref == "302"
+    assert res.validity.status == "repealed"
+    assert res.validity.replaced_by[0].act == "BNS"
+    assert res.text.startswith("<corpus_text ")
+    assert "Whoever commits murder" in res.text
+
+
+async def test_get_provision_not_found_returns_structured_error():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["get_provision"].fn(act="IPC", ref="99999")
+    assert res.is_error is True
+    assert res.structured_content["error"]["code"] == "not_found"
+
+
+async def test_browse_statute_catalog_toc_and_provisions():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    catalog = await tools["browse_statute"].fn()
+    assert catalog.mode == "catalog"
+    assert catalog.total >= 2
+
+    toc = await tools["browse_statute"].fn(act="IPC")
+    assert toc.mode == "toc"
+    assert toc.act_info is not None
+    assert toc.act_info.short_name == "IPC"
+
+    provs = await tools["browse_statute"].fn(act="IPC", kind="section", include_snippet=True)
+    assert provs.mode == "provisions"
+    assert provs.provisions[0].snippet is not None
+    assert provs.provisions[0].snippet.startswith("<corpus_text ")
+
+
+async def test_compare_provisions_resolves_concordance_and_manual_target():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["compare_provisions"].fn(source="IPC s.302")
+    assert res.mapping_type == "one_to_one"
+    assert res.source_provision.act == "IPC"
+    assert res.target_provisions[0].act == "BNS"
+    assert res.target_provisions[0].ref == "103"
+    assert res.source_provision.text.startswith("<corpus_text ")
+
+    manual = await tools["compare_provisions"].fn(source="IPC s.302", target="BNS s.103")
+    assert manual.target_provisions[0].ref == "103"
+
+
+async def test_cross_reference_returns_framed_links():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["cross_reference"].fn(act="IPC", ref="302", direction="from")
+    assert res.source.act == "IPC"
+    assert res.total >= 1
+    assert res.links[0].to_ref.act == "BNS"
+    assert res.links[0].context_note is not None
+    assert res.links[0].context_note.startswith("<corpus_text ")
+
+
+async def test_get_provision_history_returns_framed_amendment_summary():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["get_provision_history"].fn(act="Constitution", amendment_number=42)
+    assert res.total == 1
+    assert res.amendments[0].year == 1976
+    assert res.amendments[0].summary.startswith("<corpus_text ")
+
+
+async def test_trace_precedent_enforces_unverified_automated_status():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["trace_precedent"].fn(identifier="AIR 1973 SC 1461")
+    assert res.precedent_status == "unverified_automated"
+    assert "does NOT perform automated Shepardizing" in res.verification_notice or "unverified" in res.verification_notice.lower()
+    assert res.target.case_id == "sc:1973:kesavananda"
+
+
+async def test_get_judgment_modes_and_commercial_safe_block():
+    backend = _build_rich_memory_backend()
+    backend.judgments["sc:1973:kesavananda"].pdf_s3_bucket = "indian-supreme-court-judgments"
+    backend.judgments["sc:1973:kesavananda"].pdf_s3_key = "data/pdf/year=1973/english/kesavananda.pdf"
+    storage.set_backend(backend)
+
+    class _FakePdfFetcher:
+        async def fetch_and_read(self, meta: JudgmentMeta, **kwargs: Any) -> JudgmentContent:
+            return JudgmentContent(
+                case_id=meta.case_id,
+                mode=kwargs.get("mode", "overview"),
+                extraction_quality="verified",
+                extraction_method="pypdfium2_s3_pdf",
+                excerpts=[
+                    JudgmentExcerpt(
+                        para_num=1,
+                        text="The basic structure of the Constitution cannot be abrogated under Article 368.",
+                    )
+                ],
+                total_paragraphs=10,
+                total_pages=5,
+                chars_per_page=1200.0,
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    storage.set_pdf_fetcher(_FakePdfFetcher())
+    tools = await _tool_map(_fresh_mcp())
+
+    # Overview mode + mode="query_excerpt" alias support
+    res = await tools["get_judgment"].fn(identifier="AIR 1973 SC 1461", view="overview")
+    assert res.card.case_id == "sc:1973:kesavananda"
+    assert res.excerpts[0].text.startswith("<corpus_text ")
+
+    res_alias = await tools["get_judgment"].fn(
+        identifier="AIR 1973 SC 1461",
+        mode="query_excerpt",
+        excerpt_query="basic structure",
     )
+    assert res_alias.view == "search_within"
+    assert res_alias.excerpts[0].text.startswith("<corpus_text ")
 
-
-_ACT = {
-    "short_name": "IPC", "full_name": "The Indian Penal Code, 1860",
-    "year": 1860, "citation": "Act No. 45 of 1860", "kind": "criminal",
-    "source": "PRS (CC BY 4.0)", "source_license": "CC BY 4.0", "as_of": None,
-}
-
-
-def _patch_db(monkeypatch, **overrides):
-    """Patch the db functions the tool modules call, recording the calls."""
-    calls: dict[str, Any] = {}
-
-    def _mk(name, ret):
-        def fn(*args, **kwargs):
-            calls[name] = (args, kwargs)
-            return ret
-
-        return fn
-
-    defaults: dict[str, Any] = {
-        "get_section": _doc(),
-        "get_cross_refs": [CrossRef(from_act="IPC", from_section="302",
-                                    to_act="BNS", to_section="103",
-                                    kind="replaced_by")],
-        "list_chapters": [{"number": 1, "title": "Of Punishments"}],
-        "get_act": Act(**_ACT),
-        "list_sections": ([_doc()], 1, "Of Punishments"),
-        "list_schedules": [_doc("schedule")],
-        "get_schedule": _doc("schedule"),
-        "list_amendments": [_doc("amendment")],
-        "get_amendment": _doc("amendment"),
-        "get_amendments_for_article": [_doc("amendment")],
-    }
-    for name, ret in {**defaults, **overrides}.items():
-        monkeypatch.setattr(db, name, _mk(name, ret), raising=False)
-    return calls
-
-
-_TOOL_MODULES = {
-    "get_section": get_section,
-    "cross_reference": cross_reference,
-    "list_chapters": list_acts_tool,
-    "list_acts": list_acts_tool,
-    "schedules_amendments": schedules_amendments,
-    "get_amendments_for_article": get_amendments_for_article,
-}
-
-
-async def _tool(name: str) -> Any:
-    """Register one tool module on a throwaway FastMCP and return its fn."""
-    mcp = FastMCP(name="t")
-    _TOOL_MODULES[name].register(mcp)
-    tools = {t.name: t for t in await mcp.list_tools()}
-    return tools[name].fn
-
-
-async def test_get_section_passes_args_through_to_db(monkeypatch):
-    """Normalization (case/alias/s. prefix) lives in the db layer; the tool is
-    a pass-through (contract: tool does not second-guess db normalization)."""
-    calls = _patch_db(monkeypatch)
-    fn = await _tool("get_section")
-    result = await fn(act="IPC", section=" s.302 ")
-    assert result.ref == "302"
-    assert calls["get_section"][0] == ("IPC", " s.302 ")
-
-
-async def test_get_section_parses_citation_string_when_act_empty(monkeypatch):
-    calls = _patch_db(monkeypatch)
-    fn = await _tool("get_section")
-    result = await fn(act="", section="IPC s.302")
-    assert result.kind == "section"
-    assert calls["get_section"][0] == ("IPC", "302")
-
-
-async def test_get_section_not_found_is_structured_error(monkeypatch):
-    _patch_db(monkeypatch, get_section=None)
-    fn = await _tool("get_section")
-    result = await fn(act="IPC", section="99999")
-    assert result.is_error is True
-    error = result.structured_content["error"]
-    assert error["code"] == "not_found"
-    assert error["kind"] == "section"
-    assert error["hint"]
-    assert any("99999" in c.text for c in result.content)
-
-
-async def test_cross_reference_returns_list_with_direction(monkeypatch):
-    calls = _patch_db(monkeypatch)
-    fn = await _tool("cross_reference")
-    result = await fn(act="IPC", section="302", direction="from")
-    assert result.direction == "from"
-    assert result.references[0].to_act == "BNS"
-    assert calls["get_cross_refs"][1] == {"direction": "from"}
-
-
-async def test_schedules_amendments_tools_surface(monkeypatch):
-    _patch_db(monkeypatch, get_schedule=None)
-    mcp = FastMCP(name="t")
-    schedules_amendments.register(mcp)
-    tools = {t.name: t for t in await mcp.list_tools()}
-    assert set(tools) == {"list_schedules", "get_schedule", "list_amendments", "get_amendment"}
-
-    scheds = await tools["list_schedules"].fn()
-    assert [d.kind for d in scheds] == ["schedule"]
-
-    # Not-found comes back as a structured error, not an exception.
-    result = await tools["get_schedule"].fn(99)
-    assert result.is_error is True
-    assert result.structured_content["error"]["kind"] == "schedule"
-
-
-async def test_get_amendments_for_article_empty_is_structured_not_found(monkeypatch):
-    _patch_db(monkeypatch, get_amendments_for_article=[])
-    fn = await _tool("get_amendments_for_article")
-    result = await fn(article="31")
-    assert result.is_error is True
-    assert result.structured_content["error"]["kind"] == "article"
-
-
-async def test_get_amendments_for_article_blank_is_structured_not_found(monkeypatch):
-    _patch_db(monkeypatch)
-    fn = await _tool("get_amendments_for_article")
-    result = await fn(article="  ")
-    assert result.is_error is True
-    assert result.structured_content["error"]["kind"] == "article"
-
-
-async def test_list_chapters_unknown_act_is_structured_not_found(monkeypatch):
-    _patch_db(monkeypatch, list_chapters=[], get_act=None)
-    fn = await _tool("list_chapters")
-    result = await fn(act="NOPE")
-    assert result.is_error is True
-    error = result.structured_content["error"]
-    assert error["kind"] == "act"
-    assert "list_acts" in error["hint"]
-
-
-async def test_list_sections_passes_pagination_and_text_flags(monkeypatch):
-    calls = _patch_db(monkeypatch)
-    mcp = FastMCP(name="t")
-    list_acts_tool.register(mcp)
-    tools = {t.name: t for t in await mcp.list_tools()}
-    result = await tools["list_sections"].fn(
-        act="IPC", chapter=16, limit=9999, offset=-3,
-        include_text=False, snippet_chars=120,
+    # Commercial license block on ILDC NC record when commercial_safe_only=True
+    blocked = await tools["get_judgment"].fn(
+        identifier="2021 INSC 999",
+        commercial_safe_only=True,
     )
-    assert result.total == 1
-    assert result.limit == 500  # clamped from 9999
-    assert result.offset == 0  # clamped from -3
-    assert calls["list_sections"][1]["include_text"] is False
-    assert calls["list_sections"][1]["snippet_chars"] == 120
+    assert blocked.is_error is True
+    assert blocked.structured_content["error"]["code"] == "commercial_license_blocked"
 
 
-async def test_structured_errors_catches_only_nyaya_errors():
-    """Non-NyayaError exceptions propagate (FastMCP's default handling)."""
-
-    @structured_errors
-    async def boom():
-        raise ValueError("not a nyaya error")
-
-
-    try:
-        await boom()
-    except ValueError as exc:
-        assert "not a nyaya error" in str(exc)
-    else:
-        raise AssertionError("ValueError should propagate through structured_errors")
-
-
-# ---------------------------------------------------------------------------
-# 4. Task 11 dedupe/removal contracts
-# ---------------------------------------------------------------------------
-
-def test_dead_embedding_service_symbols_are_gone():
-    """The unused EmbeddingService indirection was deleted; the module-level
-    embed_query/rerank_query functions are the only API."""
-    import nyaya.embeddings as emb
-
-    for gone in ("EmbeddingService", "get_default_service", "embed_texts"):
-        assert not hasattr(emb, gone), f"{gone} should be removed"
-    for kept in ("embed_query", "rerank_query"):
-        assert hasattr(emb, kept), f"{kept} should remain"
+async def test_verify_citations_detects_repealed_struck_down_and_hallucinated():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    draft = (
+        "The accused is charged under IPC s. 302 and IT Act s. 66A. "
+        "Reliance is placed on AIR 1973 SC 1461 and AIR 1973 SC 9999."
+    )
+    res = await tools["verify_citations"].fn(
+        text=draft,
+        verify_quotes=[{"citation": "IPC s. 302", "quote": "Whoever commits murder"}],
+    )
+    assert res.precedent_status == "unverified_automated"
+    statuses = {f.raw_citation: f.status for f in res.findings}
+    assert any(f.status == "VERIFIED_REPEALED" for f in res.findings)
+    assert any(f.status == "VERIFIED_STRUCK_DOWN_OR_READ_DOWN" for f in res.findings)
+    assert statuses.get("AIR 1973 SC 1461") == "VERIFIED"
+    assert statuses.get("AIR 1973 SC 9999") == "NOT_FOUND_IN_CORPUS"
+    assert any(f.status == "QUOTE_VERIFIED" for f in res.findings)
 
 
-def test_bidi_regex_has_a_single_home():
-    """db.normalize_act must strip the same bidi characters as sanitize."""
-    from nyaya.sanitize import BIDI_RE as sanitize_re
-
-    assert db.BIDI_RE is sanitize_re
-    assert not hasattr(inspect.getmodule(db), "_BIDI_RE")
-
-
-def test_redact_url_has_a_single_home():
-    """ratelimit imports config._redact_url instead of its own copy."""
-
-    import nyaya.ratelimit as rl
-
-    assert rl._redact_url is _redact_url_ref()
-    assert "urlsplit" not in inspect.getsource(rl)
+async def test_judgment_analytics_blocks_district_court_when_commercial_safe():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["judgment_analytics"].fn(
+        group_by="year",
+        court_tier="district_court",
+        state="MH",
+        commercial_safe_only=True,
+    )
+    assert res.is_error is True
+    assert res.structured_content["error"]["code"] == "commercial_license_blocked"
 
 
-def _redact_url_ref():
-    from nyaya.config import _redact_url
-
-    return _redact_url
+async def test_corpus_status_returns_v2_counts():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+    res = await tools["corpus_status"].fn()
+    assert res.service_version == "2.0.0"
+    assert res.retrieval_mode == "lexical_metadata_graph"
+    assert res.counts.central_acts >= 2

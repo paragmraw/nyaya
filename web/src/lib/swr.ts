@@ -1,13 +1,25 @@
 "use client";
 
 import useSWR from "swr";
-import { api, type CorpusStats, type ToolsResponse, type HealthSummary } from "./api";
+import {
+  api,
+  buildQuery,
+  type ActsQuery,
+  type ActsResponse,
+  type AnalyticsQuery,
+  type AnalyticsResponse,
+  type CorpusStatusResponse,
+  type HealthSummary,
+  type JudgmentsQuery,
+  type JudgmentsResponse,
+  type ToolsResponse,
+} from "./api";
 import corpusStatsFile from "@/data/corpus-stats.json";
 
-// Static build-time snapshot generated from CURATED (src/lib/data.ts) by
-// scripts/generate-corpus-stats.ts and committed; useCorpusStats falls back to
-// it while /api/corpus-stats is unreachable.
-const CORPUS_STATS_FALLBACK = corpusStatsFile as unknown as CorpusStats;
+// Static build-time snapshot generated from CURATED & BASELINE_COUNTS
+// (scripts/generate-corpus-stats.ts); useCorpusStatus falls back to it while
+// /api/corpus-status is unreachable or hydrating.
+const CORPUS_STATUS_FALLBACK = corpusStatsFile as unknown as CorpusStatusResponse;
 
 // SWR defaults: 5-min dedup, 10s error retry, no revalidate on focus.
 // Static info pages don't need to react to tab focus.
@@ -18,10 +30,34 @@ const SWR_OPTS = {
   revalidateOnFocus: false,
 };
 
-export function useCorpusStats() {
-  return useSWR<CorpusStats>("/api/corpus-stats", api.corpusStats, {
+export function useCorpusStatus() {
+  return useSWR<CorpusStatusResponse>("/api/corpus-status", api.corpusStatus, {
     ...SWR_OPTS,
-    fallbackData: CORPUS_STATS_FALLBACK,
+    fallbackData: CORPUS_STATUS_FALLBACK,
+  });
+}
+
+export function useActs(params?: ActsQuery, fallbackData?: ActsResponse) {
+  const key = `/api/acts${buildQuery(params)}`;
+  return useSWR<ActsResponse>(key, () => api.acts(params), {
+    ...SWR_OPTS,
+    fallbackData,
+  });
+}
+
+export function useJudgments(params?: JudgmentsQuery, fallbackData?: JudgmentsResponse) {
+  const key = `/api/judgments${buildQuery(params)}`;
+  return useSWR<JudgmentsResponse>(key, () => api.judgments(params), {
+    ...SWR_OPTS,
+    fallbackData,
+  });
+}
+
+export function useAnalytics(params?: AnalyticsQuery, fallbackData?: AnalyticsResponse) {
+  const key = `/api/analytics${buildQuery(params)}`;
+  return useSWR<AnalyticsResponse>(key, () => api.analytics(params), {
+    ...SWR_OPTS,
+    fallbackData,
   });
 }
 

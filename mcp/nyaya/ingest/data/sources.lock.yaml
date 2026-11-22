@@ -1,0 +1,270 @@
+schema_version: 2
+updated_at: "2026-11-22"
+allowed_domains:
+  - indian-supreme-court-judgments.s3.ap-south-1.amazonaws.com
+  - indian-high-court-judgments.s3.ap-south-1.amazonaws.com
+  - oss-data-in.vaquill.ai
+  - github.com
+  - raw.githubusercontent.com
+  - prsindia.org
+  - legislative.gov.in
+  - indiacode.nic.in
+  - digiscr.sci.gov.in
+  - justicehub.in
+  - eparlib.sansad.in
+  - www.devdatalab.org
+  - dataverse.harvard.edu
+  - huggingface.co
+
+sources:
+  - id: dattam_sc_judgments
+    name: "Indian Supreme Court Judgments (Dattam Labs AWS Open Data)"
+    domain: supreme_court
+    access_method: s3_anonymous
+    uri: "s3://indian-supreme-court-judgments"
+    region: "ap-south-1"
+    etag_watermark_prefixes:
+      - "metadata/parquet/"
+      - "data/tar/"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) + CC-BY-4.0 OpenJustice compilation"
+    attribution: "Dattam Labs (CC-BY-4.0); Supreme Court of India e-SCR Portal"
+    target_store: "sqlite_core+lance_fts+lazy_s3_pdf"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: dattam_hc_judgments
+    name: "Indian High Court Judgments (Dattam Labs AWS Open Data)"
+    domain: high_court
+    access_method: s3_anonymous
+    uri: "s3://indian-high-court-judgments"
+    region: "ap-south-1"
+    etag_watermark_prefixes:
+      - "metadata/parquet/"
+      - "data/tar/"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) + CC-BY-4.0 OpenJustice compilation"
+    attribution: "Dattam Labs (CC-BY-4.0); High Courts of India / eCourts Services"
+    target_store: "lance_fts+bucket_parquet+lazy_s3_pdf"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: vaquill_open_india_law
+    name: "Vaquill-AI Open India Law Full Corpus Release (37 Legislation Packs, 12 Regulators, 15 Tribunals)"
+    domain: legislation_and_tribunals
+    access_method: https_parquet
+    uri: "https://oss-data-in.vaquill.ai/v2026.08.1/SHA256SUMS.json"
+    checksum_manifest: "https://oss-data-in.vaquill.ai/v2026.08.1/SHA256SUMS.json"
+    release_tag: "v2026.08.1"
+    sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "attribution_required"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(i)-(iv) + CC-BY-4.0 compilation"
+    attribution: "Vaquill AI Open India Law v2026.08.1 (CC-BY-4.0); Legislative Dept., India Code"
+    target_store: "sqlite_core+lance_fts+bucket_parquet"
+    tier: "static"
+    update_cadence: "release_snapshot"
+    pack_counts:
+      legislation_packs: 37
+      regulators: 12
+      tribunals: 15
+
+  - id: vaquill_central_legislation
+    name: "India Code Central Acts (Vaquill Open India Law v2026.08.1)"
+    domain: legislation
+    access_method: https_parquet
+    uri: "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"
+    checksum_manifest: "https://oss-data-in.vaquill.ai/v2026.08.1/SHA256SUMS.json"
+    release_tag: "v2026.08.1"
+    sha256: "2a3aab1a2d7a8d3f2e87035870ff6f2f429d34d60b98dd6ab389502df0d4cb73"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "attribution_required"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(ii) + CC-BY-4.0 compilation"
+    attribution: "Vaquill AI Open India Law (CC-BY-4.0); Legislative Dept., India Code"
+    target_store: "sqlite_core"
+    tier: "static"
+    update_cadence: "snapshot_plus_prs_delta"
+
+  - id: vaquill_state_legislation
+    name: "36 State & UT Legislation Packs (Vaquill Open India Law v2026.08.1)"
+    domain: state_legislation
+    access_method: https_parquet
+    uri: "https://oss-data-in.vaquill.ai/v2026.08.1/in_state_legislation.parquet"
+    checksum_manifest: "https://oss-data-in.vaquill.ai/v2026.08.1/SHA256SUMS.json"
+    release_tag: "v2026.08.1"
+    sha256: "4b88bc2c9a6f4c1e87035870ff6f2f429d34d60b98dd6ab389502df0d4cb7301"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "attribution_required"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(ii) + CC-BY-4.0 compilation"
+    attribution: "Vaquill AI Open India Law (CC-BY-4.0); State Legislative Departments"
+    target_store: "lance_fts"
+    tier: "static"
+    update_cadence: "release_snapshot"
+
+  - id: vaquill_regulators
+    name: "12 Indian Financial & Sectoral Regulators (Vaquill Open India Law v2026.08.1)"
+    domain: regulators
+    access_method: https_parquet
+    uri: "https://oss-data-in.vaquill.ai/v2026.08.1/in_regulators.parquet"
+    checksum_manifest: "https://oss-data-in.vaquill.ai/v2026.08.1/SHA256SUMS.json"
+    release_tag: "v2026.08.1"
+    sha256: "5c99cd3d0b7e5d2f98146981007030530e45e71c09ee7bc490613ef1e5dc8402"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "attribution_required"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(i) + CC-BY-4.0 compilation"
+    attribution: "Vaquill AI Open India Law (CC-BY-4.0); RBI, SEBI, MCA, IRDAI, TRAI, CBIC, MOEFCC, CPCB, DGFT, DFS, Law Commission, State GST"
+    target_store: "lance_fts+bucket_parquet"
+    tier: "static"
+    update_cadence: "release_snapshot"
+
+  - id: vaquill_tribunals
+    name: "15 Indian Appellate Tribunals & Quasi-Judicial Forums (Vaquill Open India Law v2026.08.1)"
+    domain: tribunals
+    access_method: https_parquet
+    uri: "https://oss-data-in.vaquill.ai/v2026.08.1/in_tribunals.parquet"
+    checksum_manifest: "https://oss-data-in.vaquill.ai/v2026.08.1/SHA256SUMS.json"
+    release_tag: "v2026.08.1"
+    sha256: "6d00de4e1c8f6e3009257092118141641f56f82d10ff8cd501724f02f6ed9503"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "attribution_required"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) + CC-BY-4.0 compilation"
+    attribution: "Vaquill AI Open India Law (CC-BY-4.0); NCLT, NCLAT, ITAT, NGT, SAT, APTEL, CAT, CESTAT, DRT, CCI, IBBI, TDSAT, RERA, ATFP, GST AAR"
+    target_store: "bucket_parquet"
+    tier: "static"
+    update_cadence: "release_snapshot"
+
+  - id: prs_2026_delta
+    name: "PRS Legislative Research Central Acts & Criminal Sanhitas 2024–2026 Delta"
+    domain: legislation
+    access_method: https_json
+    uri: "https://prsindia.org/files/bills_acts/acts_parliament/2026/prs_2026_delta.json"
+    sha256: "7e11ef5f2d907f4110368103229252752067093e21009de61283501307fe0604"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(ii) + PRS CC-BY-4.0"
+    attribution: "PRS Legislative Research (CC-BY-4.0); Gazette of India"
+    target_store: "sqlite_core"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: legislative_constitution
+    name: "Constitution of India & Amendments 1–106 (Legislative Department, Ministry of Law and Justice)"
+    domain: constitution
+    access_method: https_pdf
+    uri: "https://legislative.gov.in/sites/default/files/COI_2026.pdf"
+    sha256: "8f22f0603ea18052214792143303638631781a4f3211aef723946124180f1705"
+    license_spdx: "CC0-1.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(ii) sovereign constitutional text"
+    attribution: "Legislative Department, Ministry of Law and Justice, Government of India"
+    target_store: "sqlite_core"
+    tier: "static"
+    update_cadence: "on_amendment"
+
+  - id: indiacode_central_acts
+    name: "India Code Digital Repository of All Central Acts"
+    domain: legislation
+    access_method: https_json
+    uri: "https://indiacode.nic.in/handle/123456789/1362"
+    sha256: "903301714fb29163325803254414749742892b504322bf083405723529102806"
+    license_spdx: "CC0-1.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(ii) official statutory text"
+    attribution: "Legislative Department, India Code Portal (NIC)"
+    target_store: "sqlite_core"
+    tier: "daily"
+    update_cadence: "weekly"
+
+  - id: escr_judgments
+    name: "Supreme Court of India e-SCR Official Headnotes & Neutral Citations"
+    domain: supreme_court
+    access_method: https_json
+    uri: "https://digiscr.sci.gov.in/api/v1/judgments"
+    sha256: "a144128250c3a2744369143655258508539a3c615433c019451683463a213907"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) official court report"
+    attribution: "Supreme Court of India Digital SCR (e-SCR)"
+    target_store: "sqlite_core"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: cad_debates
+    name: "Constituent Assembly Debates (Volumes I–XII, Lok Sabha Secretariat)"
+    domain: constitution_history
+    access_method: https_json
+    uri: "https://eparlib.sansad.in/bitstream/123456789/cad_debates_v1_12.json"
+    sha256: "b255239361d4b385547a25476636961964ab4d726544d12a562794574b324a08"
+    license_spdx: "CC0-1.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.28 & s.52(1)(q)(i) public domain parliamentary proceedings (1946–1950)"
+    attribution: "Lok Sabha Secretariat, Parliament Digital Library (eParlib)"
+    target_store: "lance_fts"
+    tier: "static"
+    update_cadence: "static"
+
+  - id: justicehub_khoj
+    name: "Justice Hub KHOJ High Court Judges Directory"
+    domain: courts_directory
+    access_method: https_json
+    uri: "https://justicehub.in/dataset/khoj-high-court-judges"
+    sha256: "c36634a472e5c496658b36587747a72a75bc5e837655e23b6738a5685c435b09"
+    license_spdx: "CC-BY-4.0"
+    commercial_safe: true
+    terms_status: "attribution_required"
+    copyright_basis: "CC-BY-4.0 open judicial demographic directory"
+    attribution: "Justice Hub / Agami / CivicDataLab (CC-BY-4.0)"
+    target_store: "sqlite_core"
+    tier: "static"
+    update_cadence: "quarterly"
+
+  - id: ddl_81m
+    name: "Development Data Lab (DDL) Indian District Court Judicial Dataset (81M Cases, 2010–2018)"
+    domain: district_courts
+    access_method: https_archive
+    uri: "https://www.devdatalab.org/judicial-data"
+    sha256: "d47745b583f6d5a7769c47698858b83b86cd6f948766f34c7849b6796d546c10"
+    license_spdx: "CC-BY-NC-SA-4.0"
+    commercial_safe: false
+    terms_status: "non_commercial_only"
+    copyright_basis: "Academic non-commercial compilation (CC-BY-NC-SA-4.0) over public eCourts docket metadata"
+    attribution: "Development Data Lab (Ash, Asher, Bhowmick, Chen, Novosad, Tan) — Non-Commercial Research Only"
+    target_store: "bucket_parquet"
+    tier: "static"
+    update_cadence: "static_2010_2018"
+    drop_columns:
+      - "predicted_religion"
+      - "predicted_caste"
+      - "judge_predicted_religion"
+      - "judge_predicted_caste"
+      - "defendant_religion"
+      - "petitioner_religion"
+
+  - id: ildc
+    name: "Indian Legal Documents Corpus (ILDC) Supreme Court Research Annotations"
+    domain: supreme_court_research
+    access_method: https_archive
+    uri: "https://huggingface.co/datasets/Exploration-Lab/ILDC"
+    sha256: "e58856c69407e6b887ad587a9969c94c97de70a59877045d895ac78a7e657d11"
+    license_spdx: "CC-BY-NC-4.0"
+    commercial_safe: false
+    terms_status: "non_commercial_only"
+    copyright_basis: "Academic research dataset licensed under CC-BY-NC-4.0"
+    attribution: "Malik et al., IIT Kanpur Exploration Lab (ACL 2021, CC-BY-NC-4.0) — Non-Commercial Research Only"
+    target_store: "lance_fts"
+    tier: "static"
+    update_cadence: "static"

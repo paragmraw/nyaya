@@ -1,4 +1,4 @@
-// API client + SWR hooks for the Nyaya SPA.
+// API client + types for the Nyaya v2.0 SPA.
 //
 // All data is fetched client-side against same-origin REST endpoints (see
 // mcp/nyaya/rest.py). In dev, next.config.mjs rewrites /api/* to localhost:8000;
@@ -7,34 +7,166 @@
 
 // ─── Types ────────────────────────────────────────────────────────
 export type CorpusCounts = {
-  acts: number;
-  sections: number;
+  legislation_jurisdictions: number;
+  central_acts: number;
+  state_acts: number;
+  regulators: number;
+  tribunals: number;
+  provisions: number;
   articles: number;
-  judgments: number;
-  amendments: number;
   schedules: number;
-  chapters: number;
-  cross_refs: number;
+  amendments: number;
+  concordance_mappings: number;
+  judicial_invalidations: number;
+  sc_judgments: number;
+  hc_judgments: number;
+  tribunal_orders: number;
+  district_court_records: number;
+  citation_edges: number;
 };
 
-export type CorpusStats = {
-  counts: CorpusCounts;
+export type CorpusLicensing = {
+  code_license: string;
+  commercial_safe_default: boolean;
+  nc_datasets: string[];
+};
+
+export type CorpusSourceStatus = {
+  source_id?: string;
+  short_name?: string;
+  name: string;
+  category?: string;
+  coverage?: string;
+  records?: number;
+  license_spdx: string;
+  commercial_safe: boolean;
+  terms_status?: string;
+  as_of?: string | null;
+};
+
+export type CorpusStatusResponse = {
+  version?: string;
+  service_version?: string;
+  retrieval_mode?: string;
+  commercial_safe_locked?: boolean;
   as_of: string | null;
+  tiers?: Record<string, unknown>;
+  counts: CorpusCounts;
+  licensing?: CorpusLicensing;
+  sources?: CorpusSourceStatus[];
+};
+
+export type ActSummary = {
+  short_name: string;
+  full_name: string;
+  jurisdiction?: string;
+  year?: number | null;
+  category?: string;
+  kind?: string;
+  status?: string;
+  provision_count?: number;
+  source?: string;
+  license_spdx?: string;
+  commercial_safe?: boolean;
+  as_of?: string | null;
+};
+
+export type ActsQuery = {
+  jurisdiction?: string;
+  category?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+  commercial_safe_only?: boolean;
+};
+
+export type ActsResponse = {
+  items: ActSummary[];
+  total: number;
+  limit?: number;
+  offset?: number;
+};
+
+export type JudgmentSummary = {
+  case_id: string;
+  cnr?: string | null;
+  neutral_citation?: string | null;
+  reporter_citations?: string[];
+  title: string;
+  court: string;
+  court_tier?: string;
+  decision_date?: string | null;
+  bench_strength?: number | null;
+  disposal_nature?: string | null;
+  text_availability?: string;
+  license_spdx?: string;
+  commercial_safe?: boolean;
+};
+
+export type JudgmentsQuery = {
+  tier?: string;
+  court?: string;
+  year_from?: number;
+  year_to?: number;
+  q?: string;
+  limit?: number;
+  offset?: number;
+  commercial_safe_only?: boolean;
+};
+
+export type JudgmentsResponse = {
+  items: JudgmentSummary[];
+  total: number;
+  total_is_estimate?: boolean;
+  limit: number;
+  offset: number;
+};
+
+export type AnalyticsQuery = {
+  dataset?: string;
+  group_by?: string;
+  court?: string;
+  state?: string;
+  year_from?: number;
+  year_to?: number;
+  top_n?: number;
+  commercial_safe_only?: boolean;
+};
+
+export type AnalyticsRow = {
+  key: string;
+  count: number;
+  share_pct?: number;
+};
+
+export type AnalyticsResponse = {
+  dataset: string;
+  group_by: string;
+  rows: AnalyticsRow[];
+  total_cases: number;
+  as_of: string | null;
+  commercial_safe: boolean;
+  license_spdx: string;
 };
 
 export type ToolInfo = {
   name: string;
   description: string;
+  open_world?: boolean;
 };
 
 export type ToolsResponse = {
   items: ToolInfo[];
   total: number;
+  resources_count?: number;
+  prompts_count?: number;
 };
 
 export type HealthSummary = {
   status: string;
+  version?: string;
   counts: Partial<CorpusCounts>;
+  backends?: Record<string, unknown>;
   as_of: string | null;
 };
 
@@ -83,6 +215,17 @@ export type ChatMessage = {
 // ─── Fetch helpers ────────────────────────────────────────────────
 const FETCH_TIMEOUT_MS = 10_000;
 
+export function buildQuery(params?: Record<string, string | number | boolean | undefined | null>): string {
+  if (!params) return "";
+  const sp = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val === undefined || val === null || val === "") continue;
+    sp.set(key, String(val));
+  }
+  const qs = sp.toString();
+  return qs ? `?${qs}` : "";
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -106,7 +249,10 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export const api = {
-  corpusStats: () => fetchJson<CorpusStats>("/api/corpus-stats"),
+  corpusStatus: () => fetchJson<CorpusStatusResponse>("/api/corpus-status"),
+  acts: (params?: ActsQuery) => fetchJson<ActsResponse>(`/api/acts${buildQuery(params)}`),
+  judgments: (params?: JudgmentsQuery) => fetchJson<JudgmentsResponse>(`/api/judgments${buildQuery(params)}`),
+  analytics: (params?: AnalyticsQuery) => fetchJson<AnalyticsResponse>(`/api/analytics${buildQuery(params)}`),
   tools: () => fetchJson<ToolsResponse>("/api/tools"),
   healthSummary: () => fetchJson<HealthSummary>("/api/health-summary"),
 };
@@ -114,5 +260,20 @@ export const api = {
 // ─── Format helpers ───────────────────────────────────────────────
 export function formatNumber(n: number | null | undefined): string {
   if (n == null) return "N/A";
+  return n.toLocaleString("en-IN");
+}
+
+export function formatCompactCount(n: number | null | undefined): string {
+  if (n == null) return "N/A";
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    const str = Number.isInteger(m) ? String(m) : m.toFixed(2).replace(/\.?0+$/, "");
+    return `${str}M+`;
+  }
+  if (n >= 1_000) {
+    const k = n / 1_000;
+    const str = Number.isInteger(k) ? String(k) : k.toFixed(1).replace(/\.0$/, "");
+    return `${str}k+`;
+  }
   return n.toLocaleString("en-IN");
 }

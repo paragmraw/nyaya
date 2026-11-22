@@ -1,24 +1,29 @@
-"""Server-side exceptions that map onto MCP error responses.
+"""Server-side exceptions that map onto structured MCP tool error responses.
 
-The hierarchy is intentionally shallow but structured: every exception carries
-a short ``code`` string so MCP clients (LLMs) can branch programmatically
-instead of parsing the human-readable ``message``. ``NotFound`` additionally
-carries an optional ``hint`` to suggest the next action (e.g. "Try
-``semantic_query`` with a topical query").
+Nyaya v2.0 defines exactly 9 canonical ``NyayaError`` subclasses so MCP
+clients and the chat agent can branch deterministically on ``.code`` without
+parsing human-readable error strings.
 """
 
 from __future__ import annotations
 
+from typing import Any, Literal
+
+PdfErrorReason = Literal[
+    "timeout",
+    "size_limit",
+    "corrupt_pdf",
+    "disallowed_key",
+    "http_error",
+]
+
+
+class ConfigurationError(ValueError):
+    """Raised when an environment variable or startup setting is invalid."""
+
 
 class NyayaError(Exception):
-    """Base class for all nyaya-raised exceptions.
-
-    Attributes:
-        code: Stable, machine-readable error code (e.g. ``"not_found"``,
-            ``"database_unavailable"``). Clients branch on this rather than
-            parsing ``message``.
-        hint: Optional suggested next action for the caller/LLM.
-    """
+    """Base class for all nyaya-raised MCP domain and storage exceptions."""
 
     code: str = "nyaya_error"
     hint: str | None = None
@@ -29,15 +34,19 @@ class NyayaError(Exception):
         if hint is not None:
             self.hint = hint
 
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the exception into a structured JSON-safe error payload."""
+        payload: dict[str, Any] = {
+            "code": self.code,
+            "message": self.message,
+        }
+        if self.hint:
+            payload["hint"] = self.hint
+        return payload
+
 
 class NotFound(NyayaError):
-    """A requested act/section/article/judgment is not in the corpus.
-
-    ``kind`` distinguishes what was missing (act vs section vs article vs
-    judgment vs schedule vs amendment vs chapter) so callers can choose a
-    tailored fallback (e.g. suggest ``list_acts`` for a missing act, but
-    ``semantic_query`` for a missing section).
-    """
+    """A requested act, provision, amendment, or judgment was not found."""
 
     code = "not_found"
 
@@ -46,36 +55,197 @@ class NotFound(NyayaError):
         message: str = "",
         *,
         kind: str = "unknown",
+        did_you_mean: list[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.kind = kind
+        self.did_you_mean = list(did_you_mean or [])
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["kind"] = self.kind
+        if self.did_you_mean:
+            data["did_you_mean"] = self.did_you_mean
+        return data
+
+
+class AmbiguousReference(NyayaError):
+    """A case name or citation matched multiple distinct records."""
+
+    code = "ambiguous_reference"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        kind: str = "unknown",
+        candidates: list[dict[str, Any]] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.kind = kind
+        self.candidates = list(candidates or [])
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["kind"] = self.kind
+        data["candidates"] = self.candidates
+        return data
+
+
+class TextUnavailableMetadataOnly(NyayaError):
+    """Metadata exists, but full text is absent or PDF is scanned/image-only."""
+
+    code = "text_unavailable_metadata_only"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        kind: str = "judgment",
+        metadata: dict[str, Any] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.kind = kind
+        self.metadata = dict(metadata or {})
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["kind"] = self.kind
+        if self.metadata:
+            data["metadata"] = self.metadata
+        return data
+
+
+class PdfFetchError(NyayaError):
+    """Direct S3 PDF retrieval or validation failed."""
+
+    code = "pdf_fetch_error"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        reason: PdfErrorReason = "http_error",
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.reason = reason
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["reason"] = self.reason
+        return data
+
+
+class InvalidFilter(NyayaError):
+    """A caller-supplied filter value or parameter combination is invalid."""
+
+    code = "invalid_filter"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        kind: str = "filter",
+        allowed_values: list[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.kind = kind
+        self.allowed_values = list(allowed_values or [])
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["kind"] = self.kind
+        if self.allowed_values:
+            data["allowed_values"] = self.allowed_values
+        return data
+
+
+class QueryTooBroad(NyayaError):
+    """A cold Parquet/HC/District scan lacked mandatory narrowing filters."""
+
+    code = "query_too_broad"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        kind: str = "query",
         hint: str | None = None,
     ) -> None:
         super().__init__(message, hint=hint)
         self.kind = kind
 
-
-class DatabaseUnavailable(NyayaError):
-    """The Postgres/Supabase backing store could not be reached or timed out."""
-
-    code = "database_unavailable"
-
-
-class SearchError(NyayaError):
-    """A full-text or semantic search query failed at the DB/embedding layer."""
-
-    code = "search_error"
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["kind"] = self.kind
+        return data
 
 
-class ConfigurationError(NyayaError):
-    """A required environment variable or setting is missing or invalid."""
+class QueryTimeout(NyayaError):
+    """A storage query exceeded its hard wall-clock execution budget."""
 
-    code = "configuration_error"
+    code = "query_timeout"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        kind: str = "query",
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.kind = kind
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        data["kind"] = self.kind
+        return data
 
 
-class EmbeddingUnavailable(NyayaError):
-    """The semantic-search model is not installed or failed to load.
+class StorageUnavailable(NyayaError):
+    """A required local or remote storage backend could not be opened or reached."""
 
-    Distinct from ``SearchError`` so ``semantic_query`` can surface a precise
-    "this build does not include semantic search" message instead of an empty
-    result that looks like "no matches".
-    """
+    code = "storage_unavailable"
 
-    code = "embedding_unavailable"
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        degraded_capabilities: list[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.degraded_capabilities = list(degraded_capabilities or [])
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        if self.degraded_capabilities:
+            data["degraded_capabilities"] = self.degraded_capabilities
+        return data
+
+
+class CommercialLicenseBlocked(NyayaError):
+    """Target record/dataset is non-commercial while commercial_safe_only is active."""
+
+    code = "commercial_license_blocked"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        license_spdx: str | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.license_spdx = license_spdx
+
+    def to_dict(self) -> dict[str, Any]:
+        data = super().to_dict()
+        if self.license_spdx:
+            data["license_spdx"] = self.license_spdx
+        return data

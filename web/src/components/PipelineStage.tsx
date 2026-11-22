@@ -14,55 +14,53 @@ const STAGES: Stage[] = [
   {
     id: "pipe-query",
     num: "01",
-    title: "Query",
-    desc: "User question is parsed, normalised, and embedded for retrieval.",
+    title: "Query & Parse",
+    desc: "Normalizes Indian statute aliases, bridges IPC/CrPC/IEA ↔ BNS/BNSS/BSA, and parses exact citation tuples.",
     detail: (
       <>
-        <strong>Input:</strong> natural-language legal question.<br />
-        <strong>Output:</strong> normalised query + embedding vector.<br />
-        <strong>Model:</strong> nvidia/nemotron-3-embed-1b (2048-dim).<br />
-        <strong>Latency target:</strong> &lt; 80ms p95.
+        <strong>Input:</strong> natural-language query, CNR, INSC, HC Neutral, AIR/SCC, or draft brief.<br />
+        <strong>Parser:</strong> priority-ordered <code>nyaya/citations.py</code> (no bare first-number matching).<br />
+        <strong>Expansion:</strong> pari-materia IPC↔BNS, CrPC↔BNSS, IEA↔BSA equivalence.<br />
+        <strong>Embeddings:</strong> zero dense vectors or GPU dependencies in Phase 1.
       </>
     ),
   },
   {
     id: "pipe-retrieve",
     num: "02",
-    title: "Retrieve",
-    desc: "MCP tools fetch matching provisions and judgments from the indexed corpus (semantic search fuses embedding retrieval + reranking).",
+    title: "Tiered Retrieve",
+    desc: "Deterministic RRF (k=60) across SQLite FTS5, LanceDB native BM25, DuckDB ZSTD Parquet, and on-demand S3 PDFs.",
     detail: (
       <>
-        <strong>Store:</strong> pgvector + Postgres tsvector (GIN indexes).<br />
-        <strong>Search:</strong> semantic_query (embedding retrieval + reranking), get_section, get_article, get_judgment.<br />
-        <strong>Reranker:</strong> llama-nemotron-rerank-vl-1b-v2 (cross-encoder).<br />
-        <strong>Corpus:</strong> Constitution, BNS/BNSS/BSA, IPC/CrPC/IEA/CPC, commercial statutes, SC judgments.
+        <strong>Baked Core (~250 MB):</strong> read-only SQLite3 FTS5 + concordance + invalidations + citation graph.<br />
+        <strong>Bucket Warm/Cold:</strong> 3 LanceDB native Rust BM25 tables + 5 compacted DuckDB ZSTD Parquet layouts (256 MB / 5s cap).<br />
+        <strong>Direct S3 PDFs:</strong> anonymous HTTPS reads from AWS Open Data via Apache-2.0 <code>pypdfium2</code> (15 MB / 500p cap + 256 MB zstd LRU).
       </>
     ),
   },
   {
-    id: "pipe-cite",
+    id: "pipe-verify",
     num: "03",
-    title: "Cite",
-    desc: "Synthesis LLM drafts the answer with inline citations from retrieved passages.",
+    title: "Verify & Frame",
+    desc: "Attaches StatutoryValidity alerts, raw citation-graph edges, license filtering, and OWASP <corpus_text> isolation.",
     detail: (
       <>
-        <strong>Model:</strong> NVIDIA Nemotron-3.5 Lightning 30B.<br />
-        <strong>Architecture:</strong> supervisor-synthesis LangGraph (supervisor plans, synthesis composes).<br />
-        <strong>Constraint:</strong> no answer without a citation in the retrieved context.<br />
-        <strong>Output:</strong> answer text + structured citation list.
+        <strong>Validity:</strong> flags repealed (2024-07-01), struck-down (IT Act s.66A, IPC s.497), and abeyance provisions.<br />
+        <strong>Precedent Graph:</strong> raw edges + coram comparison with mandatory <code>precedent_status=&quot;unverified_automated&quot;</code>.<br />
+        <strong>OWASP LLM01:</strong> strips Unicode Tags (<code>U+E0000–U+E007F</code>), escapes breakout delimiters, enforces s. 228A / BNS s. 72 &amp; <code>commercial_safe_only</code>.
       </>
     ),
   },
   {
-    id: "pipe-mcp",
+    id: "pipe-expose",
     num: "04",
-    title: "MCP",
-    desc: "get_section / get_article parse and fetch each reference from the corpus; MCP exposes 16 tools to editors.",
+    title: "Expose & Chat",
+    desc: "Serves 12 MCP tools, 8 nyaya:// resources, and 4 prompts via uvx stdio or Streamable HTTP (/mcp), plus optional /chat.",
     detail: (
       <>
-        <strong>Resolver:</strong> parse → match → fetch (built into get_section / get_article).<br />
-        <strong>MCP server:</strong> HTTP endpoint at /mcp that exposes 16 tools + 11 resources.<br />
-        <strong>Clients:</strong> Claude, Cursor, opencode.
+        <strong>Local stdio:</strong> <code>uvx nyaya-mcp</code> auto-fetches verified packs from HF / GH Releases (zero secrets).<br />
+        <strong>Hosted HTTP:</strong> single <code>python:3.12-slim-bookworm</code> container on Railway (&lt;1 GB RAM, scale-to-zero).<br />
+        <strong>Optional /chat:</strong> stateless FastAPI + LangGraph agent mounted only when <code>NVIDIA_API_KEY</code> is configured.
       </>
     ),
   },

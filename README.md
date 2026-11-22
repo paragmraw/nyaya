@@ -1,61 +1,101 @@
 # nyaya
 
-**A monorepo for Indian-law tooling** — MCP server, Next.js frontend, and LangGraph chat assistant for Indian legal research (Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark Supreme Court judgments).
+**Zero-DB-ops Indian legal intelligence monorepo (`nyaya-mcp` v2.0)** — pure-lexical/metadata/graph MCP server, Next.js static SPA, and optional LangGraph chat assistant covering the Constitution of India, 37 Central & State/UT legislative jurisdictions, 12 Regulators, 15 Tribunals, Supreme Court (35k+), High Courts (17.77M+ across 25 HCs), and District Court metadata (81M DDL records).
 
-The first component is an MCP server; other tools will follow.
+## Architecture (Option R2 — Zero-DB-Ops, Scale-to-Zero)
+
+Nyaya v2.0 runs a 100% external-database-free, pure-lexical/metadata/graph retrieval architecture requiring zero vector databases or embedding APIs:
+
+- **Baked SQLite Core (`nyaya-core.sqlite`, ~250 MB):** Read-only immutable SQLite3 with FTS5 (`porter unicode61`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry (e.g. IT Act s. 66A, Electoral Bonds), SC metadata, citation graph edges, and courts directory.
+- **Railway Storage Bucket (Private Tigris S3):** Holds 3 **LanceDB native Rust BM25 FTS** tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and **compacted ZSTD Parquet** partitions queried by **DuckDB `httpfs`** (pre-installed into `/app/duckdb_ext`, capped at `256 MB` RAM / 2 threads / 5s `con.interrupt()`).
+- **Direct AWS Open Data PDFs (`pypdfium2`, Apache-2.0):** On-demand anonymous HTTPS range/stream reads from `s3://indian-supreme-court-judgments` and `s3://indian-high-court-judgments` with strict bucket/key regex allowlisting, `%PDF-` magic gate, 15 MB / 500-page caps, scanned-PDF detection (`chars_per_page < 50`), and a 256 MB disk zstd LRU cache.
+- **Local `uvx nyaya-mcp` (`stdio`):** Public packs and `manifest.json` are dual-published to Hugging Face Datasets / GitHub Releases so `uvx nyaya-mcp` runs on laptops with **zero secrets** and **zero stdout pollution**.
 
 ## Components
 
-| Path | Status | Description |
+| Path | Version | Description |
 |---|---|---|
-| [`mcp/`](mcp/) | alpha | MCP server for Indian law — Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, landmark SC judgments. Exposes 16 tools and 11 resources over HTTP. Deployable to Railway via Docker. |
-| [`web/`](web/) | alpha | Next.js 16 (App Router, static export) frontend — Home, Corpus, Citations, Architecture pages. Served from the same container as the MCP server via Starlette `StaticFiles`; live data fetched client-side from `/api/*` REST endpoints. |
-| [`chat/`](chat/) | alpha | LangGraph + FastAPI chat backend — retrieval-grounded Indian-law assistant. A two-phase supervisor-synthesis agent over the nyaya MCP tools (supervisor plans + delegates parallel tool calls, synthesis composes the cited answer), powered by NVIDIA Nemotron, streamed to the SPA over SSE. Mounted into the main server at `/chat`, so the SPA, REST, MCP, and chat share one origin and one Railway service. |
+| [`mcp/`](mcp/) | `2.0.0` | `nyaya-mcp` Python package: 12 MCP tools, 8 `nyaya://` resources, 4 practitioner/student prompts, pure-ASGI security/rate-limit middleware, thin `/api/*` REST routes, and `nyaya-ingest` CLI. |
+| [`web/`](web/) | `2.0.0` | Next.js 16 static export (`web/out/`) — Home, Corpus, Citations, and Architecture pages served from the same Starlette origin (`/`), hydrating live from `/api/corpus-status`, `/api/acts`, `/api/judgments`, `/api/analytics`, `/api/tools`, and `/api/health-summary`. |
+| [`chat/`](chat/) | `2.0.0` | Optional FastAPI + LangGraph assistant (`nyaya-chat`) over an 8-tool v2 allowlist using shared `nyaya.citations` verification and `ChatNVIDIA` (`langchain-nvidia-ai-endpoints`); mounted automatically at `/chat` only when `NVIDIA_API_KEY` is set. |
 
-See [`mcp/README.md`](mcp/README.md) for setup, deployment, and client-configuration instructions.
+## Quickstart
 
-## Deploy to Railway
+### 1. Local `stdio` MCP (`uvx` — zero API keys)
 
-A single Railway service serves the SPA, the REST API, the MCP endpoint, and the chat assistant from one origin (root `Dockerfile`). Service settings are declared with [Railway IaC](https://docs.railway.com/infrastructure-as-code) in [`.railway/railway.ts`](.railway/railway.ts) — the deprecated `railway.toml` Config-as-Code format is not used.
+```bash
+uvx nyaya-mcp
+```
 
-1. Install the [Railway CLI](https://docs.railway.com/guides/cli), then `railway login` and `railway link` to the nyaya project's production environment.
-2. Set `DATABASE_URL` (Supabase/Postgres connection string) and `NVIDIA_API_KEY` (NVIDIA API Catalog key for the chat assistant) in the Railway Variables tab. `PORT` is set automatically. Both secrets are `preserve()`d in the IaC file, so `railway config apply` never touches their values.
-3. Push to `main` for autodeploy (or `railway up` for a manual deploy) — Railway builds the root `Dockerfile` (Node 20 stage builds `web/out/`, Python 3.12-alpine stage serves it alongside the MCP server and the chat sub-app).
-4. Railway polls `GET /health` (declared in `.railway/railway.ts`).
-5. Run the hydration notebook `mcp/notebooks/hydrate.ipynb` locally once (with the same `.env`) to populate the corpus — the deployed server reads from the same database.
-6. Smoke checks against the deployed domain:
-   - `GET /` → SPA home renders, chat panel live (streaming).
-   - `GET /corpus/` → live numbers from `/api/corpus-stats`.
-   - `GET /architecture/` → `mcp.json` copy button yields `{ "mcpServers": { "nyaya": { "url": "https://<domain>/mcp", "transport": "http" } } }`.
-   - `POST /mcp` with an MCP initialize envelope → succeeds.
-   - `POST /chat/turn` with `{"message":"What is IPC 302?"}` → SSE stream of tokens + citations.
-   - `GET /chat/health` → `{"status":"healthy","model":"…","tools_loaded":N}`.
+Useful CLI flags (`mcp/nyaya/cli.py`):
 
-## Local development
+- `--transport stdio|http` (default `stdio`; or `nyaya-mcp serve` for HTTP mode)
+- `--commercial-safe-only` (or `NYAYA_COMMERCIAL_SAFE_ONLY=1`): exclude CC-BY-NC datasets (`DDL 81M District Courts`, `ILDC`)
+- `--offline-only --no-download --data-dir /path/to/data` (plus `--cache-dir`, `--ensure-data`): air-gapped local mode
+- `nyaya-mcp sync --pack core|lance|parquet|all`: pre-download public packs from `NYAYA_MANIFEST_URL`
+- `--host 0.0.0.0 --port 8000`: HTTP bind host and port
 
-- **MCP + REST + Chat**: `cd mcp && uv venv && pip install -e . && pip install -e ../chat && nyaya` → uvicorn on `:8000`. The chat sub-app mounts at `/chat` automatically when `NVIDIA_API_KEY` is set (Swagger UI at `http://localhost:8000/chat/docs`). The agent calls the same-process MCP server at `http://localhost:8000/mcp` (configured in `chat/nyaya_chat/config.py`).
-- **SPA (HMR)**: `cd web && npm run dev` → Next dev server on `:3000`. `next.config.mjs` rewrites `/api/*`, `/mcp`, and `/chat/*` to `localhost:8000`.
-- **Build check**: `cd web && npx eslint . && npm run build` → produces `web/out/`.
-- **Serve the production bundle locally**: `python -m nyaya.server` from `mcp/` → visit `http://localhost:8000/`.
-- **Python tests / lint**:
-  - `cd mcp && pytest` and `ruff check .` (runs mcp + chat unit tests via installed package)
-  - `cd chat && pytest` and `ruff check .` (chat package's own unit tests)
+### 2. Local Docker & Docker Compose (hardened `read_only: true` + 1 GB RAM)
 
-## License
+```bash
+cp .env.example .env   # optional — works with zero secrets out of the box
+docker compose up -d --build
 
-Apache-2.0. See [LICENSE](LICENSE).
+# Or build and run stdio MCP directly inside a hardened read-only container:
+docker build -t nyaya-mcp .
+docker run --rm -i --read-only --tmpfs /tmp:size=64m -w /tmp nyaya-mcp nyaya-mcp --offline-only --no-download
+```
+
+`docker-compose.yml` runs with `read_only: true` and mounts a disk-backed named volume (`nyaya_cache:/var/cache/nyaya`) for `NYAYA_CACHE_DIR` so the PDF zstd LRU and DuckDB temp spill never consume Linux RAM `tmpfs` under `mem_limit: 1g`.
+
+### 3. Deploy to Railway (Option R2)
+
+Service infrastructure is declared in [`.railway/railway.ts`](.railway/railway.ts):
+
+1. Provision a **Railway Storage Bucket** attached to the `nyaya` service and set the deployment region to **`asia-southeast1` (Singapore)** in the Railway dashboard (minimal RTT to Indian users and AWS `ap-south-1` PDFs).
+2. Configure `NYAYA_BUCKET_ENDPOINT`, `NYAYA_BUCKET_NAME`, `NYAYA_BUCKET_ACCESS_KEY_ID`, `NYAYA_BUCKET_SECRET_ACCESS_KEY` (plus optional `NVIDIA_API_KEY` for `/chat`) in Railway Variables. All are `preserve()`d in `.railway/railway.ts`.
+3. Populate the bucket via `nyaya-ingest` (or `.github/workflows/ingest-refresh.yml`):
+   ```bash
+   cd mcp && uv sync --extra ingest
+   uv run nyaya-ingest sync --tier static && uv run nyaya-ingest sync --tier daily
+   uv run nyaya-ingest build-sqlite && uv run nyaya-ingest build-lance-fts && uv run nyaya-ingest compact-parquet
+   uv run nyaya-ingest verify-gate --strict
+   uv run nyaya-ingest publish --target all
+   # Hermetic offline pipeline test:
+   uv run nyaya-ingest all --fixture --dry-run
+   ```
+4. Review and apply Railway IaC with `railway config plan` and `railway config apply`.
+5. Verify live endpoints: `GET /health`, `GET /api/corpus-status`, `GET /api/acts`, `GET /api/judgments`, `GET /api/analytics?dataset=sc&group_by=disposal_nature`, `GET /api/tools`, `GET /api/health-summary`, `POST /mcp` (`initialize`), and (if `NVIDIA_API_KEY` is set) `GET /chat/health` & `POST /chat/turn`.
+
+## Local Development
+
+```bash
+# 1. MCP + Chat tests, lint, types & offline eval
+cd mcp
+uv sync --extra http --extra ingest --dev
+uv pip install -e ../chat
+uv run ruff check nyaya/ tests/ ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
+uv run mypy nyaya/ ../chat/nyaya_chat/
+uv run pytest --cov=nyaya --cov-fail-under=78
+NVIDIA_API_KEY=nvapi-test-key-for-ci uv run pytest ../chat/tests/ --cov=nyaya_chat --cov-fail-under=84
+uv run python ../chat/eval/retrieval_eval.py --fixture tests/fixtures/mini_corpus
+
+# 2. Run local HTTP server (MCP + REST + built SPA + optional /chat)
+uv run nyaya-mcp --transport http --host 127.0.0.1 --port 8000
+
+# 3. Web frontend (Next.js static export)
+cd ../web
+npm install
+npm run dev        # HMR on :3000 (proxies /api/*, /mcp, /chat/* to :8000)
+npx eslint . && npm test && npm run build
+```
+
+## Licensing & Attribution
+
+- **Source code:** Apache-2.0 — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+- **Legal corpus & exclusions:** Primary Indian statutes and judgments are reproduced under **Indian Copyright Act, 1957 s. 52(1)(q)** and ***Eastern Book Company v. D.B. Modak*, (2008) 1 SCC 1** (commercial reporter headnotes and s. 228A / BNS s. 72 / POCSO protected orders are excluded).
+- **Non-commercial datasets:** Default research packs bundle DDL 81M District Courts (`CC-BY-NC-SA-4.0`) and ILDC (`CC-BY-NC-4.0`) tagged `commercial_safe=false`. Commercial operators must set `NYAYA_COMMERCIAL_SAFE_ONLY=1` or pass `commercial_safe_only=true`. See [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md).
 
 ## Security
 
-The Nyaya MCP server is designed to be deployed behind a reverse proxy (Cloudflare, Railway edge, nginx) that handles authentication and TLS. The server itself does not enforce authentication — this is intentional for the alpha so browser-based MCP clients can call the endpoint without configuration.
-
-**Rate limiting** is configured in [`mcp/nyaya/config.py`](mcp/nyaya/config.py) via the `RateLimitSettings` dataclass (edit there to tune; no env vars needed). Defaults: 120 req/min/IP for read tools, 30 req/min/IP for embedding tools, 15 req/min/IP for chat turns, 1 MB body size cap.
-
-**Security headers** (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS) are set by the Starlette middleware in [`mcp/nyaya/security_headers.py`](mcp/nyaya/security_headers.py).
-
-**Corpus integrity**: the ingest pipeline sanitizes all text at ingest time (strips control characters, caps row length at 200 KB) via [`mcp/nyaya/sanitize.py`](mcp/nyaya/sanitize.py). See [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md) for the trust model and data provenance.
-
-**Recommendations for production deployment**:
-- Use a **read-only Postgres role** for `DATABASE_URL` (the server only reads; ingestion uses the same URL but should be run from a trusted environment).
-- Deploy behind a reverse proxy with TLS, authentication, and IP-based rate limiting.
-- Run the hydration notebook from a trusted machine, not the public deployment.
+Nyaya treats all primary legal text as **untrusted data** (`<corpus_text ... trust="untrusted_primary_law">`, OWASP LLM01). Rate limits, streaming body caps, security headers, DuckDB/S3 isolation, and vulnerability disclosure are documented in [`SECURITY.md`](SECURITY.md) and [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md).

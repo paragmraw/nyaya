@@ -1,9 +1,4 @@
-"""Test configuration.
-
-Provides:
-  - ``offline_settings``: forces env vars so get_settings() returns
-    deterministic values. Autouse so every test gets a clean config.
-"""
+"""Hermetic test configuration for Nyaya MCP v2.0 (zero DATABASE_URL)."""
 
 from __future__ import annotations
 
@@ -14,25 +9,24 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-os.environ.setdefault("DATABASE_URL", "postgresql://nobody@nowhere/db")
-os.environ.setdefault("NVIDIA_API_KEY", "nvapi-test-key")
-
 
 @pytest.fixture(autouse=True)
-def offline_settings(monkeypatch):
-    from nyaya import config
+def offline_settings(monkeypatch: pytest.MonkeyPatch):
+    from nyaya import config, storage
 
-    try:
-        config.get_settings.cache_clear()
-    except AttributeError:
-        pass
+    for fn in (config.get_settings, config.get_rate_limit_settings):
+        try:
+            fn.cache_clear()
+        except AttributeError:
+            pass
 
-    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody@nowhere/db")
-    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test-key")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
 
     yield
 
-    try:
-        config.get_settings.cache_clear()
-    except AttributeError:
-        pass
+    storage.close_all()
+    for fn in (config.get_settings, config.get_rate_limit_settings):
+        try:
+            fn.cache_clear()
+        except AttributeError:
+            pass

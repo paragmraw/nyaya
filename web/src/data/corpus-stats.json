@@ -1,148 +1,714 @@
 {
-  "counts": {
-    "acts": 14,
-    "articles": 464,
-    "sections": 1884,
-    "judgments": 5,
-    "schedules": 12,
-    "amendments": 0,
-    "chapters": 0,
-    "cross_refs": 0
+  "version": "2.0.0",
+  "service_version": "2.0.0",
+  "retrieval_mode": "lexical_metadata_graph",
+  "commercial_safe_locked": false,
+  "as_of": "2026-11-22",
+  "tiers": {
+    "sqlite_core": "baked_readonly_fts5",
+    "lance_fts": "railway_bucket_rust_bm25",
+    "parquet_cold": "duckdb_zstd_parquet",
+    "s3_pdf": "aws_opendata_pypdfium2"
   },
-  "as_of": "2026-09-05",
+  "counts": {
+    "legislation_jurisdictions": 37,
+    "central_acts": 850,
+    "state_acts": 4500,
+    "regulators": 12,
+    "tribunals": 15,
+    "provisions": 1450000,
+    "articles": 506,
+    "schedules": 12,
+    "amendments": 106,
+    "concordance_mappings": 1100,
+    "judicial_invalidations": 25,
+    "sc_judgments": 35000,
+    "hc_judgments": 17770000,
+    "tribunal_orders": 813168,
+    "district_court_records": 81000000,
+    "citation_edges": 240000
+  },
+  "licensing": {
+    "code_license": "Apache-2.0",
+    "commercial_safe_default": false,
+    "nc_datasets": [
+      "ddl_district_courts",
+      "ildc_research"
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "constitution",
+      "short_name": "Constitution",
+      "name": "Constitution of India, 1950",
+      "category": "legislation",
+      "coverage": "All 506 articles + 12 schedules + Amendments 1–106",
+      "license_spdx": "IN-S52-1-q",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "bns",
+      "short_name": "BNS",
+      "name": "Bharatiya Nyaya Sanhita, 2023",
+      "category": "legislation",
+      "coverage": "All 358 sections + IPC concordance & diffs",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "bnss",
+      "short_name": "BNSS",
+      "name": "Bharatiya Nagarik Suraksha Sanhita, 2023",
+      "category": "legislation",
+      "coverage": "All 531 sections + CrPC concordance & s.531 savings",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "bsa",
+      "short_name": "BSA",
+      "name": "Bharatiya Sakshya Adhiniyam, 2023",
+      "category": "legislation",
+      "coverage": "All 170 sections + IEA concordance",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "ipc",
+      "short_name": "IPC",
+      "name": "Indian Penal Code, 1860 (Repealed 2024-07-01)",
+      "category": "legislation",
+      "coverage": "All 511 sections (pre-2024 savings + invalidations)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "crpc",
+      "short_name": "CrPC",
+      "name": "Code of Criminal Procedure, 1973 (Repealed 2024-07-01)",
+      "category": "legislation",
+      "coverage": "All 484 sections (BNSS s.531 transition notes)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "evidenceact",
+      "short_name": "EvidenceAct",
+      "name": "Indian Evidence Act, 1872 (Repealed 2024-07-01)",
+      "category": "legislation",
+      "coverage": "All 167 sections (incl. s.65B electronic evidence)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "cpc",
+      "short_name": "CPC",
+      "name": "Code of Civil Procedure, 1908",
+      "category": "legislation",
+      "coverage": "Sections + Orders I–LI (incl. O.7 R.11)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "companies",
+      "short_name": "Companies",
+      "name": "Companies Act, 2013",
+      "category": "legislation",
+      "coverage": "Corporate & NCLT statutory provisions",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "itact",
+      "short_name": "ITAct",
+      "name": "Information Technology Act, 2000",
+      "category": "legislation",
+      "coverage": "All sections (incl. s.66A Shreya Singhal invalidation)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "arbitration",
+      "short_name": "Arbitration",
+      "name": "Arbitration and Conciliation Act, 1996",
+      "category": "legislation",
+      "coverage": "Domestic & international arbitration sections",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "cgst",
+      "short_name": "CGST",
+      "name": "Central Goods and Services Tax Act, 2017",
+      "category": "legislation",
+      "coverage": "Central GST provisions",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "igst",
+      "short_name": "IGST",
+      "name": "Integrated Goods and Services Tax Act, 2017",
+      "category": "legislation",
+      "coverage": "Inter-state GST provisions",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "consumerprotection",
+      "short_name": "ConsumerProtection",
+      "name": "Consumer Protection Act, 2019",
+      "category": "legislation",
+      "coverage": "Consumer dispute & regulator provisions",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "centralacts",
+      "short_name": "CentralActs",
+      "name": "India Code Central Acts Pack (850+ Statutes)",
+      "category": "legislation",
+      "coverage": "850+ Central Acts + PRS 2026+ legislative deltas",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "stateacts",
+      "short_name": "StateActs",
+      "name": "36 State & Union Territory Legislation Packs",
+      "category": "legislation",
+      "coverage": "4,500+ State Acts (~850,000 sections across 36 States/UTs)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "cad",
+      "short_name": "CAD",
+      "name": "Constituent Assembly Debates (12 Volumes)",
+      "category": "legislation",
+      "coverage": "12 volumes of verbatim framing debates",
+      "license_spdx": "IN-S52-1-q",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "regulators",
+      "short_name": "Regulators",
+      "name": "12 Indian Financial & Sectoral Regulators",
+      "category": "regulators",
+      "coverage": "554,000+ provisions (RBI, SEBI, MCA, CBIC, TRAI, IRDAI, MOEFCC, CPCB, DGFT, DFS…)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "sc",
+      "short_name": "SC",
+      "name": "Supreme Court of India Judgments",
+      "category": "judiciary",
+      "coverage": "35,000+ full-text judgments, citation graph & S3 PDFs",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "hc",
+      "short_name": "HC",
+      "name": "25 Indian High Courts (45 Benches)",
+      "category": "judiciary",
+      "coverage": "17.77M+ orders/metadata + 150k+ reportable full text + on-demand PDFs",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "tribunals",
+      "short_name": "Tribunals",
+      "name": "15 Indian Tribunals & Quasi-Judicial Forums",
+      "category": "tribunals",
+      "coverage": "813,168+ matters (ITAT, NCLT, NGT, SAT, APTEL, CAT, CESTAT, DRT, CCI, IBBI…)",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "justicehub",
+      "short_name": "JusticeHub",
+      "name": "Justice Hub KHOJ High Court Judges Directory",
+      "category": "judiciary",
+      "coverage": "1,700+ High Court judge profiles & bench metadata",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "ildc",
+      "short_name": "ILDC",
+      "name": "ILDC Supreme Court Research Annotations (Non-Commercial)",
+      "category": "judiciary",
+      "coverage": "35,000+ SC outcome & explanation annotations (excluded when commercial_safe_only=true)",
+      "license_spdx": "CC-BY-NC-4.0",
+      "commercial_safe": false,
+      "as_of": "2026-11-22"
+    },
+    {
+      "source_id": "ddl",
+      "short_name": "DDL",
+      "name": "DDL Indian Judicial District Court Dataset (2010–2018, Non-Commercial)",
+      "category": "judiciary",
+      "coverage": "81,000,000+ district court docket records (metadata only; ML prediction columns stripped)",
+      "license_spdx": "CC-BY-NC-SA-4.0",
+      "commercial_safe": false,
+      "as_of": "2018-12-31"
+    },
+    {
+      "source_id": "privycouncil",
+      "short_name": "PrivyCouncil",
+      "name": "Pre-1950 Privy Council & Federal Court decisions",
+      "category": "judiciary",
+      "coverage": "Planned historical layer",
+      "license_spdx": "IN-S52-1-q",
+      "commercial_safe": true,
+      "as_of": null
+    }
+  ],
   "acts": [
     {
       "short_name": "Constitution",
-      "name": "Constitution of India",
+      "aliases": [
+        "COI",
+        "Constitution of India"
+      ],
+      "name": "Constitution of India, 1950",
       "type": "Constitution",
-      "coverage": "All 464 articles + 12 schedules",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 506 articles + 12 schedules + Amendments 1–106",
       "status": "live",
-      "count": 464
+      "license_spdx": "IN-S52-1-q",
+      "commercial_safe": true,
+      "source": "Legislative Dept. + GSMS-B",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "BNS",
+      "aliases": [
+        "Bharatiya Nyaya Sanhita"
+      ],
       "name": "Bharatiya Nyaya Sanhita, 2023",
-      "type": "Statute",
-      "coverage": "All 358 sections",
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 358 sections + IPC concordance & diffs",
       "status": "live",
-      "count": 358
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "PRS + Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "BNSS",
+      "aliases": [
+        "Bharatiya Nagarik Suraksha Sanhita"
+      ],
       "name": "Bharatiya Nagarik Suraksha Sanhita, 2023",
-      "type": "Statute",
-      "coverage": "All 531 sections",
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 531 sections + CrPC concordance & s.531 savings",
       "status": "live",
-      "count": 531
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "PRS + Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "BSA",
+      "aliases": [
+        "Bharatiya Sakshya Adhiniyam"
+      ],
       "name": "Bharatiya Sakshya Adhiniyam, 2023",
-      "type": "Statute",
-      "coverage": "All sections (replaces Evidence Act)",
-      "status": "live"
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 170 sections + IEA concordance",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "PRS + Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "IPC",
-      "name": "Indian Penal Code, 1860",
-      "type": "Statute",
-      "coverage": "All 511 sections (legacy reference)",
+      "aliases": [
+        "Indian Penal Code"
+      ],
+      "name": "Indian Penal Code, 1860 (Repealed 2024-07-01)",
+      "type": "Legacy Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 511 sections (pre-2024 savings + invalidations)",
       "status": "live",
-      "count": 511
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "CrPC",
-      "name": "Code of Criminal Procedure, 1973",
-      "type": "Statute",
-      "coverage": "All 484 sections (legacy reference)",
+      "aliases": [
+        "Code of Criminal Procedure"
+      ],
+      "name": "Code of Criminal Procedure, 1973 (Repealed 2024-07-01)",
+      "type": "Legacy Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 484 sections (BNSS s.531 transition notes)",
       "status": "live",
-      "count": 484
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "EvidenceAct",
-      "name": "Indian Evidence Act, 1872",
-      "type": "Statute",
-      "coverage": "All sections (legacy reference)",
-      "status": "live"
+      "aliases": [
+        "IEA",
+        "Indian Evidence Act"
+      ],
+      "name": "Indian Evidence Act, 1872 (Repealed 2024-07-01)",
+      "type": "Legacy Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All 167 sections (incl. s.65B electronic evidence)",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "CPC",
+      "aliases": [
+        "Code of Civil Procedure"
+      ],
       "name": "Code of Civil Procedure, 1908",
-      "type": "Statute",
-      "coverage": "All sections (legacy reference)",
-      "status": "live"
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "Sections + Orders I–LI (incl. O.7 R.11)",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "Companies",
+      "aliases": [
+        "CompaniesAct",
+        "Companies Act 2013"
+      ],
       "name": "Companies Act, 2013",
-      "type": "Statute",
-      "coverage": "Commercial statute",
-      "status": "live"
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "Corporate & NCLT statutory provisions",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
-      "short_name": "IGST",
-      "name": "Integrated Goods and Services Tax Act, 2017",
-      "type": "Statute",
-      "coverage": "Commercial statute",
-      "status": "live"
+      "short_name": "ITAct",
+      "aliases": [
+        "IT Act",
+        "Information Technology Act"
+      ],
+      "name": "Information Technology Act, 2000",
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "All sections (incl. s.66A Shreya Singhal invalidation)",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "Arbitration",
+      "aliases": [
+        "ArbitrationAct"
+      ],
+      "name": "Arbitration and Conciliation Act, 1996",
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "Domestic & international arbitration sections",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "CGST",
       "name": "Central Goods and Services Tax Act, 2017",
-      "type": "Statute",
-      "coverage": "Commercial statute",
-      "status": "live"
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "Central GST provisions",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
-      "short_name": "ITAct",
-      "name": "Information Technology Act, 2000",
-      "type": "Statute",
-      "coverage": "Commercial statute",
-      "status": "live"
-    },
-    {
-      "short_name": "Arbitration",
-      "name": "Arbitration and Conciliation Act, 1996",
-      "type": "Statute",
-      "coverage": "Commercial statute",
-      "status": "live"
+      "short_name": "IGST",
+      "name": "Integrated Goods and Services Tax Act, 2017",
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "Inter-state GST provisions",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
       "short_name": "ConsumerProtection",
       "name": "Consumer Protection Act, 2019",
-      "type": "Statute",
-      "coverage": "Commercial statute",
-      "status": "live"
-    },
-    {
-      "short_name": "",
-      "name": "Supreme Court landmark judgments",
-      "type": "Case law",
-      "coverage": "5 curated judgments (Kesavananda, Maneka, Puttaswamy, Shah Bano, Navtej Johar)",
+      "type": "Central Statute",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "Consumer dispute & regulator provisions",
       "status": "live",
-      "fallback_date": "2026-07-01",
-      "count": 5
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law",
+      "fallback_date": "2026-11-22"
     },
     {
-      "short_name": "",
-      "name": "High Court reported judgments",
-      "type": "Case law",
-      "coverage": "Planned",
-      "status": "coming"
+      "short_name": "CentralActs",
+      "aliases": [
+        "IBC",
+        "NI Act",
+        "POCSO",
+        "PMLA",
+        "NDPS",
+        "UAPA"
+      ],
+      "name": "India Code Central Acts Pack (850+ Statutes)",
+      "type": "Central Legislation",
+      "category": "legislation",
+      "tier": "Baked SQLite Core",
+      "coverage": "850+ Central Acts + PRS 2026+ legislative deltas",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law + PRS",
+      "fallback_date": "2026-11-22"
     },
     {
-      "short_name": "",
-      "name": "Subordinate legislation & rules",
-      "type": "Regulation",
-      "coverage": "Planned",
-      "status": "coming"
+      "short_name": "StateActs",
+      "aliases": [
+        "MH-MOFA",
+        "State Legislation"
+      ],
+      "name": "36 State & Union Territory Legislation Packs",
+      "type": "State / UT Legislation",
+      "category": "legislation",
+      "tier": "LanceDB BM25",
+      "coverage": "4,500+ State Acts (~850,000 sections across 36 States/UTs)",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill Open India Law v2026.08.1",
+      "fallback_date": "2026-11-22"
     },
     {
-      "short_name": "",
-      "name": "Pre-1950 Privy Council decisions",
-      "type": "Case law",
-      "coverage": "Planned",
-      "status": "coming"
+      "short_name": "CAD",
+      "aliases": [
+        "Constituent Assembly Debates"
+      ],
+      "name": "Constituent Assembly Debates (12 Volumes)",
+      "type": "Constitutional History",
+      "category": "legislation",
+      "tier": "LanceDB BM25",
+      "coverage": "12 volumes of verbatim framing debates",
+      "status": "live",
+      "license_spdx": "IN-S52-1-q",
+      "commercial_safe": true,
+      "source": "eparlib.sansad.in",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "Regulators",
+      "aliases": [
+        "SEBI",
+        "SEBI-LODR",
+        "RBI",
+        "CBIC",
+        "TRAI",
+        "IRDAI",
+        "MCA"
+      ],
+      "name": "12 Indian Financial & Sectoral Regulators",
+      "type": "Regulatory Rules & Circulars",
+      "category": "regulators",
+      "tier": "LanceDB BM25 + DuckDB",
+      "coverage": "554,000+ provisions (RBI, SEBI, MCA, CBIC, TRAI, IRDAI, MOEFCC, CPCB, DGFT, DFS…)",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill v2026.08.1 + Official Portals",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "SC",
+      "aliases": [
+        "Supreme Court",
+        "SupremeCourt",
+        "INSC"
+      ],
+      "name": "Supreme Court of India Judgments",
+      "type": "Apex Judiciary",
+      "category": "judiciary",
+      "tier": "SQLite + LanceDB + AWS S3 PDF",
+      "coverage": "35,000+ full-text judgments, citation graph & S3 PDFs",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Dattam Labs AWS Open Data + Vaquill",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "HC",
+      "aliases": [
+        "DHC",
+        "BHC",
+        "MHC",
+        "KHC",
+        "High Court",
+        "HighCourt"
+      ],
+      "name": "25 Indian High Courts (45 Benches)",
+      "type": "High Court Judiciary",
+      "category": "judiciary",
+      "tier": "DuckDB Parquet + LanceDB Hot + S3 PDF",
+      "coverage": "17.77M+ orders/metadata + 150k+ reportable full text + on-demand PDFs",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Dattam Labs AWS Open Data + Vaquill",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "Tribunals",
+      "aliases": [
+        "NCLT",
+        "NCLAT",
+        "ITAT",
+        "NGT",
+        "SAT",
+        "CAT",
+        "CESTAT",
+        "DRT",
+        "CCI",
+        "IBBI"
+      ],
+      "name": "15 Indian Tribunals & Quasi-Judicial Forums",
+      "type": "Tribunals",
+      "category": "tribunals",
+      "tier": "DuckDB ZSTD Parquet + PDF URL",
+      "coverage": "813,168+ matters (ITAT, NCLT, NGT, SAT, APTEL, CAT, CESTAT, DRT, CCI, IBBI…)",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "Vaquill v2026.08.1 + Official Portals",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "JusticeHub",
+      "aliases": [
+        "KHOJ"
+      ],
+      "name": "Justice Hub KHOJ High Court Judges Directory",
+      "type": "Judicial Directory",
+      "category": "judiciary",
+      "tier": "Baked SQLite Core",
+      "coverage": "1,700+ High Court judge profiles & bench metadata",
+      "status": "live",
+      "license_spdx": "CC-BY-4.0",
+      "commercial_safe": true,
+      "source": "JusticeHub CKAN (CC-BY-4.0)",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "ILDC",
+      "aliases": [
+        "ILDC Research"
+      ],
+      "name": "ILDC Supreme Court Research Annotations (Non-Commercial)",
+      "type": "Research Annotations",
+      "category": "judiciary",
+      "tier": "LanceDB BM25",
+      "coverage": "35,000+ SC outcome & explanation annotations (excluded when commercial_safe_only=true)",
+      "status": "beta",
+      "license_spdx": "CC-BY-NC-4.0",
+      "commercial_safe": false,
+      "source": "ILDC Academic Release",
+      "fallback_date": "2026-11-22"
+    },
+    {
+      "short_name": "DDL",
+      "aliases": [
+        "CNR",
+        "District Court",
+        "DistrictCourts"
+      ],
+      "name": "DDL Indian Judicial District Court Dataset (2010–2018, Non-Commercial)",
+      "type": "District Court Metadata",
+      "category": "judiciary",
+      "tier": "DuckDB ZSTD Parquet",
+      "coverage": "81,000,000+ district court docket records (metadata only; ML prediction columns stripped)",
+      "status": "live",
+      "license_spdx": "CC-BY-NC-SA-4.0",
+      "commercial_safe": false,
+      "source": "Development Data Lab (DDL)",
+      "fallback_date": "2018-12-31"
+    },
+    {
+      "short_name": "PrivyCouncil",
+      "name": "Pre-1950 Privy Council & Federal Court decisions",
+      "type": "Historical Judiciary",
+      "category": "judiciary",
+      "tier": "Planned Archive",
+      "coverage": "Planned historical layer",
+      "status": "coming",
+      "license_spdx": "IN-S52-1-q",
+      "commercial_safe": true,
+      "source": "Planned"
     }
   ]
 }

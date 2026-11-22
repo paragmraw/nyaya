@@ -4,9 +4,33 @@ import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { SITE } from "@/lib/site";
 
 type Variant = "promo" | "block";
+type TransportTab = "local" | "remote";
 
-function buildMcpJson(origin: string): string {
-  // Streamable HTTP form — the real config for the deployed HTTP MCP server.
+function buildLocalMcpJson(commercialSafeOnly: boolean): string {
+  const serverCfg: {
+    command: string;
+    args: string[];
+    env?: Record<string, string>;
+  } = {
+    command: "uvx",
+    args: ["nyaya-mcp"],
+  };
+  if (commercialSafeOnly) {
+    serverCfg.env = { NYAYA_COMMERCIAL_SAFE_ONLY: "1" };
+  }
+  return JSON.stringify(
+    {
+      mcpServers: {
+        nyaya: serverCfg,
+      },
+    },
+    null,
+    2,
+  );
+}
+
+function buildRemoteMcpJson(origin: string): string {
+  // Streamable HTTP form — connects to the hosted HTTP MCP endpoint.
   return JSON.stringify(
     {
       mcpServers: {
@@ -51,25 +75,22 @@ const CopyIcon = () => (
 );
 
 export default function McpConfig({ variant = "promo" }: { variant?: Variant }) {
-  // Render with the placeholder on the first client render (matches SSR
-  // output) to avoid hydration mismatches, then update to the real
-  // window.location.origin on the client. useSyncExternalStore gives us a
-  // stable client-only read without a cascading setState-in-effect render.
+  // Render with the canonical SITE placeholder on SSR and swap to
+  // window.location.origin on hydration to avoid hydration mismatches.
   const origin = useSyncExternalStore(
     () => () => {},
     () => window.location.origin,
     () => null,
   );
+  const [tab, setTab] = useState<TransportTab>("local");
+  const [commercialSafeOnly, setCommercialSafeOnly] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // In production, fail-closed if the origin is not HTTPS (prevent the user
-  // from connecting their editor to an insecure MCP endpoint).
   const json = useMemo(() => {
-    // SSR placeholder — now the real deployed origin so the server-rendered
-    // config block is correct as-is; the client render swaps in the actual
-    // window.location.origin on hydration.
-    const fallback = SITE;
-    const effectiveOrigin = origin ?? fallback;
+    if (tab === "local") {
+      return buildLocalMcpJson(commercialSafeOnly);
+    }
+    const effectiveOrigin = origin ?? SITE;
     if (
       process.env.NODE_ENV === "production" &&
       effectiveOrigin.startsWith("http:") &&
@@ -81,8 +102,8 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
         2,
       );
     }
-    return buildMcpJson(effectiveOrigin);
-  }, [origin]);
+    return buildRemoteMcpJson(effectiveOrigin);
+  }, [tab, commercialSafeOnly, origin]);
 
   const onCopy = useCallback(async () => {
     const text = json;
@@ -99,8 +120,7 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
     setTimeout(() => setCopied(false), 1500);
   }, [json]);
 
-  // Render the JSON with light syntax highlighting: keys in --accent,
-  // string values in --muted.
+  // Light syntax highlighting: keys in --accent, string values in --muted.
   const rendered = useMemo(() => {
     return json.split("\n").map((line, i) => {
       const parts: React.ReactNode[] = [];
@@ -125,6 +145,65 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
     });
   }, [json]);
 
+  const configBox = (
+    <div className={variant === "promo" ? "mcp-config" : "mcp-config-block"}>
+      <div className="mcp-config-head">
+        <div className="mcp-tabs" role="tablist" aria-label="MCP transport mode">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "local"}
+            className={`mcp-tab${tab === "local" ? " active" : ""}`}
+            onClick={() => setTab("local")}
+          >
+            Local (uvx · stdio)
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "remote"}
+            className={`mcp-tab${tab === "remote" ? " active" : ""}`}
+            onClick={() => setTab("remote")}
+          >
+            Remote (HTTP)
+          </button>
+        </div>
+        <button
+          className={`mcp-copy${copied ? " copied" : ""}`}
+          type="button"
+          onClick={onCopy}
+          aria-label="Copy MCP config JSON"
+        >
+          <CopyIcon />
+          <span className="cp-label">{copied ? "Copied" : "Copy"}</span>
+        </button>
+        <span className="copy-status" role="status">{copied ? "MCP config copied to clipboard" : ""}</span>
+      </div>
+      <pre className="mcp-json" id={variant === "block" ? "mcp-json" : undefined}>{rendered}</pre>
+      <div className="mcp-tip">
+        {tab === "local" ? (
+          <>
+            <label className="mcp-safe-toggle">
+              <input
+                type="checkbox"
+                checked={commercialSafeOnly}
+                onChange={(e) => setCommercialSafeOnly(e.target.checked)}
+              />
+              <span>Commercial-safe only (<code>NYAYA_COMMERCIAL_SAFE_ONLY=1</code>)</span>
+            </label>
+            <span className="mcp-tip-note">
+              Zero API keys required; client briefs stay local. Commercial mode excludes CC-BY-NC datasets (DDL 81M &amp; ILDC).
+            </span>
+          </>
+        ) : (
+          <span className="mcp-tip-note">
+            Streamable HTTP endpoint for hosted deployments. Pass <code>commercial_safe_only: true</code> per call when required.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+
   if (variant === "promo") {
     return (
       <div className="mcp-card" style={{ marginTop: "var(--gap-md)", flexShrink: 0 }}>
@@ -133,44 +212,18 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
           <div className="mcp-meta">
             <div className="mcp-title-row">
               <span className="mcp-title">MCP server</span>
-              <span className="mcp-tag">plug in</span>
+              <span className="mcp-tag">12 tools · stdio / http</span>
             </div>
             <p className="mcp-desc">
-              Bring Nyaya&apos;s corpus into your editor. Retrieve cited answers to{" "}
-              <b>Constitution</b>, <b>CrPC</b> and <b>BNS</b> directly inside your workflow.
+              Run <b>nyaya-mcp</b> locally via <code>uvx</code> (zero secrets, private briefs) or connect over HTTP inside{" "}
+              <b>Claude Desktop</b>, <b>Cursor</b>, and <b>Antigravity</b>.
             </p>
           </div>
         </div>
-        <div className="mcp-config">
-          <div className="mcp-config-head">
-            <span className="mcp-filename">mcp.json</span>
-            <button className={`mcp-copy${copied ? " copied" : ""}`} type="button" onClick={onCopy} aria-label="Copy MCP config JSON">
-              <CopyIcon />
-              <span className="cp-label">{copied ? "Copied" : "Copy"}</span>
-            </button>
-            {/* SR-only live region: the visible label change is not announced
-                by screen readers, so the copy feedback is announced here. */}
-            <span className="copy-status" role="status">{copied ? "MCP config copied to clipboard" : ""}</span>
-          </div>
-          <pre className="mcp-json">{rendered}</pre>
-        </div>
+        {configBox}
       </div>
     );
   }
 
-  // block variant (architecture page)
-  return (
-    <div className="mcp-config-block">
-      <div className="mcp-config-head">
-        <span>mcp.json</span>
-        <button className={`mcp-copy${copied ? " copied" : ""}`} type="button" onClick={onCopy} aria-label="Copy MCP config JSON">
-          <CopyIcon />
-          <span className="cp-label">{copied ? "Copied" : "Copy"}</span>
-        </button>
-        {/* SR-only live region: see the promo variant above. */}
-        <span className="copy-status" role="status">{copied ? "MCP config copied to clipboard" : ""}</span>
-      </div>
-      <pre className="mcp-json" id="mcp-json">{rendered}</pre>
-    </div>
-  );
+  return configBox;
 }

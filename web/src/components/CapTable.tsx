@@ -1,8 +1,4 @@
-// Capabilities table — static content ported from the home page design.
-// The 6 modules are product copy, not live data, so they stay hardcoded.
-// Coverage numbers reflect the real corpus (464 articles, 511 IPC / 358 BNS
-// sections, 484 CrPC sections, 5 landmark SC judgments). Citation parsing
-// is built into get_section / get_article. Drafting assist is planned.
+// Capabilities table — static v2.0 overview on the home page left pane.
 
 import { CAPS } from "@/lib";
 

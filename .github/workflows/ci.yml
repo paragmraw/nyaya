@@ -27,31 +27,70 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --extra http --extra ingest --dev
 
       - name: Install chat sub-app
-        run: uv pip install -e ../chat
+        run: |
+          uv export --project ../chat --locked --no-dev --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt
+          uv pip install -r /tmp/chat-requirements.txt
+          uv pip install --no-deps -e ../chat
+          rm -f /tmp/chat-requirements.txt
 
-      - name: Lint (ruff)
+      - name: Lint MCP (ruff)
         run: uv run ruff check nyaya/ tests/
 
-      - name: Type check (mypy)
+      - name: Type check MCP (mypy)
         run: uv run mypy nyaya/
 
       - name: Test MCP with coverage
-        # Floor = measured actual at the time of introduction (78.7% on
-        # 2026-09-01, 187 tests). Ratchet this up as coverage improves;
-        # never lower it.
+        # Coverage floor (>= 78%) is enforced across the v2 test suite.
         run: uv run pytest --cov=nyaya --cov-report=term-missing --cov-report=xml --cov-fail-under=78
 
       - name: Lint chat (ruff)
         run: uv run ruff check ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
 
+      - name: Type check chat (mypy)
+        run: uv run mypy ../chat/nyaya_chat/
+
       - name: Test chat with coverage
-        # Coverage floor ratchets up as tests improve (same policy as MCP above).
+        # Coverage floor (>= 84%) is enforced across the v2 chat test suite.
         run: uv run pytest ../chat/tests/ -v --cov=nyaya_chat --cov-report=term-missing --cov-fail-under=84
         env:
           NVIDIA_API_KEY: nvapi-test-key-for-ci
+
+      - name: Offline retrieval eval
+        run: uv run python ../chat/eval/retrieval_eval.py --fixture tests/fixtures/mini_corpus
+
+      - name: Stdio JSON-RPC pipe smoke test (zero secrets)
+        run: |
+          DATA_DIR="tests/fixtures/mini_corpus"
+          TMP_DATA_DIR=""
+          if [ ! -f "$DATA_DIR/nyaya-core.sqlite" ]; then
+            TMP_DATA_DIR="$(mktemp -d)"
+            uv run --no-sync python -m tests.fixtures.mini_corpus.builder "$TMP_DATA_DIR"
+            DATA_DIR="$TMP_DATA_DIR"
+          fi
+          env -u NVIDIA_API_KEY uv run --no-sync python -c "
+          import json, subprocess, sys
+          p = subprocess.Popen(
+              ['nyaya-mcp', '--transport', 'stdio', '--data-dir', '$DATA_DIR', '--no-download', '--offline-only'],
+              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+          )
+          assert p.stdin and p.stdout and p.stderr
+          p.stdin.write(json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2024-11-05', 'capabilities': {}, 'clientInfo': {'name': 'ci', 'version': '2.0'}}}) + '\n')
+          p.stdin.flush()
+          r1 = json.loads(p.stdout.readline())
+          assert r1.get('id') == 1 and 'result' in r1, r1
+          p.stdin.write(json.dumps({'jsonrpc': '2.0', 'method': 'notifications/initialized'}) + '\n' + json.dumps({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list', 'params': {}}) + '\n')
+          p.stdin.flush()
+          r2 = json.loads(p.stdout.readline())
+          tools = r2['result']['tools']
+          assert r2.get('id') == 2 and len(tools) == 12, f'expected 12 tools, got {len(tools)}'
+          p.stdin.close()
+          rc = p.wait(timeout=15)
+          assert rc == 0, f'nyaya-mcp exited with {rc}: {p.stderr.read()}'
+          "
+          [ -n "$TMP_DATA_DIR" ] && rm -rf "$TMP_DATA_DIR" || true
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -60,7 +99,7 @@ jobs:
           name: coverage-report
           path: mcp/coverage.xml
 
-      - name: Verify lockfile is up to date
+      - name: Verify MCP lockfile is up to date
         run: uv lock --check
 
       - name: Verify chat lockfile is up to date
@@ -114,27 +153,46 @@ jobs:
       - name: Build Docker image
         run: docker build -t nyaya-ci .
 
-      - name: Smoke-run image and check /health
-        # A green build is not enough — the plan's only invisibly-breaking
-        # item is the runtime image itself. Boot it and hit the healthcheck.
+      - name: Smoke-run hardened image (zero secrets, read-only, 1 GB RAM)
         run: |
+          docker volume create nyaya-smoke-cache
+          trap 'docker rm -f nyaya-smoke >/dev/null 2>&1 || true; docker volume rm nyaya-smoke-cache >/dev/null 2>&1 || true' EXIT
           docker run -d --name nyaya-smoke \
-            -e DATABASE_URL=postgresql://postgres:pw@localhost:5432/nyaya \
-            -e NVIDIA_API_KEY=nvapi-ci-placeholder \
+            --read-only --memory=1g --pids-limit=256 \
+            --cap-drop=ALL --security-opt no-new-privileges:true \
+            --tmpfs /tmp:size=64m --tmpfs /var/tmp:size=32m \
+            -v nyaya-smoke-cache:/var/cache/nyaya \
+            -e NYAYA_CACHE_DIR=/var/cache/nyaya \
             -p 8000:8000 nyaya-ci
+
+          ready=0
           for i in $(seq 1 20); do
             code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/health || true)
-            [ "$code" = "200" ] && echo "/health -> 200" && exit 0
+            if [ "$code" = "200" ]; then
+              ready=1
+              break
+            fi
             sleep 3
           done
-          echo "::error::/health never returned 200"; docker logs nyaya-smoke; exit 1
+          if [ "$ready" != "1" ]; then
+            echo "::error::/health never returned 200"
+            docker logs nyaya-smoke
+            exit 1
+          fi
+
+          curl -fsS http://127.0.0.1:8000/health | python3 -c "import json, sys; d = json.load(sys.stdin); assert d['status'] == 'healthy', d"
+          curl -fsS http://127.0.0.1:8000/api/corpus-status | python3 -c "import json, sys; d = json.load(sys.stdin); assert 'counts' in d, d"
+          curl -fsS http://127.0.0.1:8000/api/tools | python3 -c "import json, sys; d = json.load(sys.stdin); assert d['total'] == 12, d"
+          mcp_code=$(curl -s -o /tmp/mcp-init.out -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp \
+            -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"2.0"}}}')
+          echo "POST /mcp initialize -> $mcp_code"
+          [ "$mcp_code" = "200" ] || { cat /tmp/mcp-init.out; docker logs nyaya-smoke; exit 1; }
 
       - name: Trivy image scan
         # Scan the just-verified image; fails the job on HIGH/CRITICAL vulns
         # with a published fix. No secrets or tokens required.
-        # v0.28.0 is un-runnable: it internally pins aquasecurity/setup-trivy
-        # @v0.2.1, a tag that was deleted upstream. v0.36.0 pins setup-trivy
-        # by commit hash instead.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: nyaya-ci

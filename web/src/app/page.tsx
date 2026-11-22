@@ -1,79 +1,62 @@
 import type { Metadata } from "next";
 import CapTable from "@/components/CapTable";
+import HomeStats from "@/components/HomeStats";
 import McpConfig from "@/components/McpConfig";
 import { ChatPanel } from "@/components/HomePageClient";
 import StructuredData, { homeSchema } from "@/components/StructuredData";
-import { formatNumber } from "@/lib/api";
-import { pageOpenGraph } from "@/lib/site";
-import corpusStats from "@/data/corpus-stats.json";
+import { API_VERSION, pageOpenGraph } from "@/lib/site";
 
-// Feature flag: enable/disable chat window
+// Feature flag: enable/disable optional /chat window
 const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
-
-// Headline corpus numbers come from the committed, generated snapshot (see
-// scripts/generate-corpus-stats.ts — single-sourced from CURATED), not from
-// hardcoded literals.
-const CORPUS_COUNTS = (corpusStats as { counts: { articles: number; sections: number; judgments: number } }).counts;
 
 export const metadata: Metadata = {
   title: "Home",
   description:
-    "Ask the Constitution, CrPC & statute book. Get cited answers from a retrieval-grounded AI for Indian law.",
+    "Zero-DB-ops Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 15 tribunals, Supreme Court, 17.77M+ High Court orders, and 81M+ District metadata.",
   openGraph: pageOpenGraph({
-    title: "Nyaya - Indian Law AI Assistant",
+    title: "Nyaya v2.0 - Indian Law MCP & Legal Research Assistant",
     description:
-      "Ask the Constitution, CrPC & statute book. Get cited answers from a retrieval-grounded AI for Indian law.",
+      "Pure-lexical & citation-graph legal MCP server covering Constitution, BNS/BNSS/BSA, Central & State Acts, Regulators, Tribunals, SC, and High Courts.",
   }),
 };
 
 function HomePageContent() {
   return (
     <main id="content" className="frame">
-      {/* LEFT: capabilities */}
+      {/* LEFT: capabilities & local/remote MCP setup */}
       <section className="pane-left">
         <div className="left-head">
-          <p className="eyebrow">CONVERSATIONAL AI · INDIAN LAW</p>
-          <h1>Ask the Constitution, CrPC & statute book. Get cited answers.</h1>
+          <p className="eyebrow">INDIAN LAW MCP v{API_VERSION} · PURE LEXICAL &amp; CITATION GRAPH</p>
+          <h1>Verify Indian statutes, transitions &amp; case law.</h1>
           <p className="lead">
-            A retrieval-grounded assistant for practicing lawyers. Every reply traces to a numbered article, section, or judgment. No paraphrased guesswork.
+            A zero-DB-ops legal MCP server and research assistant. Every reply resolves to numbered articles, sections, neutral citations, or judgments with license and validity metadata.
           </p>
-          <div className="left-stats">
-            <div className="ls">
-              <div className="ls-num num">{formatNumber(CORPUS_COUNTS.articles)}</div>
-              <div className="ls-lbl">Articles indexed</div>
-            </div>
-            <div className="ls">
-              <div className="ls-num num">{formatNumber(CORPUS_COUNTS.sections)}</div>
-              <div className="ls-lbl">Sections indexed</div>
-            </div>
-            <div className="ls">
-              <div className="ls-num num">{formatNumber(CORPUS_COUNTS.judgments)}</div>
-              <div className="ls-lbl">Judgments linked</div>
-            </div>
-          </div>
+          <HomeStats />
         </div>
 
         <div className="cap-wrap">
           <div className="cap-title">
             <h2>Capabilities</h2>
-            <span className="tag">6 modules</span>
+            <span className="tag">12 MCP tools</span>
           </div>
           <CapTable />
 
           <div className="src-chips" style={{ marginTop: "var(--gap-md)" }}>
-            <span className="tag">Constitution of India</span>
-            <span className="tag">IPC 1860</span>
-            <span className="tag">CrPC 1973</span>
-            <span className="tag">BNS 2023</span>
-            <span className="tag">BNSS 2023</span>
-            <span className="tag">SC judgments</span>
+            <span className="tag">Constitution · 106 Amds</span>
+            <span className="tag">BNS / BNSS / BSA 2023</span>
+            <span className="tag">IPC / CrPC / IEA (Legacy)</span>
+            <span className="tag">36 State/UT Acts</span>
+            <span className="tag">12 Regulators</span>
+            <span className="tag">15 Tribunals</span>
+            <span className="tag">SC &amp; 25 High Courts</span>
+            <span className="tag">DDL 81M (NC)</span>
           </div>
         </div>
 
         <McpConfig variant="promo" />
       </section>
 
-      {/* RIGHT: chat (can be disabled via NEXT_PUBLIC_CHAT_ENABLED) */}
+      {/* RIGHT: optional chat (disabled when NEXT_PUBLIC_CHAT_ENABLED !== "true") */}
       <section className="pane-right">
         <ChatPanel disabled={!CHAT_ENABLED} />
       </section>

@@ -18,9 +18,25 @@ def test_defaults(monkeypatch):
     assert s.llm_max_tokens == 2048
     assert s.max_history == 8
     assert s.tool_allowlist == config.DEFAULT_TOOLS
-    assert "semantic_query" in s.tool_allowlist
+    assert "search_statutes" in s.tool_allowlist
+    assert "get_provision" in s.tool_allowlist
+    assert "compare_provisions" in s.tool_allowlist
+    assert "search_judgments" in s.tool_allowlist
+    assert "semantic_query" not in s.tool_allowlist
     assert "hybrid_search" not in s.tool_allowlist
+    assert s.commercial_safe_only is False
+    assert not hasattr(s, "database_url")
     assert s.nvidia_api_key.get_secret_value() == "nvapi-abcdef1234567890"
+
+
+def test_commercial_safe_only_env(monkeypatch):
+    from nyaya_chat import config
+    config.reset_settings_cache()
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")
+    monkeypatch.setenv("NYAYA_COMMERCIAL_SAFE_ONLY", "1")
+    s = config.get_settings()
+    assert s.commercial_safe_only is True
+    assert s.as_log_dict()["commercial_safe_only"] is True
 
 
 def test_agent_pipeline_defaults(monkeypatch):

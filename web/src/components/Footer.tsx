@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback } from "react";
 import { usePathname } from "next/navigation";
+import { API_VERSION } from "@/lib/site";
 
 const FOOTER_LINKS = [
   { href: "/corpus/", label: "Corpus" },
@@ -42,7 +43,7 @@ export default function Footer() {
           ))}
         </nav>
         <div className="footer-meta">
-          <span className="meta">Nyaya · indexed legal corpus · v0.2.0 alpha</span>
+          <span className="meta">Nyaya · indexed legal corpus · v{API_VERSION}</span>
           <button type="button" className="back-to-top" onClick={backToTop}>
             Back to top ↑
           </button>

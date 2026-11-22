@@ -3,46 +3,71 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "nyaya"
+name = "nyaya-mcp"
 dynamic = ["version"]  # single source: __version__ in nyaya/__init__.py
-description = "MCP server for Indian law: Constitution, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments."
+description = "Zero-DB-ops Indian law MCP server: Constitution, Central & State Acts, 12 Regulators, 15 Tribunals, BNS/BNSS/BSA concordance, Supreme Court, High Court, and District Court judgments."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [{ name = "nyaya contributors" }]
-keywords = ["mcp", "indian-law", "constitution", "ipc", "crpc", "bns", "legal"]
+keywords = ["mcp", "indian-law", "constitution", "ipc", "crpc", "bns", "bnss", "bsa", "legal"]
 
 dependencies = [
-    "fastmcp>=2.13.0",
-    "psycopg[binary]>=3.2,<4",
-    "psycopg-pool>=3.2,<4",
+    "fastmcp>=3.4.10,<4",
     "pydantic>=2.7,<3",
     "httpx>=0.27,<1",
-    "openai>=1.0,<2",
-    "typing-extensions>=4.12,<5",
     "cachetools>=5.5,<7",
-    "redis>=5.0,<6",
+    "typing-extensions>=4.12,<5",
+    "duckdb>=1.2,<3",
+    "lancedb>=0.20,<1",
+    "pypdfium2>=4.30,<6",
+    "zstandard>=0.23,<1",
+    "pyyaml>=6.0,<7",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=9.0.3,<10",
-    "pytest-asyncio>=0.23,<0.25",
-    "pytest-cov>=5.0,<7",
-    "ruff>=0.6,<1",
-    "mypy>=1.10,<2",
+# Hosted HTTP ASGI server + optional Redis distributed rate limiting.
+http = [
+    "uvicorn[standard]>=0.32,<1",
+    "redis>=5.0,<6",
 ]
 # Optional .env loading (get_settings() reads a local .env when NYAYA_DOTENV=1).
 dotenv = [
     "python-dotenv>=1.0,<2",
 ]
+# Offline ingestion CLI extra (nyaya-ingest) — not installed in slim runtime containers.
+ingest = [
+    "pyarrow>=23.0.1,<25",
+    "beautifulsoup4>=4.12,<5",
+    "lxml>=6.1.0,<7",
+    "boto3>=1.35,<2",
+    "huggingface-hub>=0.26,<1",
+]
+dev = [
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=0.25,<1.5",
+    "pytest-cov>=5.0,<7",
+    "ruff>=0.6,<1",
+    "mypy>=1.10,<2",
+]
 
 [project.urls]
-Repository = "https://github.com/your-org/nyaya"
-Issues = "https://github.com/your-org/nyaya/issues"
+Repository = "https://github.com/paragmraw/nyaya"
+Issues = "https://github.com/paragmraw/nyaya/issues"
 
 [project.scripts]
-nyaya = "nyaya.server:main"
+nyaya-mcp = "nyaya.cli:main"
+nyaya = "nyaya.cli:main"
+nyaya-ingest = "nyaya.ingest.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=0.25,<1.5",
+    "pytest-cov>=5.0,<7",
+    "ruff>=0.6,<1",
+    "mypy>=1.10,<2",
+]
 
 [tool.hatch.version]
 path = "nyaya/__init__.py"
@@ -58,9 +83,10 @@ asyncio_mode = "auto"
 addopts = "-ra --strict-markers --tb=short -q"
 filterwarnings = [
     "ignore::DeprecationWarning:pydantic.*",
+    "ignore:create_fts_index is deprecated:DeprecationWarning",
 ]
 markers = [
-    "integration: requires a live Supabase/database connection",
+    "integration: requires an initialized ASGI app or external service",
     "slow: marks tests as slow",
 ]
 
@@ -72,13 +98,19 @@ omit = ["*/tests/*"]
 # chat/pyproject.toml). The Docker image installs mcp's exported pins first,
 # then chat's exported lock *constrained by* mcp's requirements
 # (-c requirements.txt), so any shared-pin disagreement between the two locks
-# fails the image build loudly instead of silently re-pinning. packaging is
-# the one package where the resolver direction goes chat-first: the langfuse
-# extra (langfuse>=2,<4) caps packaging at <26 in chat's lock, so mcp pins
-# 25.0 here rather than pulling chat up to 26.2.
+# fails the image build loudly instead of silently re-pinning.
 [tool.uv]
 constraint-dependencies = [
+    "authlib>=1.9.1",
+    "certifi>=2026.10.18",
+    "dnspython>=2.9.2",
+    "fastmcp>=3.4.10,<4",
+    "joserfc>=1.7.6",
+    "mcp>=1.30.0",
+    "opentelemetry-api>=1.45.2",
     "packaging==25.0",
+    "pyarrow>=23.0.1",
+    "pyjwt>=2.15.0",
 ]
 
 [tool.coverage.report]
@@ -91,31 +123,14 @@ exclude_lines = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-# The hydration notebook is data-prep scratch code (its own cell style);
-# linting it only produces noise, so it is excluded from `ruff check .`.
-extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
 disable_error_code = ["no-any-return"]
-
-# The former ``nyaya.db`` override (disable_error_code = arg-type,
-# call-overload, index, assignment, attr-defined) was removed in the Task 11
-# mypy tightening: the 28 suppressed errors were real typing debt, fixed by
-# parameterising the pool/connection generics with the dict row factory
-# (see ``db._conn`` / ``db._pool``).
-
-[[tool.mypy.overrides]]
-module = "cachetools.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "openai.*"
-ignore_missing_imports = true

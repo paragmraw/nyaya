@@ -42,19 +42,19 @@ _RESPONSES: dict[Intent, str] = {
     Intent.GREETING: (
         "Hello! I'm Nyaya, an assistant for Indian law. I can answer questions "
         "about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, "
-        "commercial statutes, and landmark Supreme Court judgments. "
+        "Central and State/UT statutes, regulators (SEBI, RBI), tribunals (NCLT, NCLAT, ITAT), "
+        "and Supreme Court and High Court judgments. "
         "Ask me about any provision, section, or case — I'll cite the exact source."
     ),
     Intent.CAPABILITY: (
         "I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:\n\n"
-        "- **Look up specific sections** of IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA\n"
-        "- **Fetch Constitution articles** by number (e.g. Article 21, Article 14)\n"
-        "- **Search semantically** across the entire corpus (e.g. \"good faith definition\")\n"
-        "- **Compare provisions** across acts (e.g. IPC s.302 vs BNS s.103)\n"
-        "- **Retrieve landmark Supreme Court judgments** by citation or case name\n"
-        "- **Show cross-references** between provisions (e.g. what replaced IPC 302)\n\n"
+        "- **Look up specific sections & articles** of the Constitution, IPC, CrPC, CPC, Evidence Act, BNS, BNSS, BSA, and 37 Central/State legislation packs\n"
+        "- **Compare criminal code transitions** side-by-side (e.g. IPC s.302 vs BNS s.103, CrPC s.438 vs BNSS s.482, IEA s.65B vs BSA s.63)\n"
+        "- **Track statutory validity & amendments** (Constitutional Amendments 1–106, repealed statutes, and struck-down provisions like IT Act s.66A)\n"
+        "- **Search across 3-tier Indian judiciary judgments** (Supreme Court, 25 High Courts, 15 Tribunals, and District Court metadata)\n"
+        "- **Trace precedent citation graphs** and check regulatory clauses from 12 regulators (SEBI, RBI, etc.)\n\n"
         "Every answer is grounded in the actual legal text with inline citations. "
-        'Try asking: *"What is IPC section 302?"* or *"What does Article 21 guarantee?"'
+        'Try asking: *"Compare IPC section 302 with BNS section 103"* or *"What did Shreya Singhal hold on Section 66A?"*'
     ),
     Intent.THANKS: (
         "You're welcome! Feel free to ask another question about Indian law."
@@ -62,8 +62,9 @@ _RESPONSES: dict[Intent, str] = {
     Intent.OFF_TOPIC: (
         "I'm Nyaya, an assistant for Indian law. I can't help with that, but I can "
         "answer questions about the Constitution of India, IPC, CrPC, CPC, Evidence Act, "
-        "BNS/BNSS/BSA 2023, commercial statutes, and landmark Supreme Court judgments. "
-        'Try asking: *"What is IPC section 302?"* or *"What does Article 21 guarantee?"'
+        "BNS/BNSS/BSA 2023, Central/State statutes, regulators, tribunals, and Supreme Court "
+        "or High Court judgments. "
+        'Try asking: *"What is IPC section 302?"* or *"What does Article 21 guarantee?"*'
     ),
 }
 
@@ -188,14 +189,15 @@ def classify_intent_tier1(message: str) -> Intent | None:
 _LEGAL_KEYWORDS = [
     "section", "article", "ipc", "crpc", "cpc", "bns", "bnss", "bsa",
     "evidence act", "constitution", "amendment", "judgment", "judgement",
-    "supreme court", "high court", "petition", "writ", "provision",
-    "act", "s.", "art.", "law", "legal", "penal", "criminal", "civil",
-    "court", "bail", "fir", "arrest", "trial", "appeal", "defendant",
-    "plaintiff", "murder", "theft", "fraud", "cheating", "defamation",
-    "dowry", "rape", "assault", "contract", "property", "tax",
-    "gst", "arbitration", "consumer", "companies act",
-    "kesavananda", "basic structure", "fundamental right",
-    "directive principle", "preamble",
+    "supreme court", "high court", "district court", "tribunal", "nclt",
+    "nclat", "itat", "ngt", "sebi", "rbi", "cnr", "insc", "scc", "air", "scr",
+    "struck down", "repealed", "concordance", "limitation", "regulator",
+    "petition", "writ", "provision", "act", "s.", "art.", "law", "legal",
+    "penal", "criminal", "civil", "court", "bail", "fir", "arrest", "trial",
+    "appeal", "defendant", "plaintiff", "murder", "theft", "fraud", "cheating",
+    "defamation", "dowry", "rape", "assault", "contract", "property", "tax",
+    "gst", "arbitration", "consumer", "companies act", "kesavananda",
+    "basic structure", "fundamental right", "directive principle", "preamble",
 ]
 
 

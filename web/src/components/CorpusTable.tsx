@@ -2,19 +2,15 @@
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { CURATED } from "@/lib";
+import type { CorpusCategoryFilter, CorpusSourceStatus } from "@/lib/types";
 import {
+  filterCorpusRows,
   getUrlQuery,
   getUrlQueryServer,
   parseViewParams,
   subscribeUrlQuery,
   writeUrlQuery,
 } from "@/lib/url-query";
-
-// Curated metadata for the corpus table. The design ships these rows with
-// status chips and coverage descriptions; we map live rows from /api/acts
-// onto this metadata by short_name. Acts not in the curated list still
-// render with a default "Live" status and the act's as_of date. Non-act rows
-// (judgments, legislation) use a fallback date from the design export.
 
 type ActLike = {
   short_name: string;
@@ -26,60 +22,114 @@ type Row = {
   short_name: string;
   name: string;
   type: string;
+  category: string;
+  tier: string;
   coverage: string;
+  license_spdx: string;
+  commercial_safe: boolean;
+  source: string;
   date: string;
   status: "live" | "beta" | "coming";
 };
 
-const STATUS_FILTERS = ["all", "live", "beta", "coming"] as const;
-type StatusFilter = (typeof STATUS_FILTERS)[number];
+const CATEGORY_FILTERS: { key: CorpusCategoryFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "judiciary", label: "Judiciary" },
+  { key: "legislation", label: "Legislation" },
+  { key: "regulators", label: "Regulators" },
+  { key: "tribunals", label: "Tribunals" },
+  { key: "commercial_safe", label: "Commercial-Safe Only" },
+];
+
+const STATUS_FILTERS: { key: string; label: string }[] = [
+  { key: "all", label: "All status" },
+  { key: "live", label: "Live" },
+  { key: "beta", label: "Beta" },
+  { key: "coming", label: "Coming" },
+];
+
+const CATEGORY_LABELS: Record<string, string> = {
+  judiciary: "Judiciary",
+  legislation: "Legislation",
+  regulators: "Regulators",
+  tribunals: "Tribunals",
+};
 
 // highlightAct: short_name (case-insensitive) of a row to highlight and scroll
 // into view — driven by citation deep-links (/corpus/?act=IPC&ref=s.302).
 export default function CorpusTable({
   acts,
+  sources,
+  snapshotDate,
   highlightAct,
 }: {
   acts: ActLike[] | undefined;
+  sources?: CorpusSourceStatus[] | undefined;
+  snapshotDate?: string | null;
   highlightAct?: string;
 }) {
-  // Sort/filter live in the URL (history.replaceState) so a configured view is
-  // shareable and survives back/forward. The URL is the source of truth — the
-  // view is DERIVED from the query snapshot rather than synced in an effect;
-  // clicks write a patch and the store notifies, re-rendering.
   const query = useSyncExternalStore(subscribeUrlQuery, getUrlQuery, getUrlQueryServer);
   const view = useMemo(() => parseViewParams(query), [query]);
   const sortCol = view.sort;
   const sortDir = view.dir;
-  const filter = (STATUS_FILTERS as readonly string[]).includes(view.status)
-    ? (view.status as StatusFilter)
+  const statusFilter = STATUS_FILTERS.some((f) => f.key === view.status) ? view.status : "all";
+  const categoryFilter = CATEGORY_FILTERS.some((f) => f.key === view.category)
+    ? (view.category as CorpusCategoryFilter)
     : "all";
 
   const actsByShort = useMemo(() => {
     const m = new Map<string, ActLike>();
-    (acts ?? []).forEach((a) => m.set(a.short_name, a));
+    (acts ?? []).forEach((a) => {
+      if (a.short_name) m.set(a.short_name.toLowerCase(), a);
+    });
     return m;
   }, [acts]);
 
+  const sourcesByName = useMemo(() => {
+    const m = new Map<string, CorpusSourceStatus>();
+    (sources ?? []).forEach((s) => {
+      if (s.short_name) m.set(s.short_name.toLowerCase(), s);
+      m.set(s.name.toLowerCase(), s);
+    });
+    return m;
+  }, [sources]);
+
   const rows: Row[] = useMemo(() => {
     return CURATED.map((c, i) => {
-      const act = c.short_name ? actsByShort.get(c.short_name) : undefined;
-      const date = (act?.as_of ?? c.fallback_date) || "N/A";
-      return { key: `${i}-${c.name}`, short_name: c.short_name ?? "", name: c.name, type: c.type, coverage: c.coverage, date, status: c.status };
+      const act = c.short_name ? actsByShort.get(c.short_name.toLowerCase()) : undefined;
+      const src =
+        (c.short_name ? sourcesByName.get(c.short_name.toLowerCase()) : undefined) ??
+        sourcesByName.get(c.name.toLowerCase());
+      const date = (act?.as_of ?? src?.as_of ?? c.fallback_date ?? (c.status === "live" ? snapshotDate : "")) || "N/A";
+      return {
+        key: `${i}-${c.name}`,
+        short_name: c.short_name ?? "",
+        name: c.name,
+        type: c.type,
+        category: c.category,
+        tier: c.tier,
+        coverage: src?.coverage ?? c.coverage,
+        license_spdx: src?.license_spdx ?? c.license_spdx,
+        commercial_safe: src?.commercial_safe ?? c.commercial_safe,
+        source: c.source,
+        date,
+        status: c.status,
+      };
     });
-  }, [actsByShort]);
+  }, [actsByShort, sourcesByName, snapshotDate]);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return rows;
-    return rows.filter((r) => r.status === filter);
-  }, [rows, filter]);
+    const byCategory = filterCorpusRows(rows, categoryFilter);
+    if (statusFilter === "all") return byCategory;
+    return byCategory.filter((r) => r.status === statusFilter);
+  }, [rows, categoryFilter, statusFilter]);
 
   const sorted = useMemo(() => {
-    if (sortCol === -1) return filtered; // unsorted: curated order
+    if (sortCol === -1) return filtered;
     const copy = [...filtered];
     copy.sort((a, b) => {
-      const av = [a.name, a.type, a.coverage, a.date, a.status][sortCol]?.toLowerCase() ?? "";
-      const bv = [b.name, b.type, b.coverage, b.date, b.status][sortCol]?.toLowerCase() ?? "";
+      const av = [a.name, a.category, a.coverage, a.license_spdx, a.date, a.status][sortCol]?.toLowerCase() ?? "";
+      const bv = [b.name, b.category, b.coverage, b.license_spdx, b.date, b.status][sortCol]?.toLowerCase() ?? "";
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;
@@ -95,8 +145,6 @@ export default function CorpusTable({
     }
   };
 
-  // Deep-link highlight: resolve the act's row key, then scroll it into view
-  // once. Instant scroll under prefers-reduced-motion (smooth otherwise).
   const highlightKey = useMemo(() => {
     if (!highlightAct) return null;
     const needle = highlightAct.toLowerCase();
@@ -111,28 +159,41 @@ export default function CorpusTable({
         : "smooth",
       block: "center",
     });
-    // Rows are static (only sort/filter reorder them); run on highlight change.
   }, [highlightKey]);
 
-  const headers = ["Source", "Type", "Coverage", "Last refreshed", "Status"];
+  const headers = ["Source", "Category", "Coverage", "License", "Updated", "Status"];
 
   return (
     <>
-      {/* Toggle group, not tabs: active state is exposed via aria-pressed, and
-          buttons are natively keyboard-operable (Enter / Space). */}
-      <div className="filter-bar" role="group" aria-label="Filter by status">
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`filter-chip${filter === f ? " active" : ""}`}
-            onClick={() => writeUrlQuery({ status: f })}
-            aria-pressed={filter === f}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="filter-controls">
+        <div className="filter-bar" role="group" aria-label="Filter by category">
+          {CATEGORY_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={`filter-chip${categoryFilter === f.key ? " active" : ""}`}
+              onClick={() => writeUrlQuery({ category: f.key })}
+              aria-pressed={categoryFilter === f.key}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="filter-bar filter-bar-status" role="group" aria-label="Filter by status">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              className={`filter-chip${statusFilter === f.key ? " active" : ""}`}
+              onClick={() => writeUrlQuery({ status: f.key })}
+              aria-pressed={statusFilter === f.key}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
+
       <div className="corpus-wrap" style={{ border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", background: "var(--surface)" }}>
         <table className="corpus-table">
           <thead>
@@ -143,9 +204,6 @@ export default function CorpusTable({
                   className={sortCol === i ? `sorted-${sortDir}` : ""}
                   aria-sort={sortCol === i ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                 >
-                  {/* Real button inside the header cell: keyboard operable and
-                      focusable by default (Enter/Space activate it), unlike a
-                      click-only th. */}
                   <button
                     type="button"
                     className="th-sort"
@@ -173,9 +231,20 @@ export default function CorpusTable({
                     : undefined
                 }
               >
-                <td><span className="ct-name">{r.name}</span></td>
-                <td>{r.type}</td>
+                <td>
+                  <span className="ct-name">{r.name}</span>
+                  <span className="ct-sub">{r.tier} · {r.source}</span>
+                </td>
+                <td>{CATEGORY_LABELS[r.category] ?? r.type}</td>
                 <td><span className="ct-cov">{r.coverage}</span></td>
+                <td>
+                  <div className="license-cell">
+                    <span className="badge-license">{r.license_spdx}</span>
+                    <span className={`badge-commercial ${r.commercial_safe ? "badge-safe" : "badge-nc"}`}>
+                      {r.commercial_safe ? "Commercial-safe" : "Non-commercial"}
+                    </span>
+                  </div>
+                </td>
                 <td><span className="ct-date">{r.date}</span></td>
                 <td>
                   <span className={`chip chip-${r.status}`}>

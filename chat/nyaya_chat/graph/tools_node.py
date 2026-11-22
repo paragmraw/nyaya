@@ -18,7 +18,7 @@ from typing import Any, cast
 from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.prebuilt import ToolNode
 
-from ..tools_layer.cleaning import clean_tool_content
+from ..tools_layer.cleaning import clean_for_ui_summary, clean_tool_content
 from .events import timed_phase, tool_result
 from .state import ChatState
 
@@ -92,7 +92,7 @@ class DedupToolNode:
                             results[key] = cleaned
                             break
                     new_msgs.append(m)
-                    tool_result(m.tool_call_id, m.name or "", cleaned)
+                    tool_result(m.tool_call_id, m.name or "", clean_for_ui_summary(cleaned, m.name))
 
         dup_msgs: list[ToolMessage] = []
         for tc in duplicate_calls:
@@ -142,7 +142,7 @@ class DedupToolNode:
                         results[key] = cleaned
                         break
                 cleaned_msgs.append(m)
-                tool_result(m.tool_call_id, m.name or "", cleaned)
+                tool_result(m.tool_call_id, m.name or "", clean_for_ui_summary(cleaned, m.name))
         return {
             "messages": cleaned_msgs,
             "dedup_seen": seen,

@@ -1,0 +1,135 @@
+name: Corpus Refresh
+
+on:
+  schedule:
+    - cron: "0 2 * * *"  # Daily at 02:00 UTC (Dattam SC/HC + PRS deltas)
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Ingestion source tier to sync"
+        type: choice
+        options:
+          - daily
+          - static
+          - all
+        default: daily
+      publish_target:
+        description: "Publish destination after verify-gate passes"
+        type: choice
+        options:
+          - all
+          - railway-bucket
+          - hf-dataset
+          - gh-release
+          - none
+        default: all
+      dry_run:
+        description: "Run sync in dry-run mode without building or publishing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ingest-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.25"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install ingestion dependencies
+        run: uv sync --extra ingest --locked
+
+      - name: Restore incremental ingest state
+        uses: actions/cache@v4
+        with:
+          path: mcp/.ingest-state
+          key: ingest-state-${{ inputs.tier || 'daily' }}-${{ github.run_id }}
+          restore-keys: |
+            ingest-state-${{ inputs.tier || 'daily' }}-
+            ingest-state-
+
+      - name: Sync corpus delta sources
+        run: |
+          mkdir -p "${{ runner.temp }}/nyaya-ingest/work" "${{ runner.temp }}/nyaya-ingest/build" .ingest-state
+          if [ -f .ingest-state/ingest_state.sqlite ]; then
+            cp .ingest-state/ingest_state.sqlite "${{ runner.temp }}/nyaya-ingest/work/ingest_state.sqlite"
+          fi
+          DRY_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_FLAG="--dry-run"
+          fi
+          uv run --no-sync nyaya-ingest sync \
+            --tier "${{ inputs.tier || 'daily' }}" \
+            --work-dir "${{ runner.temp }}/nyaya-ingest/work" \
+            $DRY_FLAG
+
+      - name: Build SQLite core, LanceDB BM25 FTS & compacted ZSTD Parquet
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          WORK_DIR="${{ runner.temp }}/nyaya-ingest/work"
+          BUILD_DIR="${{ runner.temp }}/nyaya-ingest/build"
+          uv run --no-sync nyaya-ingest build-sqlite --work-dir "$WORK_DIR" --out "$BUILD_DIR/nyaya-core.sqlite"
+          uv run --no-sync nyaya-ingest build-lance-fts --work-dir "$WORK_DIR" --out "$BUILD_DIR/lancedb"
+          uv run --no-sync nyaya-ingest compact-parquet --work-dir "$WORK_DIR" --out "$BUILD_DIR/parquet"
+          if [ -f "$WORK_DIR/ingest_state.sqlite" ]; then
+            cp "$WORK_DIR/ingest_state.sqlite" .ingest-state/ingest_state.sqlite
+          fi
+
+      - name: Run Automated Legal Integrity Gate
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          BUILD_DIR="${{ runner.temp }}/nyaya-ingest/build"
+          uv run --no-sync nyaya-ingest verify-gate \
+            --build-dir "$BUILD_DIR" \
+            --strict \
+            --report "$BUILD_DIR/gate-report.json"
+
+      - name: Upload Legal Integrity Gate report
+        if: always() && inputs.dry_run != true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ingest-gate-report
+          path: |
+            ${{ runner.temp }}/nyaya-ingest/build/gate-report.json
+            ${{ runner.temp }}/nyaya-ingest/build/gate-pass.json
+          if-no-files-found: ignore
+
+      - name: Atomic blue/green publish
+        if: ${{ inputs.dry_run != true && (github.event_name == 'schedule' || inputs.publish_target != 'none') }}
+        env:
+          NYAYA_BUCKET_ENDPOINT: ${{ secrets.NYAYA_BUCKET_ENDPOINT }}
+          NYAYA_BUCKET_NAME: ${{ secrets.NYAYA_BUCKET_NAME }}
+          NYAYA_BUCKET_ACCESS_KEY_ID: ${{ secrets.NYAYA_BUCKET_ACCESS_KEY_ID }}
+          NYAYA_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.NYAYA_BUCKET_SECRET_ACCESS_KEY }}
+          NYAYA_BUCKET_REGION: auto
+          NYAYA_BUCKET_URL_STYLE: vhost
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TARGET="${{ inputs.publish_target || 'all' }}"
+          TAG="v$(date -u +%Y.%m.%d)-${{ github.run_number }}"
+          if [ -z "${NYAYA_BUCKET_ACCESS_KEY_ID:-}" ] && [ -z "${HF_TOKEN:-}" ] && [ "$TARGET" != "gh-release" ]; then
+            echo "::notice::Publish credentials (NYAYA_BUCKET_ACCESS_KEY_ID / HF_TOKEN) not configured; skipping remote upload after verify-gate pass."
+            exit 0
+          fi
+          uv run --no-sync nyaya-ingest publish \
+            --build-dir "${{ runner.temp }}/nyaya-ingest/build" \
+            --target "$TARGET" \
+            --tag "$TAG"

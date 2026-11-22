@@ -1,74 +1,56 @@
 # syntax=docker/dockerfile:1.7
 #
-# Multi-stage Dockerfile for the Nyaya monorepo: builds the Next.js static
-# export in a Node stage, then assembles the Python runtime that serves the
-# SPA + REST + MCP from one origin. Build context is the repo root.
+# Multi-stage Dockerfile for the Nyaya v2.0 monorepo (Option R2, Zero-Supabase):
+#   1. web-builder : builds the Next.js static export (/web/out)
+#   2. py-builder  : installs pinned mcp + chat Python deps on Debian slim and
+#                    pre-installs the DuckDB httpfs extension into /app/duckdb_ext
+#   3. data-stage  : bakes /app/data/nyaya-core.sqlite from a verified release URL
+#                    (.zst + SHA-256) or falls back offline to mini_corpus fixture
+#   4. runtime     : hardened non-root python:3.12-slim-bookworm image serving
+#                    SPA + REST + /mcp + optional /chat from one origin (:8000)
 
 # --- Stage 1: build the SPA (static export -> /web/out) -----------------------
-# node:20-alpine pinned by digest for reproducible builds (amd64).
+# node:20-alpine pinned by linux/amd64 manifest digest.
 FROM node:20-alpine@sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb AS web-builder
 ENV NODE_ENV=production
-# Feature flag for chat UI (embedded at build time for static export).
-# Defaults to true so the production image ships with the chat panel live
-# (the server mounts /chat whenever NVIDIA_API_KEY is set); override the
-# build arg to build a chat-less image.
+# Build-time feature flag embedded in the Next.js static export. Defaults to
+# true; runtime mounts /chat whenever NVIDIA_API_KEY is configured.
 ARG NEXT_PUBLIC_CHAT_ENABLED=true
 ENV NEXT_PUBLIC_CHAT_ENABLED=${NEXT_PUBLIC_CHAT_ENABLED}
 WORKDIR /web
-# Install deps first for layer caching (lockfile is committed for reproducibility).
-# Use `npm install` (not `npm ci`) so platform-specific optional deps
-# (e.g. @unrs/resolver-binding-linux-*) are reconciled — the committed
-# lockfile was generated on Windows and lacks Linux-only entries.
+# Install deps first for layer caching. Use `npm install` (not `npm ci`) so
+# Linux-specific optional bindings are resolved cleanly.
 COPY web/package.json web/package-lock.json ./
 RUN npm install --no-audit --no-fund --include=dev
 COPY web/ .
 RUN npm run build
-# Output: /web/out/ (static HTML/CSS/JS + assets + logo.svg)
+# Output: /web/out/
 
-# --- Stage 2: build the Python package (Alpine, no semantic search) ----------
-# python:3.12-alpine pinned by digest for reproducible builds (amd64).
-FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS py-builder
+# --- Stage 2: build Python site-packages & DuckDB extensions (Debian slim) ----
+# python:3.12-slim-bookworm (3.12.16) pinned by linux/amd64 manifest digest so
+# duckdb, lancedb, pypdfium2, pyarrow, and zstandard install via manylinux
+# glibc wheels with zero compilers or libpq/postgresql-dev.
+FROM python:3.12-slim-bookworm@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4 AS py-builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    CFLAGS="-Os -fomit-frame-pointer" \
-    CPPFLAGS="-Os -fomit-frame-pointer"
+    PYTHONUNBUFFERED=1
 
 WORKDIR /build
 
-RUN apk add --no-cache \
-        build-base \
-        postgresql-dev \
-        curl
-
-# uv and uvx pinned by digest for supply-chain integrity.
-COPY --from=ghcr.io/astral-sh/uv:0.11.25-alpine@sha256:18a2499e97102ccb684f4d19fe4cdd598feb20582dccb65fe086fcadc7c9b81a /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
+# uv and uvx pinned by linux/amd64 manifest digest for supply-chain integrity.
+COPY --from=ghcr.io/astral-sh/uv:0.11.25-debian-slim@sha256:672c2cac384d695fc9395d14ded6f986dfa0e6bde1f0846bed0aa461a757cffd /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
 COPY mcp/pyproject.toml mcp/uv.lock mcp/README.md ./
 
-# Export pinned requirements from the lockfile and install into system site-packages.
-# --locked (not --frozen): a stale lock must be a hard error here, not silently
-# ignored — --frozen only *skips* the freshness check.
-RUN uv export --locked --no-dev --no-emit-project --no-editable --format requirements-txt > requirements.txt \
+# Export pinned runtime requirements (including [http] for uvicorn + redis)
+# from mcp/uv.lock. --locked fails loudly if the lockfile is stale.
+RUN uv export --locked --no-dev --extra http --no-emit-project --no-editable --format requirements-txt > requirements.txt \
     && uv pip install --system --no-cache -r requirements.txt
 
-# Install the chat sub-app package (chat/nyaya_chat) and its dependencies
-# (fastapi, langgraph, langchain-mcp-adapters, langchain-nvidia-ai-endpoints)
-# into site-packages so the host nyaya server can ``import nyaya_chat`` at
-# runtime. Non-editable so the code lives in site-packages (the builder's
-# /build is discarded).
-#
-# Dependencies are pinned by exporting chat/uv.lock (committed) rather than
-# letting uv resolve fresh against pyproject.toml — and chat's install is
-# *constrained by* mcp's exported requirements (-c requirements.txt) so any
-# shared-pin disagreement between the two locks fails this build loudly
-# instead of silently re-pinning what mcp installed. The [tool.uv]
-# constraint-dependencies blocks in both pyprojects keep the locks aligned;
-# see the comments there. The langfuse telemetry extra is behind a build ARG
-# (default off) so the base image doesn't pull the langfuse SDK stack; opt in
-# with --build-arg CHAT_LANGFUSE=true.
+# Install the chat sub-app (chat/nyaya_chat) constrained by mcp's exported
+# pins (-c ../requirements.txt) so any shared-dependency drift fails loudly.
 ARG CHAT_LANGFUSE=false
 COPY chat/pyproject.toml chat/uv.lock chat/README.md ./chat/
 COPY chat/nyaya_chat/ ./chat/nyaya_chat/
@@ -81,40 +63,76 @@ RUN cd chat \
     && uv pip install --system --no-cache -r /tmp/chat-requirements.txt -c ../requirements.txt \
     && uv pip install --system --no-cache --no-deps .
 
-# --- Stage 3: runtime -------------------------------------------------------
-# python:3.12-alpine pinned by digest for reproducible builds (amd64).
-FROM python:3.12-alpine@sha256:aa679aa4eed6eb56c1dc6ad3f1b98b7d2d788fd961596779d188fdedad97fb38 AS runtime
+# Pre-install DuckDB httpfs extension into /app/duckdb_ext so the runtime
+# container works under `read_only: true` with autoinstall disabled.
+RUN mkdir -p /app/duckdb_ext \
+    && python -c "import duckdb; con = duckdb.connect(); con.execute(\"SET extension_directory='/app/duckdb_ext'; INSTALL httpfs;\"); con.close()"
+
+# Install nyaya-mcp package & console scripts (`nyaya-mcp`, `nyaya`, `nyaya-ingest`).
+# Installed after dependency & httpfs layers to preserve Docker layer caching.
+COPY mcp/nyaya/ ./nyaya/
+RUN uv pip install --system --no-cache --no-deps .
+
+# --- Stage 2b: dual-mode SQLite core baker (prod artifact OR CI mini_corpus) --
+FROM py-builder AS data-stage
+
+ARG NYAYA_CORE_SQLITE_URL=""
+ARG NYAYA_CORE_SQLITE_SHA256=""
+
+COPY mcp/tests/ ./tests/
+
+RUN mkdir -p /app/data \
+    && if [ -n "$NYAYA_CORE_SQLITE_URL" ]; then \
+        if [ -z "$NYAYA_CORE_SQLITE_SHA256" ]; then \
+            echo "ERROR: NYAYA_CORE_SQLITE_SHA256 must be set when NYAYA_CORE_SQLITE_URL is non-empty" >&2; \
+            exit 1; \
+        fi; \
+        apt-get update \
+        && apt-get install -y --no-install-recommends curl ca-certificates zstd \
+        && rm -rf /var/lib/apt/lists/* \
+        && curl -fsSL "$NYAYA_CORE_SQLITE_URL" -o /tmp/nyaya-core.sqlite.zst \
+        && echo "${NYAYA_CORE_SQLITE_SHA256}  /tmp/nyaya-core.sqlite.zst" | sha256sum -c - \
+        && zstd -d --rm /tmp/nyaya-core.sqlite.zst -o /app/data/nyaya-core.sqlite; \
+    else \
+        PYTHONPATH=/build python -m tests.fixtures.mini_corpus.builder /app/data; \
+    fi
+
+# --- Stage 3: hardened non-root runtime -------------------------------------
+FROM python:3.12-slim-bookworm@sha256:0f086103b026048cc50cb5da25ec435c023c5241a83fc44daea593377abc61c4 AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    NYAYA_DATA_DIR=/app/data \
+    NYAYA_CACHE_DIR=/tmp/nyaya-cache \
+    NYAYA_DUCKDB_EXT_DIR=/app/duckdb_ext \
     PORT=8000
 
-# apk upgrade pulls security fixes published to the Alpine repos after the
-# digest-pinned base image was built (e.g. openssl CVEs) — the Trivy CI gate
-# fails on HIGH/CRITICAL findings that have a published fix, so the runtime
-# must not ship the base image's frozen package set.
-RUN apk upgrade --no-cache \
-    && apk add --no-cache libpq ca-certificates \
-    && addgroup -S nyaya \
-    && adduser -S -G nyaya -u 1000 nyaya
+# Apply latest Debian security patches (Trivy gate fails on fixable HIGH/CRITICAL
+# OS CVEs) and create non-root user `nyaya` (UID/GID 1000) + writable cache
+# mountpoints (owned by nyaya so Docker named volumes inherit UID 1000 ownership).
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 nyaya \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin nyaya \
+    && mkdir -p /app /var/cache/nyaya /tmp/nyaya-cache \
+    && chown -R nyaya:nyaya /app /var/cache/nyaya /tmp/nyaya-cache
 
 WORKDIR /app
 
-# Python packages and entrypoints from the builder
+# Python packages and console scripts from py-builder; strip build-only uv/uvx.
 COPY --from=py-builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=py-builder /usr/local/bin /usr/local/bin
-# uv/uvx ride along in the builder's /usr/local/bin (which also carries the
-# pip-installed console scripts the runtime needs). They are build-time-only
-# tooling — the runtime never invokes them — so drop them instead of shipping
-# their attack surface (the Trivy gate flagged quinn-proto inside uv).
 RUN rm -f /usr/local/bin/uv /usr/local/bin/uvx
 
-# Application code (server.py mounts StaticFiles at web/out/)
-COPY --chown=nyaya:nyaya mcp/nyaya/ /app/nyaya/
-COPY --chown=nyaya:nyaya mcp/pyproject.toml mcp/README.md /app/
+# Pre-installed DuckDB httpfs extension and baked SQLite core corpus.
+COPY --from=py-builder --chown=nyaya:nyaya /app/duckdb_ext /app/duckdb_ext
+COPY --from=data-stage --chown=nyaya:nyaya /app/data /app/data
 
-# Built SPA from stage 1 — served at / by Starlette StaticFiles
+# Apache-2.0 NOTICE, README, and built SPA (`nyaya` and `nyaya_chat` live in site-packages).
+COPY --chown=nyaya:nyaya mcp/README.md NOTICE /app/
 COPY --from=web-builder --chown=nyaya:nyaya /web/out/ /app/web/out/
 
 USER nyaya
@@ -124,6 +142,6 @@ EXPOSE 8000
 STOPSIGNAL SIGTERM
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:${PORT:-8000}/health', timeout=3).status==200 else 1)"
+    CMD python -c "import os, urllib.request, sys; port = os.environ.get('PORT', '8000'); sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{port}/health', timeout=3).status == 200 else 1)"
 
-CMD ["python", "-m", "nyaya.server"]
+CMD ["python", "-m", "nyaya.cli", "--transport", "http", "--host", "0.0.0.0"]
