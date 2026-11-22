@@ -45,7 +45,7 @@ ingest = [
 ]
 dev = [
     "pytest>=9.0.3,<10",
-    "pytest-asyncio>=0.25,<1.5",
+    "pytest-asyncio>=0.25,<1.6",
     "pytest-cov>=5.0,<7",
     "ruff>=0.6,<1",
     "mypy>=1.10,<2",
@@ -63,7 +63,7 @@ nyaya-ingest = "nyaya.ingest.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=9.0.3,<10",
-    "pytest-asyncio>=0.25,<1.5",
+    "pytest-asyncio>=0.25,<1.6",
     "pytest-cov>=5.0,<7",
     "ruff>=0.6,<1",
     "mypy>=1.10,<2",
