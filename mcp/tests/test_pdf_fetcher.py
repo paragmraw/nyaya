@@ -170,3 +170,15 @@ async def test_pdf_fetcher_lru_evicts_oldest_over_limit(tmp_path: Path) -> None:
         assert len(cached_files) <= 1
     finally:
         await fetcher.aclose()
+
+
+async def test_pdf_fetcher_default_client_instantiation_and_offline_error(tmp_path: Path) -> None:
+    fetcher = DirectS3PdfFetcher(cache_dir=tmp_path / "default_client", offline_only=True)
+    try:
+        assert fetcher._owns_client is True
+        assert fetcher._client.timeout == httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
+        with pytest.raises(PdfFetchError) as exc_info:
+            await fetcher.fetch_and_read(_meta(), mode="overview")
+        assert exc_info.value.reason == "http_error"
+    finally:
+        await fetcher.aclose()

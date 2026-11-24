@@ -241,7 +241,7 @@ class DirectS3PdfFetcher:
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             follow_redirects=False,
-            timeout=httpx.Timeout(connect=3.0, read=8.0),
+            timeout=httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0),
         )
         self.offline_only = offline_only
         self._sem = asyncio.Semaphore(4)

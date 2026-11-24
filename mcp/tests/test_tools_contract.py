@@ -352,6 +352,26 @@ async def test_trace_precedent_enforces_unverified_automated_status():
     assert res.target.case_id == "sc:1973:kesavananda"
 
 
+async def test_search_judgments_returns_cards_and_frames_snippets():
+    storage.set_backend(_build_rich_memory_backend())
+    tools = await _tool_map(_fresh_mcp())
+
+    res = await tools["search_judgments"].fn(query="2021 INSC 999")
+    assert res.total >= 1
+    assert res.returned >= 1
+    card = res.results[0]
+    assert card.case_id == "ildc:2021:sample"
+    assert card.neutral_citation == "2021 INSC 999"
+    assert card.snippet is not None
+    assert card.snippet.startswith("<corpus_text ")
+    assert card.snippet.endswith("</corpus_text>")
+    assert "Research-only judgment excerpt" in card.snippet
+
+    res_sc = await tools["search_judgments"].fn(query="AIR 1973 SC 1461")
+    assert res_sc.total >= 1
+    assert res_sc.results[0].case_id == "sc:1973:kesavananda"
+
+
 async def test_get_judgment_modes_and_commercial_safe_block():
     backend = _build_rich_memory_backend()
     backend.judgments["sc:1973:kesavananda"].pdf_s3_bucket = "indian-supreme-court-judgments"
