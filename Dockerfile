@@ -87,12 +87,15 @@ RUN mkdir -p /app/data \
             echo "ERROR: NYAYA_CORE_SQLITE_SHA256 must be set when NYAYA_CORE_SQLITE_URL is non-empty" >&2; \
             exit 1; \
         fi; \
-        apt-get update \
+        rm -rf /app/data/* \
+        && apt-get update \
         && apt-get install -y --no-install-recommends curl ca-certificates zstd \
         && rm -rf /var/lib/apt/lists/* \
         && curl -fsSL "$NYAYA_CORE_SQLITE_URL" -o /tmp/nyaya-core.sqlite.zst \
         && echo "${NYAYA_CORE_SQLITE_SHA256}  /tmp/nyaya-core.sqlite.zst" | sha256sum -c - \
-        && zstd -d --rm /tmp/nyaya-core.sqlite.zst -o /app/data/nyaya-core.sqlite; \
+        && zstd -d --rm /tmp/nyaya-core.sqlite.zst -o /app/data/nyaya-core.sqlite \
+        && find /app/data -mindepth 1 ! -name 'nyaya-core.sqlite' -exec rm -rf {} + \
+        && test -f /app/data/nyaya-core.sqlite; \
     else \
         PYTHONPATH=/build python -m tests.fixtures.mini_corpus.builder /app/data; \
     fi

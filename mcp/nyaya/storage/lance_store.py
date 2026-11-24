@@ -85,11 +85,18 @@ class LanceStore:
         return bool(self.bucket_uri and not self.offline_only)
 
     def health(self) -> dict[str, Any]:
+        has_local = self.local_dir is not None and self.local_dir.is_dir()
+        if not has_local and not self.bucket_uri:
+            return {"status": "unconfigured"}
         if not self.is_available():
             return {"status": "unavailable"}
         try:
             db = self._connect()
-            names = list(db.table_names())
+            if hasattr(db, "list_tables"):
+                res = db.list_tables()
+                names = list(getattr(res, "tables", res))
+            else:
+                names = list(db.table_names())
             return {"status": "ok", "tables": names}
         except Exception as exc:
             return {"status": "degraded", "error": str(exc)}

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..models import CorpusStatusResponse
-from ..storage import get_backend
+from ..storage import enrich_corpus_status, get_backend
 from ._error import structured_errors
 from ._util import effective_commercial_safe, run_sync
 
@@ -18,11 +18,12 @@ def corpus_status(
     """Return full corpus counts, active storage tiers, per-source provenance, and licensing posture."""
     backend = get_backend()
     cs_only = effective_commercial_safe(commercial_safe_only)
-    return backend.corpus_status(
+    resp = backend.corpus_status(
         court=court.strip() if court and court.strip() else None,
         include_sources=bool(include_sources),
         commercial_safe_only=cs_only,
     )
+    return enrich_corpus_status(resp, commercial_safe_only=cs_only)
 
 
 def register(mcp: Any) -> None:

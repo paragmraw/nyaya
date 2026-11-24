@@ -27,6 +27,11 @@ on:
         description: "Run sync in dry-run mode without building or publishing"
         type: boolean
         default: false
+      hc_year_from:
+        description: "Minimum High Court year to sync (default 2020; leave empty for full historical)"
+        type: string
+        required: false
+        default: "2020"
 
 concurrency:
   group: ingest-refresh
@@ -71,14 +76,21 @@ jobs:
           if [ -f .ingest-state/ingest_state.sqlite ]; then
             cp .ingest-state/ingest_state.sqlite "${{ runner.temp }}/nyaya-ingest/work/ingest_state.sqlite"
           fi
-          DRY_FLAG=""
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            DRY_FLAG="--dry-run"
+          SYNC_ARGS=(
+            --tier "${{ inputs.tier || 'daily' }}"
+            --work-dir "${{ runner.temp }}/nyaya-ingest/work"
+          )
+          HC_YEAR_FROM="${{ inputs.hc_year_from }}"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$HC_YEAR_FROM" ]; then
+            HC_YEAR_FROM="2020"
           fi
-          uv run --no-sync nyaya-ingest sync \
-            --tier "${{ inputs.tier || 'daily' }}" \
-            --work-dir "${{ runner.temp }}/nyaya-ingest/work" \
-            $DRY_FLAG
+          if [ -n "$HC_YEAR_FROM" ]; then
+            SYNC_ARGS+=(--hc-year-from "$HC_YEAR_FROM")
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            SYNC_ARGS+=(--dry-run)
+          fi
+          uv run --no-sync nyaya-ingest sync "${SYNC_ARGS[@]}"
 
       - name: Build SQLite core, LanceDB BM25 FTS & compacted ZSTD Parquet
         if: ${{ inputs.dry_run != true }}

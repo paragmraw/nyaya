@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+from datetime import date as Date
 from pathlib import Path
 
 import pytest
 
 from nyaya.exceptions import CommercialLicenseBlocked
+from nyaya.models import JudgmentMeta, SourceProvenance
 from nyaya.storage import close_all, get_backend, set_backend
 from nyaya.storage.memory_backend import InMemoryCorpusBackend
-from nyaya.storage.sqlite_store import SqliteStore
+from nyaya.storage.sqlite_store import SqliteStore, _fts_query
 from tests.fixtures.mini_corpus.builder import build_mini_corpus
 
 
@@ -124,3 +127,66 @@ def test_in_memory_backend_and_registry() -> None:
         assert status.counts.central_acts == 2
     finally:
         close_all()
+
+
+def test_fts_query_stopwords_and_operators() -> None:
+    # Stopwords are stripped when content tokens remain
+    assert _fts_query("what is the punishment for murder") == '"punishment" OR "murder"'
+    assert _fts_query("punishment for murder", operator="AND") == '"punishment" AND "murder"'
+    # Falls back to all tokens when every token is a stopword
+    assert _fts_query("what is the") == '"what" OR "is" OR "the"'
+    # Exact phrase keeps stopwords intact
+    assert _fts_query("right of speech", exact_phrase=True) == '"right of speech"'
+
+
+def test_search_statutes_fts_precision_no_false_positives(sqlite_store: SqliteStore) -> None:
+    # Unmatched multi-word query with "of" must not match Article 19 or other noise
+    assert sqlite_store.search_statutes_fts("dishonour of cheque insufficient funds") == []
+    # 2-content-token query with 0 AND hits must not fall back to single-token noise
+    assert sqlite_store.search_statutes_fts("cheque dishonour") == []
+    # 2-content-token query with AND hits succeeds
+    hits = sqlite_store.search_statutes_fts("punishment for murder")
+    assert len(hits) >= 1
+    assert any(h.act in {"IPC", "BNS"} and h.ref in {"302", "103"} for h in hits)
+
+
+def test_meta_to_card_authority_levels_and_amendment_sha256(sqlite_store: SqliteStore) -> None:
+    sc_meta = sqlite_store.resolve_judgment_id("AIR 1973 SC 1461")[0]
+    assert SqliteStore._meta_to_card(sc_meta).authority_level == "binding_sc"
+
+    hc_meta = sqlite_store.resolve_judgment_id("2024:DHC:1234")[0]
+    assert SqliteStore._meta_to_card(hc_meta).authority_level == "persuasive_other_hc"
+
+    prov = SourceProvenance(
+        source_id="test",
+        source_name="Test",
+        source_url="https://example.invalid",
+        license_spdx="CC-BY-4.0",
+        commercial_safe=True,
+        terms_status="cleared",
+        as_of=Date(2026, 11, 22),
+    )
+    trib_meta = JudgmentMeta(
+        case_id="trib:1",
+        court_tier="tribunal",
+        court_code="NCLAT",
+        court_name="NCLAT",
+        title="Tribunal Order",
+        provenance=prov,
+    )
+    dist_meta = JudgmentMeta(
+        case_id="dist:1",
+        court_tier="district_court",
+        court_code="MH_DIST_01",
+        court_name="Pune District Court",
+        title="District Order",
+        provenance=prov,
+    )
+    assert SqliteStore._meta_to_card(trib_meta).authority_level == "tribunal"
+    assert SqliteStore._meta_to_card(dist_meta).authority_level == "district"
+
+    hist = sqlite_store.get_provision_history("Constitution", amendment_number=42)
+    assert len(hist.amendments) == 1
+    am = hist.amendments[0]
+    expected_sha = hashlib.sha256(am.summary.encode("utf-8")).hexdigest()
+    assert am.provenance.content_sha256 == expected_sha

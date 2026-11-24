@@ -618,6 +618,7 @@ class JudgmentViewResponse(BaseModel):
         "metadata_only"
     )
     chars_per_page: float | None = None
+    warning: str | None = None
     provenance: SourceProvenance
 
 

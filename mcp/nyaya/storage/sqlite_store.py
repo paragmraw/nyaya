@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
@@ -259,6 +260,16 @@ _REF_PREFIX_RE = re.compile(
 )
 _FTS_TOKEN_RE = re.compile(r"[A-Za-z0-9_./()-]+")
 _SUB_CLAUSE_RE = re.compile(r"^([A-Za-z0-9-]+?)((?:\([0-9a-zA-Z]+\))+)$")
+_STOPWORDS = frozenset(
+    {
+        "a", "an", "and", "are", "as", "at", "be", "been", "being", "by",
+        "did", "do", "does", "for", "from", "has", "have", "how", "in", "is",
+        "it", "its", "may", "no", "not", "of", "on", "or", "regarding", "say",
+        "shall", "state", "such", "that", "the", "these", "this", "those", "to",
+        "under", "upon", "was", "were", "what", "when", "where", "which", "who",
+        "whom", "whose", "with", "about", "any", "all", "into",
+    }
+)
 
 _TIER_TO_PUBLIC: dict[str, str] = {
     "sc": "supreme_court",
@@ -301,15 +312,31 @@ def _normalize_ref(ref: str) -> tuple[str, str | None]:
     return cleaned.upper(), None
 
 
-def _fts_query(raw: str, *, exact_phrase: bool = False) -> str:
-    tokens = [t.strip(".-/()") for t in _FTS_TOKEN_RE.findall(raw)]
-    tokens = [t for t in tokens if t]
-    if not tokens:
+def _extract_fts_tokens(raw: str) -> tuple[list[str], list[str]]:
+    """Extract normalized FTS tokens and non-stopword content tokens."""
+    all_tokens = [t.strip(".-/()") for t in _FTS_TOKEN_RE.findall(raw)]
+    all_tokens = [t for t in all_tokens if t]
+    content_tokens = [t for t in all_tokens if t.lower() not in _STOPWORDS]
+    return all_tokens, content_tokens
+
+
+def _fts_query(
+    raw: str,
+    *,
+    exact_phrase: bool = False,
+    operator: str = "OR",
+    max_tokens: int | None = None,
+) -> str:
+    all_tokens, content_tokens = _extract_fts_tokens(raw)
+    if not all_tokens:
         return ""
     if exact_phrase:
-        escaped = " ".join(tokens).replace('"', '""')
+        escaped = " ".join(all_tokens).replace('"', '""')
         return f'"{escaped}"'
-    return " OR ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in tokens[:16])
+    selected = content_tokens if content_tokens else all_tokens
+    op = "AND" if operator.upper() == "AND" else "OR"
+    cap = max_tokens if max_tokens is not None else (8 if op == "AND" else 16)
+    return f" {op} ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in selected[:cap])
 
 
 def _row_provenance(row: sqlite3.Row, *, content_sha256: str | None = None) -> SourceProvenance:
@@ -942,6 +969,7 @@ class SqliteStore:
                 for x in str(r["articles_affected"] or "").split(",")
                 if x.strip()
             ]
+            summary_str = str(r["summary"])
             amends.append(
                 AmendmentRecord(
                     amendment_id=str(r["amendment_id"]),
@@ -953,7 +981,7 @@ class SqliteStore:
                     effective_date=_parse_date(r["effective_date"]),
                     action=str(r["action"]),
                     provisions_affected=affected,
-                    summary=str(r["summary"]),
+                    summary=summary_str,
                     provenance=SourceProvenance(
                         source_id=str(r["source_id"]),
                         source_name=str(r["src_name"]),
@@ -962,6 +990,7 @@ class SqliteStore:
                         commercial_safe=bool(r["commercial_safe"]),
                         terms_status=r["src_terms_status"],
                         as_of=_parse_date(r["src_as_of"]) or Date(2026, 11, 22),
+                        content_sha256=hashlib.sha256(summary_str.encode("utf-8")).hexdigest(),
                     ),
                 )
             )
@@ -1211,10 +1240,18 @@ class SqliteStore:
         matched_via: str = "direct",
         snippet: str | None = None,
     ) -> JudgmentCard:
+        from ..retrieval.ranking import compute_authority_level
+
         avail: TextAvailability = (
             "indexed_bm25"
             if meta.has_lance_text
             else ("on_demand_s3_pdf" if (meta.pdf_s3_bucket and meta.pdf_s3_key) else "metadata_only")
+        )
+        authority = compute_authority_level(
+            meta.court_tier,
+            meta.court_code,
+            meta.court_name,
+            binding_for_court=None,
         )
         return JudgmentCard(
             case_id=meta.case_id,
@@ -1232,6 +1269,7 @@ class SqliteStore:
             author_judge=meta.author_judge,
             disposal_nature=meta.disposal_nature,
             case_type=meta.case_type,
+            authority_level=authority,
             acts_cited=meta.acts_cited,
             matched_via=matched_via,  # type: ignore[arg-type]
             cited_by_count=meta.cited_by_count,
@@ -1384,12 +1422,12 @@ class SqliteStore:
     ) -> list[StatuteHit]:
         con = self._conn()
         cs_only = self._effective_cs(commercial_safe_only)
-        fts_expr = _fts_query(query, exact_phrase=exact_phrase)
-        if not fts_expr:
+        all_tokens, content_tokens = _extract_fts_tokens(query)
+        if not all_tokens:
             return []
 
         where = ["provisions_fts MATCH ?"]
-        params: list[Any] = [fts_expr]
+        base_params: list[Any] = []
         if cs_only:
             where.append("p.commercial_safe = 1")
         if act:
@@ -1397,18 +1435,18 @@ class SqliteStore:
             if act_id is None:
                 return []
             where.append("p.act_id = ?")
-            params.append(act_id)
+            base_params.append(act_id)
         if jurisdiction:
             where.append("lower(a.jurisdiction) = lower(?)")
-            params.append(jurisdiction.strip())
+            base_params.append(jurisdiction.strip())
         if kind:
             where.append("p.kind = ?")
-            params.append(kind)
+            base_params.append(kind)
         if status and status != "all":
             where.append("p.status = ?")
-            params.append(status)
+            base_params.append(status)
 
-        rows = con.execute(
+        sql = (
             "SELECT p.*, a.short_name AS act_short_name, a.jurisdiction AS act_jurisdiction, "
             "s.name AS src_name, s.url AS src_url, s.license_spdx AS src_license, "
             "s.terms_status AS src_terms_status, s.as_of AS src_as_of, "
@@ -1417,9 +1455,46 @@ class SqliteStore:
             "JOIN provisions p ON provisions_fts.rowid = p.rowid "
             "JOIN acts a ON p.act_id = a.act_id "
             "JOIN sources s ON p.source_id = s.source_id "
-            f"WHERE {' AND '.join(where)} ORDER BY fts_rank LIMIT ? OFFSET ?",
-            [*params, limit, offset],
-        ).fetchall()
+            f"WHERE {' AND '.join(where)} ORDER BY fts_rank LIMIT ? OFFSET ?"
+        )
+
+        def _run_fts(expr: str, q_limit: int, q_offset: int) -> list[sqlite3.Row]:
+            if not expr:
+                return []
+            return con.execute(sql, [expr, *base_params, q_limit, q_offset]).fetchall()
+
+        distinct_content = list(dict.fromkeys(t.lower() for t in content_tokens))
+        rows: list[sqlite3.Row]
+        if exact_phrase or len(distinct_content) < 2:
+            fts_expr = _fts_query(query, exact_phrase=exact_phrase, operator="OR")
+            rows = _run_fts(fts_expr, limit, offset)
+        elif len(distinct_content) == 2:
+            and_expr = _fts_query(query, exact_phrase=False, operator="AND", max_tokens=8)
+            rows = _run_fts(and_expr, limit, offset)
+        else:
+            need = limit + offset
+            and_expr = _fts_query(query, exact_phrase=False, operator="AND", max_tokens=8)
+            and_rows = _run_fts(and_expr, need, 0)
+            if len(and_rows) >= need:
+                rows = and_rows[offset : offset + limit]
+            else:
+                or_expr = _fts_query(query, exact_phrase=False, operator="OR", max_tokens=16)
+                or_candidates = _run_fts(or_expr, max(need * 5, 100), 0)
+                min_required = min(2, len(distinct_content))
+                seen_ids = {str(r["doc_id"]) for r in and_rows}
+                merged = list(and_rows)
+                for r in or_candidates:
+                    doc_id = str(r["doc_id"])
+                    if doc_id in seen_ids:
+                        continue
+                    haystack = (
+                        f"{r['title'] or ''} {r['text'] or ''} "
+                        f"{r['act_short_name'] or ''} {r['ref'] or ''}"
+                    ).lower()
+                    if sum(1 for tok in distinct_content if tok in haystack) >= min_required:
+                        merged.append(r)
+                        seen_ids.add(doc_id)
+                rows = merged[offset : offset + limit]
 
         hits: list[StatuteHit] = []
         for r in rows:

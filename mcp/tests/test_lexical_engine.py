@@ -181,3 +181,38 @@ def test_paragraph_bm25_ranking() -> None:
     ranked = bm25.rank("electronic records certificate", top_k=1, context_window=0)
     assert len(ranked) == 1
     assert ranked[0][0] == 1
+
+
+def test_lance_state_and_regulator_exact_match_ranks_first(
+    corpus_paths: dict[str, Path],
+    tmp_path: Path,
+) -> None:
+    settings = _make_settings(corpus_paths["root"], tmp_path / "cache")
+    sqlite = SqliteStore(corpus_paths["sqlite"])
+    lance = LanceStore(local_dir=corpus_paths["lancedb"], offline_only=True)
+    engine = build_retrieval_engine(settings, sqlite, lance=lance)
+    try:
+        mofa_resp = engine.search_statutes(
+            StatuteSearchQuery(
+                query="What does Maharashtra Ownership Flats Act (MH-MOFA) section 4 require a promoter to execute before accepting advance payment?",
+                limit=10,
+            )
+        )
+        assert mofa_resp.returned >= 1
+        assert (mofa_resp.results[0].act, mofa_resp.results[0].ref) == ("MH-MOFA", "4")
+
+        sebi_resp = engine.search_statutes(
+            StatuteSearchQuery(
+                query="What disclosure of material events is required by a listed entity under SEBI LODR Reg. 30?",
+                limit=10,
+            )
+        )
+        assert sebi_resp.returned >= 1
+        assert (sebi_resp.results[0].act, sebi_resp.results[0].ref) == ("SEBI-LODR", "30")
+
+        empty_resp = engine.search_statutes(
+            StatuteSearchQuery(query="dishonour of cheque insufficient funds", limit=10)
+        )
+        assert empty_resp.total == 0
+    finally:
+        sqlite.close()

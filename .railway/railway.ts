@@ -47,6 +47,10 @@ export default defineRailway(() =>
           NYAYA_BUCKET_SECRET_ACCESS_KEY: preserve(),
           NYAYA_BUCKET_REGION: "auto",
           NYAYA_BUCKET_URL_STYLE: "vhost",
+          // Build-time SQLite core release artifact (Dockerfile Stage 2b); preserve()
+          // keeps the release URL and SHA-256 configured in Railway Variables.
+          NYAYA_CORE_SQLITE_URL: preserve(),
+          NYAYA_CORE_SQLITE_SHA256: preserve(),
           // Right-most trusted proxy hop count (1 behind Railway edge).
           NYAYA_TRUSTED_PROXY_HOPS: "1",
           // Academic/research-inclusive default (CC-BY-NC DDL 81M & ILDC tagged

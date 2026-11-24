@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+import duckdb
 import pytest
 
+from nyaya import storage as storage_pkg
 from nyaya.config import Settings
 from nyaya.exceptions import (
     CommercialLicenseBlocked,
@@ -18,7 +21,7 @@ from nyaya.storage.duckdb_store import (
     build_s3_secret_sql,
     normalize_duckdb_endpoint,
 )
-from nyaya.storage.manifest import load_manifest, resolve_partitions
+from nyaya.storage.manifest import CorpusManifest, load_manifest, resolve_partitions
 from tests.fixtures.mini_corpus.builder import build_mini_corpus
 
 
@@ -154,5 +157,151 @@ def test_duckdb_analytics_closed_schema_and_timeout(
             store._execute_with_timeout(
                 "SELECT count(*) FROM range(5000000) a, range(5000000) b"
             )
+    finally:
+        store.close()
+
+
+def _bucket_settings(
+    tmp_path: Path,
+    *,
+    offline_only: bool = False,
+    manifest_url: str | None = None,
+    duckdb_ext_dir: Path | None = None,
+) -> Settings:
+    return Settings(
+        data_dir=tmp_path / "data",
+        cache_dir=tmp_path / "cache",
+        bucket_endpoint="https://t3.storageapi.dev",
+        bucket_name="nyaya-prod-bucket",
+        bucket_access_key_id="tid_abc",
+        bucket_secret_access_key="tsec_xyz",
+        bucket_region="auto",
+        bucket_url_style="vhost",
+        manifest_url=manifest_url,
+        commercial_safe_only=False,
+        offline_only=offline_only,
+        duckdb_ext_dir=duckdb_ext_dir,
+        log_level="INFO",
+        port=8000,
+        redis_url=None,
+        trusted_proxy_hops=1,
+    )
+
+
+def test_fetch_bucket_manifest_caches_and_loads_ext_dir(
+    tmp_path: Path,
+    corpus_paths: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ext_dir = tmp_path / "duckdb_ext"
+    ext_dir.mkdir()
+    settings = _bucket_settings(tmp_path, duckdb_ext_dir=ext_dir)
+    settings.data_dir.mkdir(parents=True)
+    manifest_raw = corpus_paths["manifest"].read_text(encoding="utf-8")
+
+    executed_sql: list[tuple[str, Any]] = []
+
+    class _FakeCursor:
+        def __init__(self, row: tuple[str] | None) -> None:
+            self._row = row
+
+        def fetchone(self) -> tuple[str] | None:
+            return self._row
+
+    class _FakeDuckConn:
+        def execute(self, sql: str, params: Any = None) -> _FakeCursor:
+            executed_sql.append((sql, params))
+            if "read_text" in sql:
+                assert params == ["s3://nyaya-prod-bucket/current/manifest.json"]
+                return _FakeCursor((manifest_raw,))
+            return _FakeCursor(None)
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(duckdb, "connect", lambda *_args, **_kwargs: _FakeDuckConn())
+
+    manifest = storage_pkg._load_optional_manifest(settings)
+    assert manifest is not None
+    assert manifest.datasets["high_court"].row_count >= 1
+    cached = settings.cache_dir / "manifest.json"
+    assert cached.is_file()
+    assert CorpusManifest.model_validate_json(cached.read_text(encoding="utf-8")).datasets
+
+    sql_joined = "\n".join(s for s, _ in executed_sql)
+    assert "SET extension_directory=" in sql_joined
+    assert "LOAD httpfs" in sql_joined
+    assert "CREATE OR REPLACE SECRET nyaya_bucket" in sql_joined
+
+
+def test_load_optional_manifest_precedence_and_fallback(
+    tmp_path: Path,
+    corpus_paths: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_raw = corpus_paths["manifest"].read_text(encoding="utf-8")
+    settings = _bucket_settings(tmp_path, manifest_url="https://example.invalid/manifest.json")
+    settings.data_dir.mkdir(parents=True)
+
+    # 1. Local data_dir/manifest.json overrides remote bucket
+    (settings.data_dir / "manifest.json").write_text(manifest_raw, encoding="utf-8")
+    called = {"bucket": 0}
+
+    def _boom_bucket(_s: Settings) -> CorpusManifest:
+        called["bucket"] += 1
+        raise RuntimeError("bucket down")
+
+    monkeypatch.setattr(storage_pkg, "fetch_bucket_manifest", _boom_bucket)
+    local_loaded = storage_pkg._load_optional_manifest(settings)
+    assert local_loaded is not None
+    assert called["bucket"] == 0
+
+    # 2. Removing local manifest tries bucket, then falls back cleanly to manifest_url
+    (settings.data_dir / "manifest.json").unlink()
+    fallback_manifest = load_manifest(corpus_paths["manifest"])
+    monkeypatch.setattr(
+        storage_pkg,
+        "load_manifest",
+        lambda src, **_kw: fallback_manifest if str(src).startswith("https://") else load_manifest(src),
+    )
+    remote_loaded = storage_pkg._load_optional_manifest(settings)
+    assert remote_loaded is fallback_manifest
+    assert called["bucket"] == 1
+
+    # 3. If both bucket and manifest_url fail, returns None without crashing
+    def _boom_load(*_args: Any, **_kwargs: Any) -> CorpusManifest:
+        raise RuntimeError("manifest_url down")
+
+    monkeypatch.setattr(storage_pkg, "load_manifest", _boom_load)
+    assert storage_pkg._load_optional_manifest(settings) is None
+
+
+def test_duckdb_store_health_and_manifest_counts(
+    corpus_paths: dict[str, Path],
+    tmp_path: Path,
+) -> None:
+    unconf = DuckDBStore(manifest=None, offline_only=True)
+    assert unconf.health() == {"status": "unconfigured"}
+    assert unconf.manifest_counts() == {}
+
+    remote_unavail = DuckDBStore(manifest=None, settings=_bucket_settings(tmp_path), offline_only=False)
+    assert remote_unavail.health() == {"status": "unavailable"}
+
+    manifest = load_manifest(corpus_paths["manifest"])
+    store = DuckDBStore(manifest=manifest, base_dir=corpus_paths["root"], offline_only=True)
+    try:
+        h = store.health()
+        assert h["status"] == "ok"
+        assert "high_court" in h["datasets"]
+
+        counts_all = store.manifest_counts(commercial_safe_only=False)
+        assert counts_all["hc_judgments"] >= 1
+        assert counts_all["sc_judgments"] >= 1
+        assert counts_all["tribunal_orders"] >= 1
+        assert counts_all["district_court_records"] >= 1
+
+        counts_cs = store.manifest_counts(commercial_safe_only=True)
+        assert "district_court_records" not in counts_cs
+        assert counts_cs["hc_judgments"] == counts_all["hc_judgments"]
     finally:
         store.close()

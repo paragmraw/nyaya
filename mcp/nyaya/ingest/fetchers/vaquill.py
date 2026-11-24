@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,73 @@ def parse_vaquill_coverage_yaml(yaml_text: str) -> dict[str, VaquillCoverageEntr
     return out
 
 
+VaquillCategory = str
+
+_LEGACY_CATEGORY_MAP: dict[str, str] = {
+    "in_central_legislation.parquet": "central",
+    "in_state_legislation.parquet": "state",
+    "in_regulators.parquet": "regulator",
+    "in_tribunals.parquet": "tribunal",
+}
+
+
+def parse_sha256sums_json(payload: Mapping[str, Any]) -> dict[str, str]:
+    """Parse Vaquill ``SHA256SUMS.json`` in either nested ``{"files": {name: {"sha256": ...}}}``
+    or flat ``{name: sha256}`` format.
+    """
+    raw_files: Mapping[str, Any]
+    nested = payload.get("files")
+    if isinstance(nested, Mapping):
+        raw_files = nested
+    else:
+        raw_files = payload
+
+    out: dict[str, str] = {}
+    for fname, entry in raw_files.items():
+        key = str(fname).strip()
+        if not key:
+            continue
+        if isinstance(entry, Mapping):
+            sha = str(entry.get("sha256") or "").strip()
+        else:
+            sha = str(entry or "").strip()
+        if sha:
+            out[key] = sha
+    return out
+
+
+def classify_vaquill_file(filename: str) -> str:
+    """Classify a Vaquill v2026.08.1 Parquet filename into central/state/regulator/tribunal."""
+    name = filename.strip()
+    if name in _LEGACY_CATEGORY_MAP:
+        return _LEGACY_CATEGORY_MAP[name]
+    if name.endswith("_legislation.parquet"):
+        return "state"
+    if name.endswith("_regulations.parquet"):
+        return "regulator"
+    if name.endswith("_tribunal_matters.parquet"):
+        return "tribunal"
+    return "other"
+
+
+def list_files_by_category(
+    checksums: Mapping[str, str] | Sequence[str],
+) -> dict[str, list[str]]:
+    """Group Vaquill Parquet filenames into ``central``, ``state``, ``regulator``, ``tribunal``."""
+    grouped: dict[str, list[str]] = {
+        "central": [],
+        "state": [],
+        "regulator": [],
+        "tribunal": [],
+    }
+    names = list(checksums.keys()) if isinstance(checksums, Mapping) else list(checksums)
+    for fname in sorted(names):
+        cat = classify_vaquill_file(fname)
+        if cat in grouped:
+            grouped[cat].append(fname)
+    return grouped
+
+
 class VaquillFetcher:
     """Downloads Vaquill Open India Law Parquets and verifies ``SHA256SUMS.json``."""
 
@@ -87,22 +155,44 @@ class VaquillFetcher:
         work_dir: Path,
         *,
         files: list[str] | None = None,
+        categories: Sequence[str] | None = None,
         dry_run: bool = False,
-        fixture_sha256sums: dict[str, str] | None = None,
+        fixture_sha256sums: Mapping[str, Any] | None = None,
     ) -> VaquillSyncResult:
-        target_files = files or [
-            "in_central_legislation.parquet",
-            "in_state_legislation.parquet",
-            "in_regulators.parquet",
-            "in_tribunals.parquet",
-        ]
         if fixture_sha256sums is not None:
-            checksums = dict(fixture_sha256sums)
+            checksums = parse_sha256sums_json(fixture_sha256sums)
         else:
             sums_url = f"{self.base_url}/{self.release_tag}/SHA256SUMS.json"
             raw_bytes = self.http_fetcher.fetch_bytes(sums_url)
             loaded: Any = json.loads(raw_bytes.decode("utf-8"))
-            checksums = {str(k): str(v) for k, v in loaded.items()} if isinstance(loaded, dict) else {}
+            checksums = parse_sha256sums_json(loaded) if isinstance(loaded, Mapping) else {}
+
+        if files is not None:
+            target_files = list(files)
+        elif categories is not None:
+            wanted = {c.strip().lower() for c in categories if c.strip()}
+            by_cat = list_files_by_category(checksums)
+            target_files = [
+                fname
+                for cat in ("central", "state", "regulator", "tribunal")
+                if cat in wanted
+                for fname in by_cat[cat]
+            ]
+        elif fixture_sha256sums is not None:
+            target_files = [
+                "in_central_legislation.parquet",
+                "in_state_legislation.parquet",
+                "in_regulators.parquet",
+                "in_tribunals.parquet",
+            ]
+        else:
+            by_cat = list_files_by_category(checksums)
+            target_files = [
+                *by_cat["central"],
+                *by_cat["state"],
+                *by_cat["regulator"],
+                *by_cat["tribunal"],
+            ]
 
         result = VaquillSyncResult(release_tag=self.release_tag)
         dest_dir = work_dir / "raw" / "vaquill" / self.release_tag

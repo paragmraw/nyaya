@@ -81,20 +81,28 @@ def test_publish_uploads_immutable_release_before_atomic_current_manifest_swap(
     assert len(bucket_client.upload_order) >= 5
     assert len(hf_client.upload_order) >= 5
 
-    # Blue/green invariant: every immutable `releases/v2026.11.22/...` key is uploaded
-    # BEFORE `current/manifest.json` is atomically swapped at the very end!
+    # Blue/green invariant: every immutable `releases/v2026.11.22/...` and `lancedb/...` key
+    # is uploaded BEFORE `current/manifest.json` is atomically swapped at the very end!
     assert bucket_client.upload_order[-1] == "current/manifest.json"
     for key in bucket_client.upload_order[:-1]:
-        assert key.startswith("releases/v2026.11.22/"), f"Unexpected pre-swap key: {key}"
+        assert key.startswith(("releases/v2026.11.22/", "lancedb/")), (
+            f"Unexpected pre-swap key: {key}"
+        )
+    assert any(k.startswith("lancedb/") for k in bucket_client.upload_order)
+    assert "releases/v2026.11.22/nyaya-core.sqlite.zst" in bucket_client.uploads
+    assert "releases/v2026.11.22/nyaya-core.sqlite.zst.sha256" in bucket_client.uploads
 
     assert hf_client.upload_order[-1] == "current/manifest.json"
+    for key in hf_client.upload_order[:-1]:
+        assert key.startswith("releases/v2026.11.22/"), f"Unexpected public pre-swap key: {key}"
 
-    # Verify non-commercial pack metadata is cleanly flagged in dual-published public manifest
+    # Verify manifest.json partitions point to releases/<tag>/... S3 keys and preserve NC metadata
     swapped_manifest = json.loads(hf_client.uploads["current/manifest.json"].decode("utf-8"))
     ddl_meta = swapped_manifest["datasets"]["district_court"]
     assert ddl_meta["commercial_safe"] is False
     assert ddl_meta["license_spdx"] == "CC-BY-NC-SA-4.0"
     assert ddl_meta["terms_status"] == "non_commercial_only"
+    assert ddl_meta["partitions"][0]["s3_key"].startswith("releases/v2026.11.22/parquet/")
 
 
 def test_nyaya_ingest_cli_end_to_end_with_fixture(tmp_path: Path) -> None:

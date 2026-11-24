@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from datetime import date as Date
 from typing import Any
 
@@ -32,6 +33,8 @@ from .ranking import (
     rank_judgment_cards,
     reciprocal_rank_fusion,
 )
+
+_STATUTE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 def encode_cursor(offset: int) -> str:
@@ -242,10 +245,44 @@ class LexicalRetrievalEngine:
             except StorageUnavailable:
                 degraded.append("lance_fts")
 
+        # Promote LanceDB state/regulator hits whose act/alias + ref match the query or parsed citations
+        exact_doc_ids = {h.doc_id for h in exact_hits}
+        q_lower = q.query.lower()
+        q_tokens = {t.lower() for t in _STATUTE_TOKEN_RE.findall(q.query)}
+        act_aliases: dict[str, set[str]] = {}
+        for alias_k, target_short in alias_map.items():
+            act_aliases.setdefault(target_short.lower(), set()).add(alias_k.lower())
+        exact_ref_pairs = {(a.lower(), r.lower()) for a, r in analyzed.exact_statute_refs}
+
+        lance_promoted: list[StatuteHit] = []
+        for lh in lance_hits:
+            act_l = lh.act.lower()
+            ref_l = lh.ref.lower()
+            aliases_for_act = act_aliases.get(act_l, set()) | {act_l}
+            act_matched = (
+                (q.act is not None and q.act.strip().lower() in aliases_for_act)
+                or any(
+                    al in q_tokens
+                    or (len(al) >= 4 and re.search(rf"(?<![A-Za-z0-9]){re.escape(al)}(?![A-Za-z0-9])", q_lower))
+                    for al in aliases_for_act
+                )
+            )
+            ref_matched = (
+                (act_l, ref_l) in exact_ref_pairs
+                or bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(ref_l)}(?![A-Za-z0-9])", q_lower))
+            )
+            if (act_l, ref_l) in exact_ref_pairs or (act_matched and ref_matched):
+                if lh.doc_id not in exact_doc_ids:
+                    exact_hits.append(lh.model_copy(update={"bm25_score": max(lh.bm25_score, 100.0)}))
+                    exact_doc_ids.add(lh.doc_id)
+            elif act_matched:
+                lance_promoted.append(lh)
+
         # 4. Weighted RRF (k=60) + definition promotion + exact-citation top-3 floor
         fused_pairs = reciprocal_rank_fusion(
             [
                 (1.5, exact_hits),
+                (1.15, lance_promoted),
                 (1.0, sqlite_hits),
                 (0.95, lance_hits),
             ],

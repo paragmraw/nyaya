@@ -131,25 +131,32 @@ def create_http_app(
 
     @mcp_instance.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> JSONResponse:
-        try:
-            st = await asyncio.to_thread(_storage.get_backend().corpus_status)
+        def _collect_health() -> tuple[dict[str, Any], dict[str, Any]]:
+            st = _storage.get_backend().corpus_status()
             if hasattr(st, "counts"):
-                counts: dict[str, Any] = (
-                    st.counts.model_dump(mode="json")
-                    if hasattr(st.counts, "model_dump")
-                    else dict(st.counts)
+                enriched = _storage.enrich_corpus_status(st)
+                c: dict[str, Any] = (
+                    enriched.counts.model_dump(mode="json")
+                    if hasattr(enriched.counts, "model_dump")
+                    else dict(enriched.counts)
                 )
-                backends: dict[str, Any] = dict(getattr(st, "tiers", None) or {"sqlite_core": "ok"})
-            elif isinstance(st, dict):
-                counts = dict(st.get("counts", st))
-                backends = dict(st.get("tiers", {"sqlite_core": "ok"}))
-            else:
-                counts = {}
-                backends = {"sqlite_core": "ok"}
+                b: dict[str, Any] = dict(enriched.tiers)
+                return c, b
+            if isinstance(st, dict):
+                c = dict(st.get("counts", st))
+                b = dict(st.get("tiers", {"sqlite_core": "ok"}))
+                b.setdefault("sqlite_core", "ok")
+                for k, v in _storage.get_cold_tier_statuses().items():
+                    b.setdefault(k, v)
+                return c, b
+            return {}, {"sqlite_core": "ok", **_storage.get_cold_tier_statuses()}
+
+        try:
+            counts, backends = await asyncio.to_thread(_collect_health)
             status = "healthy"
         except Exception:
             counts = {}
-            backends = {"sqlite_core": "unavailable"}
+            backends = {"sqlite_core": "unavailable", **_storage.get_cold_tier_statuses()}
             status = "degraded"
         return JSONResponse(
             {

@@ -39,8 +39,10 @@ def _audit_parsed_citation(
     backend: Any,
     check_date: Date,
     cs_only: bool,
+    compact: bool = False,
 ) -> AuditFinding:
-    parsed_dict = p.model_dump(mode="json")
+    parsed_dict = None if compact else p.model_dump(mode="json")
+    excerpt_cap = 180 if compact else 400
 
     # 1. Statutory / Constitutional / Regulatory provisions
     if p.kind in {
@@ -107,7 +109,7 @@ def _audit_parsed_citation(
             },
             validity=val,
             matched_excerpt=ensure_framed(
-                rec.text[:400],
+                rec.text[:excerpt_cap],
                 doc_id=rec.doc_id,
                 provenance=rec.provenance,
             ),
@@ -134,7 +136,7 @@ def _audit_parsed_citation(
                 status="VERIFIED",
                 canonical_record=am.model_dump(mode="json"),
                 matched_excerpt=ensure_framed(
-                    am.summary[:400],
+                    am.summary[:excerpt_cap],
                     doc_id=am.amendment_id,
                     provenance=am.provenance,
                 ),
@@ -196,7 +198,7 @@ def _audit_parsed_citation(
         cited_by_count=meta.cited_by_count,
         cited_by_larger_bench_count=larger_cnt,
         matched_excerpt=ensure_framed(
-            meta.snippet[:400],
+            meta.snippet[:excerpt_cap],
             doc_id=meta.case_id,
             provenance=meta.provenance,
         )
@@ -212,6 +214,7 @@ def _verify_citations_sync(
     check_date: Date | str | None = None,
     verify_quotes: list[QuoteCheckInput | dict[str, str]] | None = None,
     commercial_safe_only: bool = False,
+    compact: bool = False,
 ) -> CitationAuditResponse:
     if not text and not citations and not verify_quotes:
         raise InvalidFilter(
@@ -247,6 +250,7 @@ def _verify_citations_sync(
                     backend=backend,
                     check_date=effective_date,
                     cs_only=cs_only,
+                    compact=compact,
                 )
             )
 
@@ -271,6 +275,7 @@ def _verify_citations_sync(
                         backend=backend,
                         check_date=effective_date,
                         cs_only=cs_only,
+                        compact=compact,
                     )
                 )
 
@@ -314,18 +319,19 @@ def _verify_citations_sync(
 
             norm_needle = _norm_quote(q_in.quote)
             norm_hay = _norm_quote(target_text)
+            excerpt_cap = 180 if compact else 400
             excerpt: str | None
             if target_text and norm_needle and norm_needle in norm_hay:
                 q_status: AuditStatus = "QUOTE_VERIFIED"
                 excerpt = (
-                    ensure_framed(target_text[:400], doc_id=doc_id, provenance=prov)
+                    ensure_framed(target_text[:excerpt_cap], doc_id=doc_id, provenance=prov)
                     if prov is not None
-                    else target_text[:400]
+                    else target_text[:excerpt_cap]
                 )
             else:
                 q_status = "QUOTE_MISMATCH" if target_text else "NOT_FOUND_IN_CORPUS"
                 excerpt = (
-                    ensure_framed(target_text[:400], doc_id=doc_id, provenance=prov)
+                    ensure_framed(target_text[:excerpt_cap], doc_id=doc_id, provenance=prov)
                     if (target_text and prov is not None)
                     else None
                 )
@@ -333,7 +339,7 @@ def _verify_citations_sync(
             findings.append(
                 AuditFinding(
                     raw_citation=q_in.citation,
-                    parsed=parsed.model_dump(mode="json") if parsed else None,
+                    parsed=None if compact else (parsed.model_dump(mode="json") if parsed else None),
                     status=q_status,
                     canonical_record=canon_rec,
                     matched_para_num=1 if q_status == "QUOTE_VERIFIED" else None,
@@ -360,6 +366,7 @@ async def verify_citations(
     check_date: Date | str | None = None,
     verify_quotes: list[QuoteCheckInput | dict[str, str]] | None = None,
     commercial_safe_only: bool = False,
+    compact: bool = False,
 ) -> CitationAuditResponse:
     """Audit citations and verbatim quotes in a legal brief or explicit citation list."""
     return await asyncio.to_thread(
@@ -369,6 +376,7 @@ async def verify_citations(
         check_date=check_date,
         verify_quotes=verify_quotes,
         commercial_safe_only=commercial_safe_only,
+        compact=compact,
     )
 
 
@@ -398,6 +406,7 @@ def register(mcp: Any) -> None:
         check_date: str | None = None,
         verify_quotes: list[QuoteCheckInput | dict[str, str]] | None = None,
         commercial_safe_only: bool = False,
+        compact: bool = False,
     ) -> CitationAuditResponse:
         return await verify_citations(
             text=text,
@@ -405,4 +414,5 @@ def register(mcp: Any) -> None:
             check_date=check_date,
             verify_quotes=verify_quotes,
             commercial_safe_only=commercial_safe_only,
+            compact=compact,
         )

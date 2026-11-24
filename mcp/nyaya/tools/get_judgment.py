@@ -10,6 +10,7 @@ from ..exceptions import (
     AmbiguousReference,
     InvalidFilter,
     NotFound,
+    PdfFetchError,
     TextUnavailableMetadataOnly,
 )
 from ..models import (
@@ -197,35 +198,84 @@ async def get_judgment(
         )
 
     clamped_max_chars = max(1_000, min(int(max_chars), 30_000))
+    warning: str | None = None
+    total_paras: int | None
+    total_pages: int | None
+    has_more: bool
+    next_para: int | None
+    next_page: int | None
+    extraction_method: Literal["indexed_text", "pypdfium2_s3_pdf", "metadata_only"]
+    chars_per_page: float | None
 
     if meta.pdf_s3_bucket and meta.pdf_s3_key:
-        content = await get_pdf_fetcher().fetch_and_read(
-            meta,
-            mode=effective_view,
-            para_start=p_start,
-            para_end=p_end,
-            page_start=page_start,
-            page_end=page_end,
-            query=q_within,
-            max_chars=clamped_max_chars,
-        )
-        if content.extraction_quality == "scanned_image_only":
-            raise TextUnavailableMetadataOnly(
-                f"Judgment {meta.case_id} PDF is a scanned image without an embedded text layer "
-                f"(chars_per_page={content.chars_per_page}).",
-                kind="judgment",
-                metadata=card.model_dump(mode="json"),
-                hint="Use view='docket' for structured metadata; pre-2010 scanned PDFs have no OCR text.",
+        try:
+            content = await get_pdf_fetcher().fetch_and_read(
+                meta,
+                mode=effective_view,
+                para_start=p_start,
+                para_end=p_end,
+                page_start=page_start,
+                page_end=page_end,
+                query=q_within,
+                max_chars=clamped_max_chars,
             )
+        except PdfFetchError as exc:
+            if effective_view != "overview":
+                raise PdfFetchError(
+                    exc.message,
+                    reason=exc.reason,
+                    hint=exc.hint
+                    or "Use view='docket' or view='overview' for verified case metadata when the upstream S3 PDF is unavailable.",
+                ) from exc
+            warning = (
+                f"Upstream S3 PDF unavailable ({exc.message}); "
+                "returning verified case metadata and docket."
+            )
+            if meta.snippet:
+                paras = [p.strip() for p in meta.snippet.split("\n\n") if p.strip()] or [meta.snippet]
+                raw_excerpts = [
+                    JudgmentExcerpt(para_num=i, text=p)
+                    for i, p in enumerate(paras[:30], start=1)
+                ]
+                total_paras = len(paras)
+            else:
+                summary_parts = [
+                    f"{meta.title} ({meta.court_name}, {meta.decision_date or meta.year or 'N/A'})."
+                ]
+                cites = [c for c in [meta.neutral_citation, *meta.reporter_citations] if c]
+                if cites:
+                    summary_parts.append(f"Citations: {', '.join(cites)}.")
+                if meta.disposal_nature:
+                    summary_parts.append(f"Disposal: {meta.disposal_nature}.")
+                if meta.acts_cited:
+                    summary_parts.append(f"Acts cited: {', '.join(meta.acts_cited)}.")
+                raw_excerpts = [JudgmentExcerpt(para_num=1, text=" ".join(summary_parts))]
+                total_paras = 1
+            total_pages = None
+            has_more = False
+            next_para = None
+            next_page = None
+            extraction_method = "metadata_only"
+            chars_per_page = None
+        else:
+            if content.extraction_quality == "scanned_image_only":
+                raise TextUnavailableMetadataOnly(
+                    f"Judgment {meta.case_id} PDF is a scanned image without an embedded text layer "
+                    f"(chars_per_page={content.chars_per_page}).",
+                    kind="judgment",
+                    metadata=card.model_dump(mode="json"),
+                    hint="Use view='docket' for structured metadata; pre-2010 scanned PDFs have no OCR text.",
+                )
 
-        raw_excerpts = content.excerpts
-        total_paras = content.total_paragraphs
-        total_pages = content.total_pages
-        has_more = content.has_more
-        next_para = content.next_para
-        next_page = content.next_page
-        extraction_method = content.extraction_method
-        chars_per_page = content.chars_per_page
+            raw_excerpts = content.excerpts
+            total_paras = content.total_paragraphs
+            total_pages = content.total_pages
+            has_more = content.has_more
+            next_para = content.next_para
+            next_page = content.next_page
+            extraction_method = content.extraction_method
+            chars_per_page = content.chars_per_page
+            warning = content.warning
     elif meta.snippet:
         # Indexed text / snippet available without S3 PDF
         paras = [p.strip() for p in meta.snippet.split("\n\n") if p.strip()] or [meta.snippet]
@@ -312,6 +362,7 @@ async def get_judgment(
         next_page=next_page,
         extraction_method=extraction_method,
         chars_per_page=chars_per_page,
+        warning=warning,
         provenance=meta.provenance,
     )
 

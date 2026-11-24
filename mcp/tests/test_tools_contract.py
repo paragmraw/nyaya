@@ -22,6 +22,7 @@ from fastmcp import FastMCP
 
 from nyaya import storage
 from nyaya import tools as tools_pkg
+from nyaya.exceptions import PdfFetchError
 from nyaya.models import (
     AmendmentRecord,
     CitationEdgeRecord,
@@ -464,3 +465,70 @@ async def test_corpus_status_returns_v2_counts():
     assert res.service_version == "2.0.0"
     assert res.retrieval_mode == "lexical_metadata_graph"
     assert res.counts.central_acts >= 2
+
+
+async def test_get_judgment_overview_s3_fallback_and_non_overview_hint():
+    backend = _build_rich_memory_backend()
+    jm = backend.judgments["sc:1973:kesavananda"]
+    jm.pdf_s3_bucket = "indian-supreme-court-judgments"
+    jm.pdf_s3_key = "data/pdf/year=1973/english/kesavananda.pdf"
+    storage.set_backend(backend)
+
+    class _FailingPdfFetcher:
+        async def fetch_and_read(self, meta: JudgmentMeta, **kwargs: Any) -> JudgmentContent:
+            raise PdfFetchError("S3 returned HTTP 404", reason="http_error")
+
+        async def aclose(self) -> None:
+            return None
+
+    storage.set_pdf_fetcher(_FailingPdfFetcher())
+    tools = await _tool_map(_fresh_mcp())
+
+    # 1. view="overview" degrades gracefully with snippet + docket + warning
+    overview = await tools["get_judgment"].fn(identifier="AIR 1973 SC 1461", view="overview")
+    assert overview.extraction_method == "metadata_only"
+    assert overview.docket is not None
+    assert overview.warning is not None
+    assert "Upstream S3 PDF unavailable" in overview.warning
+    assert len(overview.excerpts) >= 1
+    assert overview.excerpts[0].text.startswith("<corpus_text ")
+
+    # 2. view="overview" when snippet is empty falls back to structured metadata summary
+    jm.snippet = None
+    overview_no_snip = await tools["get_judgment"].fn(identifier="AIR 1973 SC 1461", view="overview")
+    assert overview_no_snip.extraction_method == "metadata_only"
+    assert overview_no_snip.docket is not None
+    assert len(overview_no_snip.excerpts) == 1
+    assert "Kesavananda" in overview_no_snip.excerpts[0].text
+
+    # 3. Non-overview views re-raise PdfFetchError with actionable hint
+    for bad_view in ("paragraphs", "pages", "search_within"):
+        kwargs: dict[str, Any] = {"identifier": "AIR 1973 SC 1461", "view": bad_view}
+        if bad_view == "search_within":
+            kwargs["within_query"] = "basic structure"
+        err = await tools["get_judgment"].fn(**kwargs)
+        assert err.is_error is True
+        assert err.structured_content["error"]["code"] == "pdf_fetch_error"
+        assert "view='docket' or view='overview'" in err.structured_content["error"]["hint"]
+
+
+async def test_verify_citations_compact_omits_parsed_and_caps_excerpt():
+    backend = _build_rich_memory_backend()
+    long_text = "Whoever commits murder shall be punished with death. " + ("X" * 350)
+    backend.provisions["ipc-1860:302"] = backend.provisions["ipc-1860:302"].model_copy(
+        update={"text": long_text}
+    )
+    storage.set_backend(backend)
+    tools = await _tool_map(_fresh_mcp())
+
+    res = await tools["verify_citations"].fn(
+        text="Reliance on IPC s. 302 and AIR 1973 SC 1461.",
+        verify_quotes=[{"citation": "IPC s. 302", "quote": "Whoever commits murder"}],
+        compact=True,
+    )
+    assert len(res.findings) >= 2
+    for finding in res.findings:
+        assert finding.parsed is None
+        if finding.matched_excerpt:
+            inner = finding.matched_excerpt.split(">", 1)[1].rsplit("</corpus_text>", 1)[0]
+            assert len(inner.strip()) <= 180

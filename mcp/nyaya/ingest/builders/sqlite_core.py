@@ -41,6 +41,31 @@ def _ref_num(ref: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+_HTML_OR_ERR_RE = re.compile(
+    r"^\s*(?:<html\b|<!DOCTYPE\b|\{\s*\"error\"|404\s+Not\s+Found)",
+    re.IGNORECASE,
+)
+
+
+def _is_gate_clean(text: str) -> bool:
+    if not text or not text.strip():
+        return False
+    if _HTML_OR_ERR_RE.search(text):
+        return False
+    printable = sum(1 for ch in text if ch.isprintable() or ch in "\n\r\t")
+    return (printable / len(text)) >= 0.90
+
+
+def _flush_batches(
+    con: sqlite3.Connection,
+    sql: str,
+    rows: list[tuple[Any, ...]],
+    batch_size: int = 5000,
+) -> None:
+    for i in range(0, len(rows), batch_size):
+        con.executemany(sql, rows[i : i + batch_size])
+
+
 @dataclass
 class IngestInputBundle:
     """In-memory or staged input dataset bundle for SQLite, LanceDB, and Parquet builders."""
@@ -880,6 +905,7 @@ def build_sqlite_core(
     invalidations_path: Path | str | None = None,
     courts_path: Path | str | None = None,
     commercial_safe_only: bool = False,
+    include_hc_in_sqlite: bool | None = None,
 ) -> Path:
     """Build staged `nyaya-core.sqlite`, populate all 12 tables + FTS5 indexes,
     run integrity checks + VACUUM + ANALYZE, and emit `.sha256`.
@@ -916,38 +942,46 @@ def build_sqlite_core(
     con = sqlite3.connect(staging_path)
     try:
         con.executescript(SCHEMA_DDL)
+        con.execute("PRAGMA synchronous = OFF")
+        con.execute("PRAGMA temp_store = MEMORY")
+        con.execute("PRAGMA cache_size = -65536")
 
         # 1. Populate sources from lockfile
-        for src in lock.sources:
-            if commercial_safe_only and not src.commercial_safe:
-                continue
-            con.execute(
-                "INSERT OR REPLACE INTO sources VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    src.id,
-                    src.name,
-                    src.uri,
-                    src.license_spdx,
-                    1 if src.commercial_safe else 0,
-                    src.terms_status,
-                    src.release_tag or lock.updated_at,
-                    lock.updated_at,
-                    src.sha256 or _sha256_text(src.uri),
-                    0,
-                    src.attribution,
-                ),
+        source_rows = [
+            (
+                src.id,
+                src.name,
+                src.uri,
+                src.license_spdx,
+                1 if src.commercial_safe else 0,
+                src.terms_status,
+                src.release_tag or lock.updated_at,
+                lock.updated_at,
+                src.sha256 or _sha256_text(src.uri),
+                0,
+                src.attribution,
             )
+            for src in lock.sources
+            if not (commercial_safe_only and not src.commercial_safe)
+        ]
+        _flush_batches(con, "INSERT OR REPLACE INTO sources VALUES (?,?,?,?,?,?,?,?,?,?,?)", source_rows)
 
         # 2. Populate acts & aliases
         act_short_by_id: dict[str, str] = {}
+        seen_short_names: set[str] = set()
+        act_rows: list[tuple[Any, ...]] = []
         for act in bundle.acts:
             if commercial_safe_only and not bool(act.get("commercial_safe", 1)):
                 continue
             act_id = str(act["act_id"])
+            if act_id in act_short_by_id:
+                continue
             short_name = str(act["short_name"])
+            if short_name.lower() in seen_short_names:
+                short_name = f"{short_name[:72]} [{act_id}]"
+            seen_short_names.add(short_name.lower())
             act_short_by_id[act_id] = short_name
-            con.execute(
-                "INSERT OR REPLACE INTO acts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            act_rows.append(
                 (
                     act_id,
                     short_name,
@@ -964,44 +998,54 @@ def build_sqlite_core(
                     str(act.get("source_id") or "vaquill_central_legislation"),
                     1 if act.get("commercial_safe", 1) else 0,
                     str(act.get("as_of") or lock.updated_at),
-                ),
-            )
-
-        for alias_lower, target_act_id in bundle.aliases:
-            if target_act_id in act_short_by_id:
-                con.execute(
-                    "INSERT OR REPLACE INTO act_aliases VALUES (?,?)",
-                    (alias_lower.strip().lower(), target_act_id),
                 )
+            )
+        _flush_batches(con, "INSERT OR REPLACE INTO acts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", act_rows)
+
+        alias_rows = [
+            (alias_lower.strip().lower(), target_act_id)
+            for alias_lower, target_act_id in bundle.aliases
+            if target_act_id in act_short_by_id and alias_lower.strip()
+        ]
+        _flush_batches(con, "INSERT OR REPLACE INTO act_aliases VALUES (?,?)", alias_rows)
 
         # 3. Populate provisions (from bundle + auto-materialized provisions required by concordance/invalidations)
         inserted_provisions: set[str] = set()
+        inserted_act_kind_ref: set[tuple[str, str, str]] = set()
         inval_status_by_doc: dict[str, str] = {
             str(inv["target_doc_id"]): str(inv["effect"]) for inv in invalidations_list
         }
+        prov_rows: list[tuple[Any, ...]] = []
 
-        def _insert_provision(p: dict[str, Any]) -> None:
+        def _queue_provision(p: dict[str, Any]) -> None:
             doc_id = str(p["doc_id"])
             if doc_id in inserted_provisions:
                 return
-            norm = normalize_legal_record(str(p.get("text") or ""), doc_id=doc_id, metadata=p)
-            if norm.blocked_by_publication_ban:
-                return
             act_id = str(p["act_id"])
-            act_short = str(p.get("act_short") or act_short_by_id.get(act_id, act_id))
+            if act_id not in act_short_by_id:
+                return
+            kind = str(p.get("kind") or "section")
             ref = str(p["ref"])
             ref_norm = str(p.get("ref_norm") or ref).upper()
+            akr = (act_id, kind, ref_norm)
+            if akr in inserted_act_kind_ref:
+                return
+
+            norm = normalize_legal_record(str(p.get("text") or ""), doc_id=doc_id, metadata=p)
+            if norm.blocked_by_publication_ban or not _is_gate_clean(norm.cleaned_text):
+                return
+
+            act_short = str(p.get("act_short") or act_short_by_id.get(act_id, act_id))
             default_status = "repealed" if act_id in ("ipc-1860", "crpc-1973", "iea-1872") else "in_force"
             status = inval_status_by_doc.get(doc_id) or str(p.get("status") or default_status)
             raw_ref_num = p.get("ref_num")
             ref_num_val = int(raw_ref_num) if raw_ref_num is not None else _ref_num(ref)
-            con.execute(
-                "INSERT OR REPLACE INTO provisions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            prov_rows.append(
                 (
                     doc_id,
                     act_id,
                     act_short,
-                    str(p.get("kind") or "section"),
+                    kind,
                     ref,
                     ref_norm,
                     ref_num_val,
@@ -1021,14 +1065,15 @@ def build_sqlite_core(
                     ),
                     norm.text_sha256,
                     1 if p.get("commercial_safe", True) else 0,
-                ),
+                )
             )
             inserted_provisions.add(doc_id)
+            inserted_act_kind_ref.add(akr)
 
         for p in bundle.provisions:
             if commercial_safe_only and not bool(p.get("commercial_safe", True)):
                 continue
-            _insert_provision(p)
+            _queue_provision(p)
 
         # Ensure every provision referenced in concordance_list exists
         for m in concordance_list:
@@ -1036,7 +1081,7 @@ def build_sqlite_core(
             old_ref = str(m["old_ref"])
             old_doc_id = f"{old_act_id}:{old_ref}"
             if old_doc_id not in inserted_provisions:
-                _insert_provision(
+                _queue_provision(
                     {
                         "doc_id": old_doc_id,
                         "act_id": old_act_id,
@@ -1059,7 +1104,7 @@ def build_sqlite_core(
                 new_act_id = str(m["new_act_id"])
                 new_doc_id = f"{new_act_id}:{new_ref}"
                 if new_doc_id not in inserted_provisions:
-                    _insert_provision(
+                    _queue_provision(
                         {
                             "doc_id": new_doc_id,
                             "act_id": new_act_id,
@@ -1079,7 +1124,7 @@ def build_sqlite_core(
                 base_ref = str(m.get("new_base_ref") or new_ref)
                 base_doc_id = f"{new_act_id}:{base_ref}"
                 if base_ref != new_ref and base_doc_id not in inserted_provisions:
-                    _insert_provision(
+                    _queue_provision(
                         {
                             "doc_id": base_doc_id,
                             "act_id": new_act_id,
@@ -1103,7 +1148,7 @@ def build_sqlite_core(
                 t_act_id = str(inv["act_id"])
                 t_ref = str(inv["ref"])
                 kind = "amendment" if "amend" in t_doc_id else "section"
-                _insert_provision(
+                _queue_provision(
                     {
                         "doc_id": t_doc_id,
                         "act_id": t_act_id,
@@ -1119,14 +1164,20 @@ def build_sqlite_core(
                     }
                 )
 
+        _flush_batches(
+            con,
+            "INSERT OR REPLACE INTO provisions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            prov_rows,
+        )
+
         # 4. Populate all 106 Constitutional Amendments from amendments_1_106.yaml
+        amend_rows = []
         for amend in amendments:
             num = int(amend["number"])
             arts = amend.get("articles_affected") or []
             arts_csv = ",".join(str(a) for a in arts)
             primary_ref = str(arts[0]).upper() if len(arts) == 1 else None
-            con.execute(
-                "INSERT OR REPLACE INTO provision_amendments VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            amend_rows.append(
                 (
                     f"const-amend-{num}",
                     "constitution",
@@ -1139,10 +1190,16 @@ def build_sqlite_core(
                     str(amend["summary"]),
                     arts_csv,
                     "legislative_constitution",
-                ),
+                )
             )
+        _flush_batches(
+            con,
+            "INSERT OR REPLACE INTO provision_amendments VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            amend_rows,
+        )
 
         # 5. Populate Criminal Concordance from criminal_concordance.yaml
+        conc_rows = []
         for idx, m in enumerate(concordance_list, start=1):
             old_doc_id = f"{m['old_act_id']}:{m['old_ref']}"
             new_ref = str(m.get("new_ref") or "NONE")
@@ -1151,8 +1208,11 @@ def build_sqlite_core(
                 if new_ref == "NONE" or m.get("mapping_type") == "omitted"
                 else f"{m['new_act_id']}:{new_ref}"
             )
-            con.execute(
-                "INSERT OR REPLACE INTO concordance VALUES (?,?,?,?,?,?,?,?,?,?)",
+            if old_doc_id not in inserted_provisions:
+                continue
+            if conc_new_doc_id is not None and conc_new_doc_id not in inserted_provisions:
+                conc_new_doc_id = None
+            conc_rows.append(
                 (
                     idx,
                     old_doc_id,
@@ -1164,46 +1224,61 @@ def build_sqlite_core(
                     m.get("savings_note"),
                     str(m.get("verified_by") or "bprd_official_table_v1"),
                     "prs_2026_delta",
-                ),
+                )
             )
+        _flush_batches(con, "INSERT OR REPLACE INTO concordance VALUES (?,?,?,?,?,?,?,?,?,?)", conc_rows)
 
         # 6. Populate Judicial Invalidations from judicial_invalidations.yaml
-        for idx, inv in enumerate(invalidations_list, start=1):
-            con.execute(
-                "INSERT OR REPLACE INTO judicial_invalidations VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    idx,
-                    str(inv["target_doc_id"]),
-                    str(inv["effect"]),
-                    str(inv["case_id"]),
-                    str(inv["case_name"]),
-                    str(inv["citation"]),
-                    str(inv["decision_date"]),
-                    int(inv["bench_strength"]),
-                    str(inv["holding_summary"]),
-                    "dattam_sc_judgments",
-                ),
+        inval_rows = [
+            (
+                idx,
+                str(inv["target_doc_id"]),
+                str(inv["effect"]),
+                str(inv["case_id"]),
+                str(inv["case_name"]),
+                str(inv["citation"]),
+                str(inv["decision_date"]),
+                int(inv["bench_strength"]),
+                str(inv["holding_summary"]),
+                "dattam_sc_judgments",
             )
+            for idx, inv in enumerate(invalidations_list, start=1)
+            if str(inv["target_doc_id"]) in inserted_provisions
+        ]
+        _flush_batches(
+            con,
+            "INSERT OR REPLACE INTO judicial_invalidations VALUES (?,?,?,?,?,?,?,?,?,?)",
+            inval_rows,
+        )
 
-        # 7. Populate judgments_meta (SC + merged HC + optional ILDC)
+        # 7. Populate judgments_meta (SC + optional HC + optional ILDC)
         merged_hc = dedupe_and_merge_hc_rows(bundle.hc_web_rows, bundle.hc_mobile_rows)
+        use_hc = include_hc_in_sqlite if include_hc_in_sqlite is not None else (len(merged_hc) <= 10_000)
         all_judgments: list[tuple[str, dict[str, Any]]] = [
             *[("sc", j) for j in bundle.sc_judgments],
-            *[("hc", j) for j in merged_hc],
+            *([("hc", j) for j in merged_hc] if use_hc else []),
             *[("sc", j) for j in bundle.ildc_rows],
         ]
+        jmeta_rows: list[tuple[Any, ...]] = []
         for tier_code, j in all_judgments:
             comm_safe = bool(j.get("commercial_safe", True))
             if commercial_safe_only and not comm_safe:
                 continue
             case_id = str(j["case_id"])
-            norm = normalize_legal_record(str(j.get("text") or j.get("title") or ""), doc_id=case_id, metadata=j)
-            if norm.blocked_by_publication_ban:
+            title_norm = normalize_legal_record(str(j.get("title") or ""), doc_id=case_id, metadata=j)
+            if title_norm.blocked_by_publication_ban or not _is_gate_clean(title_norm.cleaned_text):
                 continue
+            raw_text = str(j.get("text") or "").strip()
+            if raw_text:
+                text_norm = normalize_legal_record(raw_text, doc_id=case_id, metadata=j)
+                if text_norm.blocked_by_publication_ban:
+                    continue
+                content_sha = text_norm.text_sha256
+            else:
+                content_sha = title_norm.text_sha256
+
             acts_cited = j.get("acts_cited") or ([j["act"]] if j.get("act") else [])
-            con.execute(
-                "INSERT OR REPLACE INTO judgments_meta VALUES ("
-                "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            jmeta_rows.append(
                 (
                     case_id,
                     tier_code,
@@ -1215,7 +1290,7 @@ def build_sqlite_core(
                     j.get("air_citation"),
                     j.get("scc_citation"),
                     j.get("scr_citation"),
-                    str(j["title"]),
+                    title_norm.cleaned_text,
                     j.get("petitioner"),
                     j.get("respondent"),
                     j.get("decision_date"),
@@ -1230,13 +1305,19 @@ def build_sqlite_core(
                     j.get("pdf_s3_bucket"),
                     j.get("pdf_s3_key"),
                     str(j.get("source_url") or "https://indian-supreme-court-judgments.s3.ap-south-1.amazonaws.com"),
-                    norm.text_sha256,
-                    1 if j.get("text") else 0,
+                    content_sha,
+                    1 if raw_text else 0,
                     int(j.get("cited_by_count") or 0),
                     str(j.get("source_id") or ("dattam_sc_judgments" if tier_code == "sc" else "dattam_hc_judgments")),
                     1 if comm_safe else 0,
-                ),
+                )
             )
+        _flush_batches(
+            con,
+            "INSERT OR REPLACE INTO judgments_meta VALUES ("
+            "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            jmeta_rows,
+        )
 
         # 8. Populate citation_edges (curated + automated extraction)
         edge_rows = list(bundle.citation_edges)
@@ -1265,26 +1346,34 @@ def build_sqlite_core(
                 )
                 edge_rows.extend(extracted)
 
-        for e in edge_rows:
-            con.execute(
-                "INSERT OR IGNORE INTO citation_edges "
-                "(from_id, from_kind, to_id, to_kind, relation, para_ref, quoting_excerpt, from_year, from_bench_str, precedent_status) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    str(e["from_id"]),
-                    str(e["from_kind"]),
-                    str(e["to_id"]),
-                    str(e["to_kind"]),
-                    str(e["relation"]),
-                    e.get("para_ref"),
-                    e.get("quoting_excerpt"),
-                    e.get("from_year"),
-                    e.get("from_bench_str"),
-                    str(e.get("precedent_status") or "unverified_automated"),
-                ),
+        edge_tuples = [
+            (
+                str(e["from_id"]).strip(),
+                str(e["from_kind"]),
+                str(e["to_id"]).strip(),
+                str(e["to_kind"]),
+                str(e["relation"]),
+                e.get("para_ref"),
+                e.get("quoting_excerpt"),
+                e.get("from_year"),
+                e.get("from_bench_str"),
+                str(e.get("precedent_status") or "unverified_automated"),
             )
+            for e in edge_rows
+            if str(e.get("from_id") or "").strip()
+            and str(e.get("to_id") or "").strip()
+            and str(e.get("from_id")).strip() != str(e.get("to_id")).strip()
+        ]
+        _flush_batches(
+            con,
+            "INSERT OR IGNORE INTO citation_edges "
+            "(from_id, from_kind, to_id, to_kind, relation, para_ref, quoting_excerpt, from_year, from_bench_str, precedent_status) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            edge_tuples,
+        )
 
         # 9. Populate courts from courts_directory.yaml (both canonical court_code and dattam_code if distinct)
+        court_tuples: list[tuple[Any, ...]] = []
         for c in courts_list:
             c_code = str(c["court_code"])
             c_name = str(c["court_name"])
@@ -1295,16 +1384,13 @@ def build_sqlite_core(
             seat_city = c.get("seat_city")
             juris = c.get("hc_jurisdiction") or []
             juris_csv = ",".join(str(x) for x in juris) if isinstance(juris, list) else str(juris)
-            con.execute(
-                "INSERT OR REPLACE INTO courts VALUES (?,?,?,?,?,?,?,?)",
-                (c_code, c_name, c_tier, b_code, b_name, state_ut, seat_city, juris_csv),
-            )
+            court_tuples.append((c_code, c_name, c_tier, b_code, b_name, state_ut, seat_city, juris_csv))
             dattam_code = c.get("dattam_code")
             if dattam_code and str(dattam_code) != c_code:
-                con.execute(
-                    "INSERT OR REPLACE INTO courts VALUES (?,?,?,?,?,?,?,?)",
-                    (str(dattam_code), c_name, c_tier, str(dattam_code), b_name, state_ut, seat_city, juris_csv),
+                court_tuples.append(
+                    (str(dattam_code), c_name, c_tier, str(dattam_code), b_name, state_ut, seat_city, juris_csv)
                 )
+        _flush_batches(con, "INSERT OR REPLACE INTO courts VALUES (?,?,?,?,?,?,?,?)", court_tuples)
 
         # 10. Rebuild FTS5 virtual tables and verify integrity
         con.execute("INSERT INTO provisions_fts(provisions_fts) VALUES('rebuild')")
@@ -1318,6 +1404,7 @@ def build_sqlite_core(
         if not integrity or str(integrity[0]).lower() != "ok":
             raise RuntimeError(f"SQLite integrity_check failed: {integrity}")
 
+        con.execute("PRAGMA synchronous = NORMAL")
         con.execute("PRAGMA journal_mode=DELETE")
         con.execute("VACUUM")
         con.execute("ANALYZE")

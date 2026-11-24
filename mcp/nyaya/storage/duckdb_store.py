@@ -38,6 +38,13 @@ _ANALYTICS_DATASET_MAP: dict[str, str] = {
     "regulator": "regulator",
 }
 
+_MANIFEST_COUNT_MAP: dict[str, str] = {
+    "supreme_court": "sc_judgments",
+    "high_court": "hc_judgments",
+    "tribunal": "tribunal_orders",
+    "district_court": "district_court_records",
+}
+
 _ALLOWED_GROUP_BY: dict[str, str] = {
     "court": "court_name",
     "court_tier": "court_code",
@@ -529,6 +536,34 @@ class DuckDBStore:
                 )
             ],
         )
+
+    def manifest_counts(self, *, commercial_safe_only: bool | None = None) -> dict[str, int]:
+        """Return manifest row counts keyed by ``CorpusCounts`` judgment/order fields."""
+        if self.manifest is None:
+            return {}
+        cs_only = self._effective_cs(commercial_safe_only)
+        counts: dict[str, int] = {}
+        for ds_key, count_field in _MANIFEST_COUNT_MAP.items():
+            ds = self.manifest.datasets.get(ds_key)
+            if ds is None:
+                continue
+            if cs_only and not ds.commercial_safe:
+                continue
+            part_rows = sum(int(p.rows or 0) for p in ds.partitions)
+            counts[count_field] = max(int(ds.row_count or 0), part_rows)
+        return counts
+
+    def health(self) -> dict[str, Any]:
+        """Return non-throwing health status for the DuckDB Parquet cold tier."""
+        if self.manifest is None:
+            has_remote = bool(
+                self.settings and (self.settings.has_bucket_config or self.settings.manifest_url)
+            )
+            return {"status": "unavailable" if has_remote else "unconfigured"}
+        datasets = sorted(self.manifest.datasets.keys())
+        if not datasets:
+            return {"status": "degraded", "datasets": []}
+        return {"status": "ok", "datasets": datasets}
 
     def close(self) -> None:
         with self._lock:
