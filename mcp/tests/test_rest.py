@@ -8,9 +8,12 @@ import pytest
 from starlette.testclient import TestClient
 
 from nyaya import storage
+from nyaya.config import get_settings
 from nyaya.exceptions import StorageUnavailable
 from nyaya.models import AnalyticsBucket, AnalyticsResult, AnalyticsTier, SourceProvenance
 from nyaya.server import create_http_app
+from nyaya.storage.duckdb_store import DuckDBStore
+from nyaya.storage.manifest import CorpusManifest, DatasetManifest, PartitionEntry
 from tests.test_tools_contract import EXPECTED_12_TOOLS, _build_rich_memory_backend
 
 pytestmark = pytest.mark.integration
@@ -181,3 +184,56 @@ def test_tools_endpoint_lists_12_tools_8_resources_4_prompts():
         assert names == EXPECTED_12_TOOLS
         assert all(item["description"] for item in body["items"])
         assert all(isinstance(item["open_world"], bool) for item in body["items"])
+
+
+def test_corpus_status_and_health_summary_enrich_three_tiers_and_manifest_counts(tmp_path, monkeypatch):
+    """GET /api/corpus-status and /api/health-summary expose 3-tier status + rolled-up HC/Tribunal counts."""
+    monkeypatch.setenv("NYAYA_DATA_DIR", str(tmp_path / "empty_data"))
+    monkeypatch.setenv("NYAYA_CACHE_DIR", str(tmp_path / "empty_cache"))
+    monkeypatch.setenv("NYAYA_OFFLINE_ONLY", "1")
+    monkeypatch.delenv("NYAYA_BUCKET_ENDPOINT", raising=False)
+    monkeypatch.delenv("NYAYA_BUCKET_NAME", raising=False)
+    get_settings.cache_clear()
+    storage.close_all()
+
+    manifest = CorpusManifest(
+        datasets={
+            "high_court": DatasetManifest(
+                license_spdx="CC-BY-4.0",
+                commercial_safe=True,
+                row_count=11162843,
+                partitions=[PartitionEntry(s3_key="parquet/high_court/hc.parquet", rows=11162843)],
+            ),
+            "tribunal": DatasetManifest(
+                license_spdx="CC-BY-4.0",
+                commercial_safe=True,
+                row_count=813168,
+                partitions=[PartitionEntry(s3_key="parquet/tribunal/tr.parquet", rows=813168)],
+            ),
+        }
+    )
+
+    app = _setup_test_app()
+    try:
+        with TestClient(app) as client:
+            storage.set_analytics(DuckDBStore(manifest=manifest, offline_only=True))
+            r_cs = client.get("/api/corpus-status")
+            assert r_cs.status_code == 200
+            cs_body = r_cs.json()
+            assert cs_body["tiers"]["sqlite_core"] == "ok"
+            assert "lance_fts" in cs_body["tiers"]
+            assert cs_body["tiers"]["duckdb_parquet"] == "ok"
+            assert cs_body["counts"]["hc_judgments"] == 11162843
+            assert cs_body["counts"]["tribunal_orders"] == 813168
+
+            r_hs = client.get("/api/health-summary")
+            assert r_hs.status_code == 200
+            hs_body = r_hs.json()
+            assert hs_body["status"] == "healthy"
+            assert hs_body["backends"]["duckdb_parquet"] == "ok"
+            assert "lance_fts" in hs_body["backends"]
+            assert hs_body["counts"]["hc_judgments"] == 11162843
+            assert hs_body["counts"]["tribunal_orders"] == 813168
+    finally:
+        storage.close_all()
+        get_settings.cache_clear()

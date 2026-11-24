@@ -7,7 +7,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { api, formatCompactCount } from "../src/lib/api";
+import { api, formatCompactCount, type CorpusSourceStatus } from "../src/lib/api";
+import { indexSourcesByName, resolveSourceMetadata } from "../src/components/CorpusTable";
 import { CURATED, MCP_TOOLS_FALLBACK, MCP_RESOURCES, MCP_PROMPTS } from "../src/lib/data";
 import { API_VERSION } from "../src/lib/site";
 import { filterCorpusRows } from "../src/lib/url-query";
@@ -94,4 +95,60 @@ test("formatCompactCount formats large Indian corpus counts legibly", () => {
   assert.equal(formatCompactCount(81_000_000), "81M+");
   assert.equal(formatCompactCount(17_770_000), "17.77M+");
   assert.equal(formatCompactCount(35_000), "35k+");
+});
+
+test("backend-shaped SourceStatus items without top-level name normalize safely", () => {
+  const scRow = CURATED.find((r) => r.short_name === "SC");
+  const ddlRow = CURATED.find((r) => r.short_name === "DDL");
+  assert.ok(scRow && ddlRow);
+
+  const backendSources: CorpusSourceStatus[] = [
+    {
+      source_id: "sc",
+      record_count: 35_000,
+      year_coverage: "1950-2026",
+      text_availability: "indexed_bm25",
+      provenance: {
+        source_id: "sc",
+        source_name: scRow.name,
+        source_url: "https://aws.amazon.com/opendata/",
+        license_spdx: "CC-BY-4.0",
+        commercial_safe: true,
+        terms_status: "verified",
+        as_of: "2026-11-23",
+      },
+    },
+    {
+      source_id: "ddl_district_courts",
+      record_count: 81_000_000,
+      text_availability: "metadata_only",
+      provenance: {
+        source_id: "ddl_district_courts",
+        source_name: ddlRow.name,
+        license_spdx: "CC-BY-NC-SA-4.0",
+        commercial_safe: false,
+        as_of: "2018-12-31",
+      },
+    },
+    {} as CorpusSourceStatus,
+  ];
+
+  const indexed = indexSourcesByName(backendSources);
+  const resolvedScSrc = indexed.get(scRow.short_name.toLowerCase());
+  const resolvedDdlSrc = indexed.get(ddlRow.name.toLowerCase());
+  assert.equal(resolvedScSrc?.source_id, "sc");
+  assert.equal(resolvedDdlSrc?.source_id, "ddl_district_courts");
+
+  const scMeta = resolveSourceMetadata(resolvedScSrc, scRow, undefined, "2026-11-24");
+  assert.equal(scMeta.license_spdx, "CC-BY-4.0");
+  assert.equal(scMeta.commercial_safe, true);
+  assert.equal(scMeta.date, "2026-11-23");
+  assert.equal(scMeta.coverage, scRow.coverage);
+
+  const ddlMeta = resolveSourceMetadata(resolvedDdlSrc, ddlRow, { short_name: "DDL", as_of: "2019-01-01" });
+  assert.equal(ddlMeta.license_spdx, "CC-BY-NC-SA-4.0");
+  assert.equal(ddlMeta.commercial_safe, false);
+  assert.equal(ddlMeta.date, "2019-01-01");
+
+  assert.equal(indexSourcesByName(undefined).size, 0);
 });

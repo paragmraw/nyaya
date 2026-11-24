@@ -25,7 +25,7 @@ from ..storage.duckdb_store import DuckDBStore
 from ..storage.lance_store import LanceStore
 from ..storage.memory_backend import InMemoryCorpusBackend
 from ..storage.protocols import CorpusBackend
-from ..storage.sqlite_store import SqliteStore
+from ..storage.sqlite_store import SqliteStore, _extract_fts_tokens
 from .query_analyzer import analyze_query
 from .ranking import (
     apply_definition_promotion,
@@ -244,6 +244,24 @@ class LexicalRetrievalEngine:
                 lance_hits = [_lance_row_to_statute_hit(r) for r in l_rows]
             except StorageUnavailable:
                 degraded.append("lance_fts")
+
+        # Stopword-aware multi-token overlap guard to suppress LanceDB OR-noise on out-of-corpus queries
+        if lance_hits and q.query_mode != "exact_phrase" and not exact_hits and not q.act:
+            _, raw_content_tokens = _extract_fts_tokens(q.query)
+            content_tokens = list(dict.fromkeys(t.lower() for t in raw_content_tokens))
+            if len(content_tokens) >= 2:
+                min_matches = min(2, len(content_tokens))
+                needles = [tok[:5] if len(tok) >= 6 else tok for tok in content_tokens]
+                lance_hits = [
+                    lh
+                    for lh in lance_hits
+                    if sum(
+                        1
+                        for needle in needles
+                        if needle in f"{lh.act} {lh.ref} {lh.title or ''} {lh.snippet}".lower()
+                    )
+                    >= min_matches
+                ]
 
         # Promote LanceDB state/regulator hits whose act/alias + ref match the query or parsed citations
         exact_doc_ids = {h.doc_id for h in exact_hits}

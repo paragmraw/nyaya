@@ -532,3 +532,44 @@ async def test_verify_citations_compact_omits_parsed_and_caps_excerpt():
         if finding.matched_excerpt:
             inner = finding.matched_excerpt.split(">", 1)[1].rsplit("</corpus_text>", 1)[0]
             assert len(inner.strip()) <= 180
+
+
+async def test_cross_reference_merges_concordance_without_duplicate_edges():
+    """cross_reference surfaces IPC 302 <-> BNS 103 from concordance even when citation_edges is empty, and dedups."""
+    backend = _build_rich_memory_backend()
+    # Remove the citation_edges entry so only backend.concordance holds IPC 302 -> BNS 103
+    backend.edges.clear()
+    storage.set_backend(backend)
+    tools = await _tool_map(_fresh_mcp())
+
+    res_from = await tools["cross_reference"].fn(act="IPC", ref="302", direction="from")
+    assert res_from.total == 1
+    assert res_from.returned == 1
+    assert res_from.links[0].from_ref.act == "IPC"
+    assert res_from.links[0].from_ref.ref == "302"
+    assert res_from.links[0].to_ref.act == "BNS"
+    assert res_from.links[0].to_ref.ref == "103"
+    assert res_from.links[0].relation_kind == "replaced_by"
+    assert res_from.links[0].context_note is not None
+    assert res_from.links[0].context_note.startswith("<corpus_text ")
+    assert "Restructured into sub-section (1)" in res_from.links[0].context_note
+    assert "BNSS s.531" in res_from.links[0].context_note
+
+    res_to = await tools["cross_reference"].fn(act="BNS", ref="103", direction="to")
+    assert res_to.total == 1
+    assert res_to.links[0].from_ref.act == "IPC"
+    assert res_to.links[0].to_ref.act == "BNS"
+    assert res_to.links[0].relation_kind == "replaced_by"
+
+    res_corr = await tools["cross_reference"].fn(
+        act="IPC", ref="302", direction="both", relation_kind="corresponds_to"
+    )
+    assert res_corr.total == 1
+    assert res_corr.links[0].relation_kind == "corresponds_to"
+
+    # Re-add identical edge and verify deduplication keeps total == 1
+    backend_with_edge = _build_rich_memory_backend()
+    storage.set_backend(backend_with_edge)
+    res_dedup = await tools["cross_reference"].fn(act="IPC", ref="302", direction="both")
+    assert res_dedup.total == 1
+    assert res_dedup.returned == 1

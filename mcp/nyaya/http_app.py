@@ -122,9 +122,46 @@ def create_http_app(
                 log.info("nyaya_chat package not installed; chat graph not pre-warmed")
             except Exception:
                 log.warning("chat graph pre-warm failed (will retry on first request)", exc_info=True)
+
+        async def _warmup_storage() -> None:
+            def _warm() -> None:
+                settings = _config.get_settings()
+                analytics = _storage.get_analytics()
+                if (
+                    settings.has_bucket_config
+                    and not settings.offline_only
+                    and hasattr(analytics, "_connect")
+                ):
+                    lock = getattr(analytics, "_lock", None)
+                    if lock is not None:
+                        with lock:
+                            analytics._connect(require_httpfs=True)
+                    else:
+                        analytics._connect(require_httpfs=True)
+                _storage.get_retrieval()
+
+            try:
+                await asyncio.to_thread(_warm)
+                log.info("storage cold-tier warm-up completed")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.warning("storage cold-tier warm-up failed (will retry on first request)", exc_info=True)
+
+        warmup_task = asyncio.create_task(_warmup_storage())
         try:
             yield {}
         finally:
+            if not warmup_task.done():
+                warmup_task.cancel()
+                try:
+                    await warmup_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    pass
+            elif not warmup_task.cancelled():
+                warmup_task.exception()
             await _storage.aclose_all()
 
     mcp_instance = mcp or create_mcp(backend=backend, lifespan=_http_lifespan)

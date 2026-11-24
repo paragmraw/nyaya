@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { CURATED } from "@/lib";
-import type { CorpusCategoryFilter, CorpusSourceStatus } from "@/lib/types";
+import type { CorpusCategoryFilter, CorpusSourceStatus, CuratedRow } from "@/lib/types";
 import {
   filterCorpusRows,
   getUrlQuery,
@@ -55,6 +55,52 @@ const CATEGORY_LABELS: Record<string, string> = {
   tribunals: "Tribunals",
 };
 
+export type ResolvedSourceMetadata = {
+  coverage: string;
+  license_spdx: string;
+  commercial_safe: boolean;
+  date: string;
+};
+
+/** Index corpus sources by all known name/id aliases without assuming top-level name is set. */
+export function indexSourcesByName(
+  sources?: readonly CorpusSourceStatus[] | null,
+): Map<string, CorpusSourceStatus> {
+  const m = new Map<string, CorpusSourceStatus>();
+  for (const s of sources ?? []) {
+    if (!s) continue;
+    const keys = [s.short_name, s.name, s.provenance?.source_name, s.source_id];
+    for (const key of keys) {
+      if (typeof key === "string" && key.length > 0) {
+        m.set(key.toLowerCase(), s);
+      }
+    }
+  }
+  return m;
+}
+
+/** Resolve display metadata for a curated row from live source/act entries and curated fallbacks. */
+export function resolveSourceMetadata(
+  src: CorpusSourceStatus | undefined,
+  curated: CuratedRow,
+  act?: ActLike,
+  snapshotDate?: string | null,
+): ResolvedSourceMetadata {
+  const date =
+    (act?.as_of ??
+      src?.as_of ??
+      src?.provenance?.as_of ??
+      curated.fallback_date ??
+      (curated.status === "live" ? snapshotDate : "")) ||
+    "N/A";
+  return {
+    coverage: src?.coverage ?? curated.coverage,
+    license_spdx: src?.license_spdx ?? src?.provenance?.license_spdx ?? curated.license_spdx,
+    commercial_safe: src?.commercial_safe ?? src?.provenance?.commercial_safe ?? curated.commercial_safe,
+    date,
+  };
+}
+
 // highlightAct: short_name (case-insensitive) of a row to highlight and scroll
 // into view — driven by citation deep-links (/corpus/?act=IPC&ref=s.302).
 export default function CorpusTable({
@@ -80,27 +126,20 @@ export default function CorpusTable({
   const actsByShort = useMemo(() => {
     const m = new Map<string, ActLike>();
     (acts ?? []).forEach((a) => {
-      if (a.short_name) m.set(a.short_name.toLowerCase(), a);
+      if (a?.short_name) m.set(String(a.short_name).toLowerCase(), a);
     });
     return m;
   }, [acts]);
 
-  const sourcesByName = useMemo(() => {
-    const m = new Map<string, CorpusSourceStatus>();
-    (sources ?? []).forEach((s) => {
-      if (s.short_name) m.set(s.short_name.toLowerCase(), s);
-      m.set(s.name.toLowerCase(), s);
-    });
-    return m;
-  }, [sources]);
+  const sourcesByName = useMemo(() => indexSourcesByName(sources), [sources]);
 
   const rows: Row[] = useMemo(() => {
     return CURATED.map((c, i) => {
       const act = c.short_name ? actsByShort.get(c.short_name.toLowerCase()) : undefined;
       const src =
         (c.short_name ? sourcesByName.get(c.short_name.toLowerCase()) : undefined) ??
-        sourcesByName.get(c.name.toLowerCase());
-      const date = (act?.as_of ?? src?.as_of ?? c.fallback_date ?? (c.status === "live" ? snapshotDate : "")) || "N/A";
+        (c.name ? sourcesByName.get(c.name.toLowerCase()) : undefined);
+      const resolved = resolveSourceMetadata(src, c, act, snapshotDate);
       return {
         key: `${i}-${c.name}`,
         short_name: c.short_name ?? "",
@@ -108,11 +147,11 @@ export default function CorpusTable({
         type: c.type,
         category: c.category,
         tier: c.tier,
-        coverage: src?.coverage ?? c.coverage,
-        license_spdx: src?.license_spdx ?? c.license_spdx,
-        commercial_safe: src?.commercial_safe ?? c.commercial_safe,
+        coverage: resolved.coverage,
+        license_spdx: resolved.license_spdx,
+        commercial_safe: resolved.commercial_safe,
         source: c.source,
-        date,
+        date: resolved.date,
         status: c.status,
       };
     });
@@ -128,8 +167,8 @@ export default function CorpusTable({
     if (sortCol === -1) return filtered;
     const copy = [...filtered];
     copy.sort((a, b) => {
-      const av = [a.name, a.category, a.coverage, a.license_spdx, a.date, a.status][sortCol]?.toLowerCase() ?? "";
-      const bv = [b.name, b.category, b.coverage, b.license_spdx, b.date, b.status][sortCol]?.toLowerCase() ?? "";
+      const av = String([a.name, a.category, a.coverage, a.license_spdx, a.date, a.status][sortCol] ?? "").toLowerCase();
+      const bv = String([b.name, b.category, b.coverage, b.license_spdx, b.date, b.status][sortCol] ?? "").toLowerCase();
       if (av < bv) return sortDir === "asc" ? -1 : 1;
       if (av > bv) return sortDir === "asc" ? 1 : -1;
       return 0;

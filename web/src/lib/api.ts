@@ -34,14 +34,26 @@ export type CorpusLicensing = {
 export type CorpusSourceStatus = {
   source_id?: string;
   short_name?: string;
-  name: string;
+  name?: string;
   category?: string;
   coverage?: string;
   records?: number;
-  license_spdx: string;
-  commercial_safe: boolean;
+  record_count?: number;
+  year_coverage?: string | null;
+  text_availability?: string;
+  license_spdx?: string;
+  commercial_safe?: boolean;
   terms_status?: string;
   as_of?: string | null;
+  provenance?: {
+    source_id?: string;
+    source_name?: string;
+    source_url?: string;
+    license_spdx?: string;
+    commercial_safe?: boolean;
+    terms_status?: string;
+    as_of?: string | null;
+  };
 };
 
 export type CorpusStatusResponse = {

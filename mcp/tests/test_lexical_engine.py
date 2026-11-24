@@ -216,3 +216,53 @@ def test_lance_state_and_regulator_exact_match_ranks_first(
         assert empty_resp.total == 0
     finally:
         sqlite.close()
+
+
+def test_lance_multitoken_guard_rejects_single_token_noise_keeps_real_queries(
+    corpus_paths: dict[str, Path],
+    tmp_path: Path,
+) -> None:
+    """Out-of-corpus queries that OR-match only 1 token in LanceDB are filtered out, while real queries remain."""
+    settings = _make_settings(corpus_paths["root"], tmp_path / "cache")
+    sqlite = SqliteStore(corpus_paths["sqlite"])
+
+    class _NoisyLanceStore:
+        def search_state_regulators(self, query: str, **_kwargs):
+            # Simulate LanceDB OR-matching a single token ("treaty") for an out-of-corpus query
+            if "martian" in query.lower():
+                return [
+                    {
+                        "doc_id": "REG_IRDAI_treaty_noise",
+                        "short_name": "IRDAI-Reinsurance",
+                        "jurisdiction": "Central",
+                        "kind": "regulation",
+                        "ref": "5",
+                        "title": "Treaty reinsurance placements",
+                        "status": "in_force",
+                        "text": "Every insurer shall file its treaty reinsurance programme annually.",
+                        "_score": 12.5,
+                    }
+                ]
+            return []
+
+    noisy_engine = build_retrieval_engine(settings, sqlite, lance=_NoisyLanceStore())  # type: ignore[arg-type]
+    real_lance = LanceStore(local_dir=corpus_paths["lancedb"], offline_only=True)
+    real_engine = build_retrieval_engine(settings, sqlite, lance=real_lance)
+    try:
+        noise_resp = noisy_engine.search_statutes(
+            StatuteSearchQuery(query="martian space treaty quantum", limit=10)
+        )
+        assert noise_resp.total == 0
+        assert noise_resp.results == []
+
+        sebi_resp = real_engine.search_statutes(
+            StatuteSearchQuery(query="SEBI LODR Regulation 30", limit=10)
+        )
+        assert any(h.act == "SEBI-LODR" and h.ref == "30" for h in sebi_resp.results)
+
+        mofa_resp = real_engine.search_statutes(
+            StatuteSearchQuery(query="Maharashtra Ownership Flats promoter agreement for sale", limit=10)
+        )
+        assert any(h.act == "MH-MOFA" for h in mofa_resp.results)
+    finally:
+        sqlite.close()

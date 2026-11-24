@@ -113,7 +113,7 @@ class DuckDBStore:
         temp_dir: Path | None = None,
         offline_only: bool = False,
         default_commercial_safe_only: bool = False,
-        query_timeout_s: float = 5.0,
+        query_timeout_s: float = 10.0,
     ) -> None:
         self.manifest = manifest
         self.settings = settings
@@ -169,7 +169,7 @@ class DuckDBStore:
 
     def _ensure_httpfs(self, con: duckdb.DuckDBPyConnection) -> None:
         con.execute("LOAD httpfs")
-        con.execute("SET http_timeout=4000")
+        con.execute("SET http_timeout=8000")
         con.execute("SET http_retries=2")
         if self.settings and not self._secret_configured and not self.offline_only:
             secret_sql = build_s3_secret_sql(self.settings)

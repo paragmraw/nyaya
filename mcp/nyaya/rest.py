@@ -21,7 +21,7 @@ from .exceptions import (
     StorageUnavailable,
 )
 from .models import AnalyticsTier, CourtTier, JudgmentSearchQuery
-from .storage import get_analytics, get_backend, get_retrieval
+from .storage import enrich_corpus_status, get_analytics, get_backend, get_retrieval
 from .storage.sqlite_store import SqliteStore
 
 log = logging.getLogger("nyaya.rest")
@@ -104,6 +104,8 @@ async def _build_corpus_status_dict(
             include_sources=True,
             commercial_safe_only=cs_only,
         )
+        if hasattr(resp, "counts"):
+            resp = await _safe(enrich_corpus_status, resp, commercial_safe_only=cs_only)
         data = resp.model_dump(mode="json") if hasattr(resp, "model_dump") else dict(resp)
         data.setdefault("version", __version__)
         data.setdefault("service_version", __version__)
