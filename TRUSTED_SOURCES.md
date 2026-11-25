@@ -83,8 +83,10 @@ build or publish.
 | **Dattam Labs — Supreme Court** | `s3://indian-supreme-court-judgments` | 38k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
 | **Dattam Labs — High Courts** | `s3://indian-high-court-judgments` | 20.7M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
 | **PRS Legislative Research** | `https://prsindia.org` | BNS / BNSS / BSA 2023 & legislative act deltas | `CC-BY-4.0` | `true` | Pinned SHA-256 + domain allowlist |
-| **Legislative Department / India Code** | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `IN-S52-1-q` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
-| **Sansad Digital Library (CAD)** | `https://eparlib.sansad.in` | Constituent Assembly Debates (12 volumes) | `IN-S52-1-q` (s. 52(1)(q) / s. 28) | `true` | Pinned SHA-256 |
+| **Legislative Department / India Code** | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
+| **India Code Digital Repository** | `https://indiacode.nic.in` | Central Acts official statutory repository | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + domain allowlist |
+| **Supreme Court e-SCR** | `https://digiscr.sci.gov.in` | Official SC neutral citations & judgment metadata | `CC-BY-4.0` (s. 52(1)(q)(iv)) | `true` | Pinned SHA-256 + domain allowlist |
+| **Sansad Digital Library (CAD)** | `https://eparlib.sansad.in` | Constituent Assembly Debates (12 volumes) | `CC0-1.0` (s. 52(1)(q) / s. 28) | `true` | Pinned SHA-256 |
 | **Justice Hub / KHOJ** | `https://justicehub.in` | High Court judge metadata (CC-BY-4.0 subset) | `CC-BY-4.0` | `true` | Pinned SHA-256 |
 | **Development Data Lab (DDL)** | `https://www.devdatalab.org/judicial-data` | 81M District Court metadata (2010–2018) | `CC-BY-NC-SA-4.0` | **`false`** | Pinned SHA-256; ML religion/caste cols dropped |
 | **ILDC Research Pack** | Hugging Face research pack | 35k SC outcome/explanation annotations | `CC-BY-NC-4.0` | **`false`** | Pinned SHA-256 |
@@ -131,7 +133,7 @@ Every ingestion run must pass 8 hard-fail suites before producing `gate-pass.jso
 CI (`.github/workflows/security.yml`) and `lockfile.py` strictly ban:
 - **Scraped / unclear-rights sources:** Unofficial third-party case-law scrapers,
   unverified community dumps (`civictech-India`, `mratanusarkar`), and
-  `terms_status="red"` Vaquill entries (enforced via `BANNED_DOMAINS` in
+  `terms_status="red"` Vaquill entries (enforced via `_BANNED_URI_SUBSTRINGS` in
   `mcp/nyaya/ingest/lockfile.py`).
 - **Copyleft & banned packages in lockfiles:** `ecourts` (GPL-3.0),
   `pymupdf` / `fitz` (AGPL-3.0), `surya-ocr` (GPL), and legacy database/vector

@@ -21,7 +21,7 @@ Which component(s) would this affect?
 - [ ] `ingest/` (`mcp/nyaya/ingest/`: `nyaya-ingest` CLI, `sources.lock.yaml`, reference YAML data, `verify-gate`)
 - [ ] `chat/` (Optional LangGraph + FastAPI `/chat` assistant, shared `nyaya.citations` verifier, `retrieval_eval.py`)
 - [ ] `web/` (Next.js 16 static export SPA)
-- [ ] `docs` (`README.md`, `TRUSTED_SOURCES.md`, `SECURITY.md`, `NOTICE`)
+- [ ] `docs` (`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRUSTED_SOURCES.md`, `SECURITY.md`, `NOTICE`)
 - [ ] `infra` (`Dockerfile`, `docker-compose.yml`, `.railway/railway.ts`, `.github/workflows/`)
 - [ ] other
 

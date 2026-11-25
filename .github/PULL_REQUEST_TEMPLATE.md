@@ -16,7 +16,7 @@ Briefly describe the changes in this PR.
 - [ ] `ingest/` (`mcp/nyaya/ingest/` pipeline, reference YAML tables, `verify-gate`)
 - [ ] `chat/` (Optional LangGraph + FastAPI `/chat` sub-app, shared citation verifier, evals)
 - [ ] `web/` (Next.js 16 static export SPA)
-- [ ] `docs` (`README.md`, `TRUSTED_SOURCES.md`, `SECURITY.md`, `NOTICE`)
+- [ ] `docs` (`README.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `TRUSTED_SOURCES.md`, `SECURITY.md`, `NOTICE`)
 - [ ] `infra` (`Dockerfile`, `docker-compose.yml`, `.railway/railway.ts`, `.github/workflows/`)
 - [ ] other
 

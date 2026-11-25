@@ -24,11 +24,15 @@ P0+P1 quality overhaul of retrieval, citation parsing, PDF extraction, and corpu
 - **PDF extraction (`mcp/nyaya/storage/pdf_fetcher.py`):** strips SCR running headers/footers, same-line SCR judge footers, and standalone page numbers; repairs ligature space-dropouts (`_repair_ligature_splits`) and minor year/parenthesis/`v.` word-joins.
 - **Ingest hygiene (`mcp/nyaya/ingest/`):** Vaquill provision text is cleaned of boilerplate headers, Markdown, repeated headings, and India Code footnotes; chapter titles are extracted; the best-scoring multi-part stem is chosen; BNS/BNSS sub-clause rows inherit parent provision text and chapter and are emitted only when the parent exists; Act commencement/repeal dates come from the act rows instead of hard-coded values; per-source record counts are computed and FTS5 tables rebuilt and integrity-checked.
 - **`nyaya-ingest build-sqlite`:** no longer loads the ~20.8M High Court rows (`include_hc=False`); the HC row total is carried as a count. `build-lance-fts` selects hot HC rows round-robin across courts.
+- **`Dockerfile` Stage 2b:** added `curl --retry 4 --retry-delay 5 --retry-all-errors` when downloading `nyaya-core.sqlite.zst` to handle transient upstream errors.
 
 ### Fixed
 - Year filter applied to equivalent-provision lookups across High Courts, and recall when a query spans multiple High Courts.
 - Same-line SCR judge footers leaking into extracted judgment text.
 - HC search ordering when the Parquet partition lacks a `decision_date` column.
+
+### Removed
+- Removed unused legacy `.trivyignore`, the `hf-dataset` publish target (`mcp/nyaya/ingest/publish.py`, `mcp/nyaya/ingest/cli.py`, `.github/workflows/ingest-refresh.yml`), and dead config/model/prompt/fetcher aliases.
 
 ## [2.0.0] - 2026-11-22
 

@@ -7,9 +7,9 @@
 Nyaya v2.0 runs a 100% external-database-free, pure-lexical/metadata/graph retrieval architecture requiring zero vector databases or embedding APIs:
 
 - **Baked SQLite Core (`nyaya-core.sqlite`; released as zstd-compressed `nyaya-core.sqlite.zst` on GitHub Releases):** Read-only immutable SQLite3 with FTS5 (`porter unicode61`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry (e.g. IT Act s. 66A, Electoral Bonds), SC metadata, citation graph edges, and courts directory.
-- **Railway Storage Bucket (Private Tigris S3):** Holds 3 **LanceDB native Rust BM25 FTS** tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and **compacted ZSTD Parquet** partitions queried by **DuckDB `httpfs`** (pre-installed into `/app/duckdb_ext`, capped at `256 MB` RAM / 2 threads / 5s `con.interrupt()`).
+- **Railway Storage Bucket (Private Tigris S3):** Holds 3 **LanceDB native Rust BM25 FTS** tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and **compacted ZSTD Parquet** partitions queried by **DuckDB `httpfs`** (pre-installed into `/app/duckdb_ext`, capped at `256 MB` RAM / 2 threads / 10s `con.interrupt()`).
 - **Direct AWS Open Data PDFs (`pypdfium2`, Apache-2.0):** On-demand anonymous HTTPS range/stream reads from `s3://indian-supreme-court-judgments` and `s3://indian-high-court-judgments` with strict bucket/key regex allowlisting, `%PDF-` magic gate, 15 MB / 500-page caps, scanned-PDF detection (`chars_per_page < 50`), and a 256 MB disk zstd LRU cache.
-- **Local `uvx nyaya-mcp` (`stdio`):** Public packs and `manifest.json` are dual-published to Hugging Face Datasets / GitHub Releases so `uvx nyaya-mcp` runs on laptops with **zero secrets** and **zero stdout pollution**.
+- **Local `uvx nyaya-mcp` (`stdio`):** Public packs and `manifest.json` are published to GitHub Releases alongside the private Railway Storage Bucket so `uvx nyaya-mcp` can sync via `NYAYA_MANIFEST_URL` and run on laptops with **zero secrets** and **zero stdout pollution**.
 
 ## Components
 
@@ -32,7 +32,7 @@ Useful CLI flags (`mcp/nyaya/cli.py`):
 - `--transport stdio|http` (default `stdio`; or `nyaya-mcp serve` for HTTP mode)
 - `--commercial-safe-only` (or `NYAYA_COMMERCIAL_SAFE_ONLY=1`): exclude CC-BY-NC datasets (`DDL 81M District Courts`, `ILDC`)
 - `--offline-only --no-download --data-dir /path/to/data` (plus `--cache-dir`, `--ensure-data`): air-gapped local mode
-- `nyaya-mcp sync --pack core|lance|parquet|all`: pre-download public packs from `NYAYA_MANIFEST_URL`
+- `nyaya-mcp sync [--pack core|lance|parquet|all]`: pre-download and verify the SQLite `core` pack from `NYAYA_MANIFEST_URL` (or build the `mini_corpus` fixture fallback; `--pack` accepts `core|lance|parquet|all`, with `core` currently synced)
 - `--host 0.0.0.0 --port 8000`: HTTP bind host and port
 
 ### 2. Local Docker & Docker Compose (hardened `read_only: true` + 1 GB RAM)
@@ -73,7 +73,9 @@ Service infrastructure is declared in [`.railway/railway.ts`](.railway/railway.t
 # 1. MCP + Chat tests, lint, types & offline eval
 cd mcp
 uv sync --extra http --extra ingest --dev
-uv pip install -e ../chat
+uv export --project ../chat --locked --no-dev --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt
+uv pip install -r /tmp/chat-requirements.txt && uv pip install --no-deps -e ../chat && rm -f /tmp/chat-requirements.txt
+uv lock --check && (cd ../chat && uv lock --check)
 uv run ruff check nyaya/ tests/ ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
 uv run mypy nyaya/ ../chat/nyaya_chat/
 uv run pytest --cov=nyaya --cov-fail-under=78

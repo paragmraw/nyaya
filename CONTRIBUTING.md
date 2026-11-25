@@ -6,9 +6,9 @@ Thank you for your interest in contributing to nyaya! This document covers local
 
 ### Prerequisites
 
-- Python 3.11+ (CI targets Python 3.12)
+- Python 3.11.5+ (`mcp/pyproject.toml` floor; CI targets Python 3.12)
 - Node.js 20+
-- [`uv`](https://docs.astral.sh/uv/) (`0.11.x`)
+- [`uv`](https://docs.astral.sh/uv/) (`0.11.x`; CI pins `0.11.25`)
 
 No external database service and no API keys are required for MCP development or offline tests.
 
@@ -17,7 +17,8 @@ No external database service and no API keys are required for MCP development or
 ```bash
 cd mcp
 uv sync --extra http --extra ingest --dev
-uv pip install -e ../chat
+uv export --project ../chat --locked --no-dev --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt
+uv pip install -r /tmp/chat-requirements.txt && uv pip install --no-deps -e ../chat && rm -f /tmp/chat-requirements.txt
 
 # Run MCP server locally over stdio (uses baked/local data or --data-dir)
 uv run nyaya-mcp --transport stdio --data-dir tests/fixtures/mini_corpus --no-download --offline-only
@@ -25,7 +26,8 @@ uv run nyaya-mcp --transport stdio --data-dir tests/fixtures/mini_corpus --no-do
 # Or run HTTP server (MCP + REST + built SPA + optional /chat when NVIDIA_API_KEY is set)
 uv run nyaya-mcp --transport http --host 127.0.0.1 --port 8000
 
-# Lint, strict type checks & tests
+# Lint, strict type checks, lockfiles & tests
+uv lock --check && (cd ../chat && uv lock --check)
 uv run ruff check nyaya/ tests/ ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
 uv run mypy nyaya/ ../chat/nyaya_chat/
 uv run pytest --cov=nyaya --cov-fail-under=78
@@ -80,9 +82,15 @@ npm run build      # static export to web/out/
 nyaya/
 ├── .github/workflows/  # ci.yml, security.yml, ingest-refresh.yml
 ├── .railway/           # Railway IaC (railway.ts)
+├── .env.example        # Environment variable reference (zero secrets required for MCP)
 ├── Dockerfile          # Multi-stage Debian-slim build (Node 20 + Python 3.12)
 ├── docker-compose.yml  # Hardened local container run (disk-backed nyaya_cache)
+├── CHANGELOG.md        # Keep-a-Changelog release & corpus history
+├── CODE_OF_CONDUCT.md  # Contributor Covenant v2.1
+├── CONTRIBUTING.md     # Local setup, style, testing & PR guidelines
 ├── NOTICE              # Apache-2.0 Section 4(d) corpus & dependency attributions
+├── README.md           # Project overview & quickstart
+├── SECURITY.md         # Vulnerability reporting & defense-in-depth architecture
 ├── TRUSTED_SOURCES.md  # Indian Copyright Act s. 52(1)(q) & OWASP LLM01 trust model
 ├── mcp/                # nyaya-mcp server, storage/retrieval, ingest CLI & tests
 │   ├── nyaya/          # cli, mcp_app, http_app, citations, storage/, retrieval/, ingest/, tools/, resources/, prompts/
