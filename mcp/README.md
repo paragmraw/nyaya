@@ -123,7 +123,7 @@ All runtime settings are read lazily in `mcp/nyaya/config.py` (zero import-time 
 
 ## Ingestion Pipeline (`nyaya-ingest`)
 
-`nyaya-ingest` (available via `uv sync --extra ingest`) builds and verifies Option R2 corpus artifacts offline or in `.github/workflows/ingest-refresh.yml`:
+`nyaya-ingest` (available via `uv sync --extra ingest`) builds and verifies SQLite, LanceDB, and Parquet corpus artifacts offline or in `.github/workflows/ingest-refresh.yml`:
 
 ```bash
 cd mcp
@@ -220,7 +220,7 @@ mcp/
 │   ├── mcp_app.py                  # Import-pure create_mcp() factory (zero stdout/env side effects)
 │   ├── http_app.py                 # create_http_app() Starlette stack (/health, /mcp, /api/*, /chat, SPA)
 │   ├── server.py                   # Compatibility shim delegating to cli.py / http_app.py
-│   ├── config.py                   # Option R2 Settings & rate-limit configuration
+│   ├── config.py                   # Runtime Settings & rate-limit configuration
 │   ├── exceptions.py               # 9 canonical NyayaError subclasses
 │   ├── models.py                   # v2 Pydantic schemas & CorpusStatusResponse
 │   ├── citations.py                # Shared Indian legal citation parser & verifier

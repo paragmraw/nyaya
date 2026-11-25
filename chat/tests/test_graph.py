@@ -1,9 +1,9 @@
 """Tests for nyaya_chat.graph — build, message assembly, nodes, routing.
 
-Phase 1 pipeline collapse: the two-model supervisor+synthesis pipeline is
-replaced by ONE streaming, tool-bound agent node in a 2-node graph
-(``START → agent → (tools → agent | END)``). The agent node buffers its
-first leg (tool-call decision); post-tools legs stream answer tokens live.
+Single-node streaming pipeline: one streaming, tool-bound agent node in a
+2-node graph (``START → agent → (tools → agent | END)``) handles both tool
+selection and synthesis. The agent node buffers its first leg (tool-call
+decision); post-tools legs stream answer tokens live.
 """
 
 from __future__ import annotations
@@ -124,8 +124,7 @@ def test_state_messages_appends_reflection_prompt_on_round_2(settings):
 
 @pytest.mark.asyncio
 async def test_build_graph_with_tools(fake_model, fake_tools):
-    """The tool graph is agent+tools — the supervisor and synthesis nodes are
-    gone (pipeline collapse)."""
+    """The tool graph uses a single streaming agent node paired with tools."""
     fake_model.responses = [
         AIMessage(content="", tool_calls=[
             {"id": "tc1", "name": "get_provision", "args": {"act": "IPC", "ref": "302"}},
@@ -994,8 +993,8 @@ async def test_agent_keeps_cited_answer_over_uncited_resynthesis(fake_model, set
 
 @pytest.mark.asyncio
 async def test_agent_logs_first_token_latency(settings, monkeypatch, caplog):
-    """The agent's answer stream must log its time-to-first-token — the
-    overhaul's headline metric — mirroring the agent_ms phase log."""
+    """The agent's answer stream must log its time-to-first-token latency,
+    mirroring the agent_ms phase log."""
     import logging as _logging
 
     from langchain_core.messages import AIMessageChunk

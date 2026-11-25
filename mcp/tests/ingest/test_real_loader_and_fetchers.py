@@ -342,7 +342,7 @@ def test_staged_loader_builds_and_passes_quality_gate(tmp_path: Path) -> None:
         mh_acts = store.browse_statute(jurisdiction="MH")
         assert mh_acts.total >= 1
 
-        # Curated provisions & P1 metadata hygiene checks
+        # Curated provisions & metadata hygiene checks
         c73 = store.get_provision("ContractAct", "73")
         assert c73 is not None and "naturally arose in the usual course" in c73.text
         crpc438 = store.get_provision("CrPC", "438")

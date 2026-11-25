@@ -1,4 +1,4 @@
-"""LanceDB native Rust BM25 FTS reader (zero Tantivy, zero dense vectors in Phase 1)."""
+"""LanceDB native Rust BM25 FTS reader (lexical full-text search without dense vectors)."""
 
 from __future__ import annotations
 

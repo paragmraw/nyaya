@@ -1,12 +1,10 @@
 """Agent node: one streaming, tool-bound model that plans retrieval AND
 composes the grounded answer.
 
-Phase 1 pipeline collapse: the separate supervisor (non-streaming
-``with_structured_output(ToolPlan)`` planner + corrective retry) and the
-synthesis node are merged into this single node in a 2-node graph
-(``START → agent → (tools → agent | END)``). One LLM round trip on the
-answer path replaces up to three, and thinking is off so the completion
-budget belongs entirely to the answer.
+Single-node streaming pipeline: retrieval planning and answer synthesis run
+in this single node within a 2-node graph (``START → agent → (tools → agent | END)``).
+Using one tool-bound node keeps the answer path to a single LLM round trip,
+and thinking is off so the completion budget belongs entirely to the answer.
 
 **Leg buffering.** The first leg of a turn (its last state message is not a
 ``ToolMessage``) is buffered: a streamed tool-call decision must not leak
@@ -368,9 +366,8 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
                     token_event(text)
                 raw_parts.append(text)
                 if first_token_ms is None and emit_tokens:
-                    # The overhaul's headline metric — time from node entry
-                    # to the first token streamed to the client — logged for
-                    # every answer leg (mirrors the agent_ms phase log).
+                    # Time from node entry to the first token streamed to the client,
+                    # logged for every answer leg (mirrors the agent_ms phase log).
                     first_token_ms = (time.monotonic() - t0) * 1000
                     log.info("agent: first token in %.0fms", first_token_ms)
             tc = getattr(chunk, "tool_calls", None)

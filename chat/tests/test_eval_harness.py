@@ -38,7 +38,7 @@ def _result(mod, *, latency_ms=1000.0, ttft_ms=500.0, error=None):
 
 
 def test_scenario_has_hard_ttft_budget():
-    """Phase 4: the plan's TTFT target (<4s) is the hard default."""
+    """The default scenario TTFT gating budget (<4s) is enforced as a hard cap."""
     mod = _load()
     s = mod.Scenario("x", "q", "factual_lookup")
     assert s.max_ttft_ms == 4000.0
@@ -73,8 +73,8 @@ def test_ttft_check_fails_over_budget():
 
 
 def test_no_checks_are_soft():
-    """Phase 4: nothing is soft — over-budget latency/TTFT ARE gating
-    failures (the live acceptance run gates on them)."""
+    """All checks are gating — over-budget latency and TTFT are hard
+    failures in live evaluation runs."""
     mod = _load()
     assert mod.SOFT_CHECKS == frozenset()
     r, _ = _result(mod, latency_ms=120000.0, ttft_ms=120000.0)
@@ -85,8 +85,8 @@ def test_no_checks_are_soft():
 
 def test_canned_caps_relaxed_for_remote_host_only():
     """The 200ms canned cap is server compute; a remote host adds network RTT
-    (the Phase 0 baseline saw up to 1.1s canned from network alone), so live
-    acceptance must relax canned caps — local runs keep 200ms strict."""
+    (remote canned requests can see up to ~1.1s from network latency alone), so
+    live runs against remote hosts relax canned caps while local runs keep 200ms strict."""
     mod = _load()
     canned_ids = [s.id for s in mod.SCENARIOS if s.category in mod.CANNED_CATEGORIES]
     assert canned_ids, "expected canned scenarios"

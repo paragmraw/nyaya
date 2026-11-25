@@ -1,4 +1,4 @@
-"""Phase-1 pure lexical, metadata, and citation-graph RetrievalEngine."""
+"""Pure lexical, metadata, and citation-graph RetrievalEngine."""
 
 from __future__ import annotations
 
@@ -291,7 +291,7 @@ def _lance_row_to_judgment_card(
 
 
 class LexicalRetrievalEngine:
-    """Phase-1 Lexical + Metadata + Citation-Graph RetrievalEngine."""
+    """Lexical + Metadata + Citation-Graph RetrievalEngine."""
 
     def __init__(
         self,
@@ -885,7 +885,7 @@ def build_retrieval_engine(
     embedder: Any = None,
     reranker: Any = None,
 ) -> LexicalRetrievalEngine:
-    """Factory constructing the Phase-1 pure-lexical RetrievalEngine."""
+    """Factory constructing the pure-lexical RetrievalEngine."""
     return LexicalRetrievalEngine(
         settings=settings,
         backend=backend,
