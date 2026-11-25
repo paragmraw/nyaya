@@ -15,6 +15,12 @@ const ROUTE_MAP: Record<string, BreadcrumbItem> = {
   "/corpus/": { label: "Corpus", href: "/corpus/" },
   "/citations/": { label: "Citations", href: "/citations/" },
   "/architecture/": { label: "Architecture", href: "/architecture/" },
+  "/privacy/": { label: "Privacy", href: "/privacy/" },
+  "/terms/": { label: "Terms", href: "/terms/" },
+  "/disclaimer/": { label: "Disclaimer", href: "/disclaimer/" },
+  "/faq/": { label: "FAQ", href: "/faq/" },
+  "/contact/": { label: "Contact", href: "/contact/" },
+  "/accessibility/": { label: "Accessibility", href: "/accessibility/" },
 };
 
 export default function Breadcrumb() {
