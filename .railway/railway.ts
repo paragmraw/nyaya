@@ -4,7 +4,7 @@ import { defineRailway, github, preserve, project, service } from "railway/iac";
 // for the deprecated railway.toml Config-as-Code, which Railway stops reading
 // on 2026-12-01.
 //
-// Option R2 (100% Railway, Zero-DB-Ops, Scale-to-Zero):
+// Single-service Railway architecture (database-free, sleep-on-idle):
 // - One service, one origin: the root multi-stage Dockerfile builds the Next.js
 //   SPA (Node 20 stage) and the Python 3.12 Debian-slim MCP runtime with a baked
 //   read-only SQLite core (~250 MB) + pre-installed DuckDB httpfs extension,
@@ -34,7 +34,7 @@ export default defineRailway(() =>
         healthcheck: "/health",
         healthcheckTimeout: 60,
         replicas: 1,
-        // Keep scale-to-zero sleep and IPv6 egress enabled.
+        // Keep sleep-on-idle (sleepApplication) and IPv6 egress enabled.
         deploy: { sleepApplication: true, ipv6EgressEnabled: true },
         env: {
           // Railway Storage Bucket (Tigris S3) cold tiers: LanceDB native BM25 FTS

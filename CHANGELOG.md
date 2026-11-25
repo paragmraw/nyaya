@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-P0+P1 quality overhaul of retrieval, citation parsing, PDF extraction, and corpus hygiene, published as GitHub Release `corpus-v2026.11.25-p1` (`nyaya-core.sqlite.zst` + `manifest.json`). Live corpus counts after the release: 1,569 central acts, 8,544 state acts, 12,152 regulator instruments, 15 tribunals, 40,353 provisions, 38,292 SC judgments, 20,696,054 HC judgments, 813,168 tribunal orders, 615 citation edges.
+Quality overhaul of retrieval, citation parsing, PDF extraction, and corpus hygiene, published as GitHub Release `corpus-v2026.11.25-p1` (`nyaya-core.sqlite.zst` + `manifest.json`). Live corpus counts after the release: 1,569 central acts, 8,544 state acts, 12,152 regulator instruments, 15 tribunals, 40,353 provisions, 38,292 SC judgments, 20,696,054 HC judgments, 813,168 tribunal orders, 615 citation edges.
 
 ### Added
 - **Curated bare-act provisions (`mcp/nyaya/ingest/data/curated_statute_provisions.yaml`):** loaded by `load_curated_provisions_yaml()` in `mcp/nyaya/ingest/fetchers/official_statutes.py` and overlaid in `ingest/loader.py`, overriding truncated Vaquill entries and adding CrPC provisions.
@@ -36,14 +36,14 @@ P0+P1 quality overhaul of retrieval, citation parsing, PDF extraction, and corpu
 
 ## [2.0.0] - 2026-11-22
 
-Full monorepo re-architecture to **Option R2 (Zero-Supabase, Zero-DB-Ops, Pure-Lexical/Metadata/Graph)** and **Nyaya MCP v2.0 (`nyaya-mcp`)**.
+Full monorepo re-architecture to a **database-free embedded and object-storage architecture (pure-lexical, metadata & graph)** and **Nyaya MCP v2.0 (`nyaya-mcp`)**.
 
 ### Added
-- **Option R2 Hybrid Storage & Retrieval (`mcp/nyaya/storage/`, `mcp/nyaya/retrieval/`):**
+- **Embedded + Object-Storage Hybrid Retrieval (`mcp/nyaya/storage/`, `mcp/nyaya/retrieval/`):**
   - Baked read-only immutable SQLite core (`nyaya-core.sqlite`) with FTS5 (`porter unicode61 remove_diacritics 2 tokenchars '.-/()'`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry, SC metadata, citation graph edges, and courts directory.
   - Railway Storage Bucket (Tigris S3) cold tiers: 3 LanceDB native Rust BM25 FTS tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and DuckDB `httpfs` over compacted ZSTD Parquet partitions (17.77M HC, 81M DDL District Courts, 15 Tribunals, 12 Regulators, SC mirror) with `manifest.json` partition pruning.
   - Direct anonymous AWS Open Data PDF extraction via Apache-2.0 `pypdfium2` (`pdf_fetcher.py`) with strict bucket/key regex allowlist, `follow_redirects=False`, 15 MB / 500-page caps, `%PDF-` magic check, `chars_per_page >= 50` scanned-PDF detection, ephemeral `ParagraphBM25`, and a 256 MB disk zstd LRU cache.
-  - Phase-1 pure-lexical `RetrievalEngine` (`QueryAnalyzer`, `LexicalEngine`, weighted RRF `k=60`, court-hierarchy prior, exact-match top-3 floor).
+  - Pure-lexical `RetrievalEngine` (`QueryAnalyzer`, `LexicalEngine`, weighted RRF `k=60`, court-hierarchy prior, exact-match top-3 floor).
 - **MCP v2.0 Surface (12 Tools · 8 Resources · 4 Prompts):**
   - 12 tools: `search_statutes`, `get_provision`, `browse_statute`, `compare_provisions`, `cross_reference`, `get_provision_history`, `search_judgments`, `get_judgment`, `trace_precedent`, `judgment_analytics`, `verify_citations`, `corpus_status` (enforcing `openWorldHint` split, `StatutoryValidity` envelopes, `precedent_status="unverified_automated"`, and `commercial_safe_only`).
   - 8 `nyaya://` resources (`corpus/status`, `statutes`, `statute/{act}`, `provision/{act}/{ref}`, `amendment/{act}/{number}`, `judgment/{identifier}`, `judgment/{identifier}/paragraphs/{start}-{end}`, `courts`).
@@ -54,7 +54,7 @@ Full monorepo re-architecture to **Option R2 (Zero-Supabase, Zero-DB-Ops, Pure-L
 - **CI/CD & Security Hygiene:** Added `mypy` gate on `chat/nyaya_chat/`, `stdio` JSON-RPC pipe test (12 tools, zero stdout pollution), offline `retrieval_eval.py`, zero-secret hardened Docker smoke test (`--read-only --memory=1g`), `chat/` `pip-audit` job, and lockfile copyleft/Postgres ban check in `.github/workflows/security.yml`.
 
 ### Changed
-- **Container & Infrastructure:** Migrated `Dockerfile` from Alpine to digest-pinned `python:3.12-slim-bookworm` with pre-installed `/app/duckdb_ext` `httpfs`, installed `nyaya-mcp` console scripts (`nyaya-mcp`, `nyaya`, `nyaya-ingest`) and package data into site-packages with `/app/web/out` static fallback, and added a dual-mode `data-stage` (`NYAYA_CORE_SQLITE_URL` + SHA-256 or offline `tests.fixtures.mini_corpus.builder`). Updated `docker-compose.yml` to mount disk-backed `nyaya_cache:/var/cache/nyaya` (preventing Linux `tmpfs` OOM under `mem_limit: 1g`). Updated `.railway/railway.ts` for Option R2 Bucket variables and `asia-southeast1` region guidance.
+- **Container & Infrastructure:** Migrated `Dockerfile` from Alpine to digest-pinned `python:3.12-slim-bookworm` with pre-installed `/app/duckdb_ext` `httpfs`, installed `nyaya-mcp` console scripts (`nyaya-mcp`, `nyaya`, `nyaya-ingest`) and package data into site-packages with `/app/web/out` static fallback, and added a dual-mode `data-stage` (`NYAYA_CORE_SQLITE_URL` + SHA-256 or offline `tests.fixtures.mini_corpus.builder`). Updated `docker-compose.yml` to mount disk-backed `nyaya_cache:/var/cache/nyaya` (preventing Linux `tmpfs` OOM under `mem_limit: 1g`). Updated `.railway/railway.ts` for Railway Storage Bucket variables and `asia-southeast1` region guidance.
 - **v2 REST API (`mcp/nyaya/rest.py`):** Migrated endpoints to `/api/corpus-status`, `/api/acts`, `/api/judgments`, `/api/analytics`, `/api/tools`, and `/api/health-summary`.
 - **Chat Sub-App (`chat/`):** Migrated `TOOL_SPECS` to 8 v2 tools, delegated citation verification to shared `nyaya.citations`, updated `cleaning.py` for parameterized `<corpus_text ...>` tags, and expanded `eval/golden.jsonl` from 25 to 90 cases.
 - **Web Frontend (`web/`):** Bumped `API_VERSION` to `2.0.0`, hydrated against v2 REST endpoints, updated `McpConfig` with `Local (uvx stdio)` + `Remote (HTTP)` tabs, added commercial-safe/category filters and academic CC-BY-NC notice, and purged v0.2 Postgres/Supabase/LLM-embedding copy.
