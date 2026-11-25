@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Multi-stage Dockerfile for the Nyaya v2.0 monorepo (Option R2, Zero-Supabase):
+# Multi-stage Dockerfile for the Nyaya v2.0 monorepo (database-free embedded + object-storage architecture):
 #   1. web-builder : builds the Next.js static export (/web/out)
 #   2. py-builder  : installs pinned mcp + chat Python deps on Debian slim and
 #                    pre-installs the DuckDB httpfs extension into /app/duckdb_ext
