@@ -84,6 +84,7 @@ test("known routes exist exactly once each", () => {
       "/corpus/",
       "/disclaimer/",
       "/privacy/",
+      "/terms/",
     ],
   );
 });
