@@ -1,103 +1,122 @@
 # nyaya
 
-**Zero-DB-ops Indian legal intelligence monorepo (`nyaya-mcp` v2.0)** — pure-lexical/metadata/graph MCP server, Next.js static SPA, and optional LangGraph chat assistant covering the Constitution of India, 37 Central & State/UT legislative jurisdictions, 12 Regulators, 15 Tribunals, Supreme Court (38k+), High Courts (20.7M+ across 25 HCs), and District Court metadata (81M DDL records).
+An open-source Indian legal research platform and [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server. Search Indian statutes, constitutional amendments, criminal-code transitions, tribunal/regulatory instruments, and Supreme Court & High Court judgments with citation verification — without running an external database or needing API keys for local use.
 
-## Architecture (Option R2 — Zero-DB-Ops, Scale-to-Zero)
+**Live Explorer:** [nyaya.parag.tech](https://nyaya.parag.tech) · **Remote MCP:** `https://nyaya.parag.tech/mcp` · **Docs:** [MCP Server](mcp/README.md) · [Web Frontend](web/README.md) · [Chat Assistant](chat/README.md) · [Trusted Sources](TRUSTED_SOURCES.md) · [Security](SECURITY.md)
 
-Nyaya v2.0 runs a 100% external-database-free, pure-lexical/metadata/graph retrieval architecture requiring zero vector databases or embedding APIs:
+---
 
-- **Baked SQLite Core (`nyaya-core.sqlite`; released as zstd-compressed `nyaya-core.sqlite.zst` on GitHub Releases):** Read-only immutable SQLite3 with FTS5 (`porter unicode61`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry (e.g. IT Act s. 66A, Electoral Bonds), SC metadata, citation graph edges, and courts directory.
-- **Railway Storage Bucket (Private Tigris S3):** Holds 3 **LanceDB native Rust BM25 FTS** tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and **compacted ZSTD Parquet** partitions queried by **DuckDB `httpfs`** (pre-installed into `/app/duckdb_ext`, capped at `256 MB` RAM / 2 threads / 10s `con.interrupt()`).
-- **Direct AWS Open Data PDFs (`pypdfium2`, Apache-2.0):** On-demand anonymous HTTPS range/stream reads from `s3://indian-supreme-court-judgments` and `s3://indian-high-court-judgments` with strict bucket/key regex allowlisting, `%PDF-` magic gate, 15 MB / 500-page caps, scanned-PDF detection (`chars_per_page < 50`), and a 256 MB disk zstd LRU cache.
-- **Local `uvx nyaya-mcp` (`stdio`):** Public packs and `manifest.json` are published to GitHub Releases alongside the private Railway Storage Bucket so `uvx nyaya-mcp` can sync via `NYAYA_MANIFEST_URL` and run on laptops with **zero secrets** and **zero stdout pollution**.
+## What is this project about?
 
-## Components
+**Nyaya** (`nyaya-mcp` v2.0) gives legal practitioners, researchers, and AI assistants deterministic, citation-grounded access to primary Indian law without external vector databases or embedding APIs.
 
-| Path | Version | Description |
-|---|---|---|
-| [`mcp/`](mcp/) | `2.0.0` | `nyaya-mcp` Python package: 12 MCP tools, 8 `nyaya://` resources, 4 practitioner/student prompts, pure-ASGI security/rate-limit middleware, thin `/api/*` REST routes, and `nyaya-ingest` CLI. |
-| [`web/`](web/) | `2.0.0` | Next.js 16 static export (`web/out/`) — Home, Corpus, Citations, and Architecture pages served from the same Starlette origin (`/`), hydrating live from `/api/corpus-status`, `/api/acts`, `/api/judgments`, `/api/analytics`, `/api/tools`, and `/api/health-summary`. |
-| [`chat/`](chat/) | `2.0.0` | Optional FastAPI + LangGraph assistant (`nyaya-chat`) over an 8-tool v2 allowlist using shared `nyaya.citations` verification and `ChatNVIDIA` (`langchain-nvidia-ai-endpoints`); mounted automatically at `/chat` only when `NVIDIA_API_KEY` is set. |
+- **Comprehensive Indian legal corpus:**
+  - **Constitution & Statutes:** Constitution of India (Amendments 1–106), 1,569 Central Acts, 8,544 State & UT Acts across 37 jurisdictions (40,353 indexed provisions), **BNS / BNSS / BSA 2023 ↔ IPC / CrPC / IEA** concordance with substantive diffs, and a **Judicial Invalidations** registry (e.g., IT Act s. 66A, Electoral Bonds).
+  - **Judiciary:** 38,000+ Supreme Court judgments (`38,292`) and 20.7M+ High Court judgments and orders (`20,696,054` across 25 High Courts), plus on-demand PDF text extraction from AWS Open Data.
+  - **Regulators & Tribunals:** 12 financial and sectoral regulators (12,152 instruments) and 15 tribunals (813,168 orders).
+  - **Citation verification & parsing:** Priority-ordered Indian citation parser (`INSC`, High Court neutral citations, `AIR`, `SCC`, `SCR`, `CNR`, CPC Orders/Rules, Constitution Articles/Schedules, and chained statute sections) that validates claims against the corpus before surfacing results.
+- **Deterministic & database-free:** Uses pure-lexical search (SQLite FTS5 + LanceDB native Rust BM25 + DuckDB over ZSTD Parquet) rather than opaque vector embeddings, so exact section numbers, case citations, and statutory phrases always match reliably.
+- **12 MCP tools, 8 resources, and 4 prompts:** Exposes structured legal lookup, statute comparison, precedent tracing, docket analytics, and draft citation auditing over `stdio` or HTTP.
 
-## Quickstart
+---
 
-### 1. Local `stdio` MCP (`uvx` — zero API keys)
+## Who is this for?
+
+- **Lawyers, legal researchers & students:** Compare repealed IPC/CrPC/IEA provisions against BNS/BNSS/BSA 2023, check whether a provision has been judicially struck down, trace Supreme Court precedent chains, and audit legal drafts for hallucinated citations.
+- **AI & MCP users (Claude Desktop, Cursor, IDEs):** Connect Nyaya directly as an MCP tool server in seconds via `uvx nyaya-mcp` (zero API keys, zero setup) or via the hosted `/mcp` endpoint.
+- **Developers & legal-tech builders:** Self-host a single hardened container serving the web explorer, `/api/*` JSON endpoints, `/mcp` Streamable HTTP endpoint, and an optional `/chat` assistant — with `NYAYA_COMMERCIAL_SAFE_ONLY=1` to strictly exclude non-commercial research datasets (`DDL`, `ILDC`).
+
+---
+
+## How to use it?
+
+### 1. Connect to an AI client (MCP via `uvx` — zero API keys)
+
+Requires Python 3.11.5+ and [`uv`](https://docs.astral.sh/uv/). Run directly from your terminal:
 
 ```bash
 uvx nyaya-mcp
 ```
 
-Useful CLI flags (`mcp/nyaya/cli.py`):
+Or add it to your MCP client configuration (Claude Desktop, Cursor, etc.):
 
-- `--transport stdio|http` (default `stdio`; or `nyaya-mcp serve` for HTTP mode)
-- `--commercial-safe-only` (or `NYAYA_COMMERCIAL_SAFE_ONLY=1`): exclude CC-BY-NC datasets (`DDL 81M District Courts`, `ILDC`)
-- `--offline-only --no-download --data-dir /path/to/data` (plus `--cache-dir`, `--ensure-data`): air-gapped local mode
-- `nyaya-mcp sync [--pack core|lance|parquet|all]`: pre-download and verify the SQLite `core` pack from `NYAYA_MANIFEST_URL` (or build the `mini_corpus` fixture fallback; `--pack` accepts `core|lance|parquet|all`, with `core` currently synced)
-- `--host 0.0.0.0 --port 8000`: HTTP bind host and port
+```json
+{
+  "mcpServers": {
+    "nyaya": {
+      "command": "uvx",
+      "args": ["nyaya-mcp"]
+    }
+  }
+}
+```
 
-### 2. Local Docker & Docker Compose (hardened `read_only: true` + 1 GB RAM)
+Common CLI options:
+
+- `--commercial-safe-only` (or `NYAYA_COMMERCIAL_SAFE_ONLY=1`) — exclude non-commercial datasets (`DDL` 81M District Courts, `ILDC`)
+- `nyaya-mcp sync` — pre-download and verify the local SQLite `core` pack from `NYAYA_MANIFEST_URL`
+- `--offline-only --no-download --data-dir /path/to/data` — run air-gapped using local packs only
+- `nyaya-mcp --transport http --host 0.0.0.0 --port 8000` — start the HTTP server (MCP + REST + Web UI)
+
+### 2. Run locally with Docker
+
+Runs the full stack (Web UI at `/`, REST API at `/api/*`, MCP at `/mcp`, and optional `/chat` when `NVIDIA_API_KEY` is set) inside a read-only container with a 1 GB memory limit and zero required secrets:
 
 ```bash
-cp .env.example .env   # optional — works with zero secrets out of the box
+cp .env.example .env   # optional — works out of the box with zero secrets
 docker compose up -d --build
+```
 
-# Or build and run stdio MCP directly inside a hardened read-only container:
+Then open `http://localhost:8000` in your browser, or run `stdio` mode inside a hardened container:
+
+```bash
 docker build -t nyaya-mcp .
 docker run --rm -i --read-only --tmpfs /tmp:size=64m -w /tmp nyaya-mcp nyaya-mcp --offline-only --no-download
 ```
 
-`docker-compose.yml` runs with `read_only: true` and mounts a disk-backed named volume (`nyaya_cache:/var/cache/nyaya`) for `NYAYA_CACHE_DIR` so the PDF zstd LRU and DuckDB temp spill never consume Linux RAM `tmpfs` under `mem_limit: 1g`.
+### 3. Hosted access, local development & deployment
 
-### 3. Deploy to Railway (Option R2)
+- **Hosted instance:** Browse the corpus explorer at [nyaya.parag.tech](https://nyaya.parag.tech) or point HTTP-capable MCP clients to `https://nyaya.parag.tech/mcp`.
+- **Local development & tests:** See [`CONTRIBUTING.md`](CONTRIBUTING.md) and each component's README ([`mcp/README.md`](mcp/README.md), [`web/README.md`](web/README.md), [`chat/README.md`](chat/README.md)).
+- **Cloud deployment & ingestion:** Infrastructure is declared in [`.railway/railway.ts`](.railway/railway.ts) and corpus build/publish commands (`nyaya-ingest`) are documented in [`mcp/README.md`](mcp/README.md).
 
-Service infrastructure is declared in [`.railway/railway.ts`](.railway/railway.ts):
+---
 
-1. Provision a **Railway Storage Bucket** attached to the `nyaya` service and set the deployment region to **`asia-southeast1` (Singapore)** in the Railway dashboard (minimal RTT to Indian users and AWS `ap-south-1` PDFs).
-2. Configure `NYAYA_BUCKET_ENDPOINT`, `NYAYA_BUCKET_NAME`, `NYAYA_BUCKET_ACCESS_KEY_ID`, `NYAYA_BUCKET_SECRET_ACCESS_KEY` (plus optional `NVIDIA_API_KEY` for `/chat`) in Railway Variables. To bake the SQLite core into the image at build time, also set `NYAYA_CORE_SQLITE_URL` (the release's `nyaya-core.sqlite.zst` asset) and `NYAYA_CORE_SQLITE_SHA256`. All are `preserve()`d in `.railway/railway.ts`.
-3. Populate the bucket via `nyaya-ingest` (or `.github/workflows/ingest-refresh.yml`):
-   ```bash
-   cd mcp && uv sync --extra ingest
-   uv run nyaya-ingest sync --tier static && uv run nyaya-ingest sync --tier daily
-   uv run nyaya-ingest build-sqlite && uv run nyaya-ingest build-lance-fts && uv run nyaya-ingest compact-parquet   # build-sqlite skips loading HC rows (served from Parquet)
-   uv run nyaya-ingest verify-gate --strict
-   uv run nyaya-ingest publish --target all
-   # Hermetic offline pipeline test:
-   uv run nyaya-ingest all --fixture --dry-run
-   ```
-4. Review and apply Railway IaC with `railway config plan` and `railway config apply`.
-5. Verify live endpoints: `GET /health`, `GET /api/corpus-status`, `GET /api/acts`, `GET /api/judgments`, `GET /api/analytics?dataset=sc&group_by=disposal_nature`, `GET /api/tools`, `GET /api/health-summary`, `POST /mcp` (`initialize`), and (if `NVIDIA_API_KEY` is set) `GET /chat/health` & `POST /chat/turn`.
+## How it is built & architecture
 
-## Local Development
+Nyaya is packaged as a single Python ASGI server (`mcp/`) that serves the MCP protocol, thin REST endpoints, the pre-built Next.js static frontend (`web/out/`), and an optional LangGraph chat router (`chat/`):
 
-```bash
-# 1. MCP + Chat tests, lint, types & offline eval
-cd mcp
-uv sync --extra http --extra ingest --dev
-uv export --project ../chat --locked --no-dev --no-emit-project --no-editable --format requirements-txt > /tmp/chat-requirements.txt
-uv pip install -r /tmp/chat-requirements.txt && uv pip install --no-deps -e ../chat && rm -f /tmp/chat-requirements.txt
-uv lock --check && (cd ../chat && uv lock --check)
-uv run ruff check nyaya/ tests/ ../chat/nyaya_chat/ ../chat/tests/ ../chat/eval/
-uv run mypy nyaya/ ../chat/nyaya_chat/
-uv run pytest --cov=nyaya --cov-fail-under=78
-NVIDIA_API_KEY=nvapi-test-key-for-ci uv run pytest ../chat/tests/ --cov=nyaya_chat --cov-fail-under=84
-uv run python ../chat/eval/retrieval_eval.py --fixture tests/fixtures/mini_corpus
-
-# 2. Run local HTTP server (MCP + REST + built SPA + optional /chat)
-uv run nyaya-mcp --transport http --host 127.0.0.1 --port 8000
-
-# 3. Web frontend (Next.js static export)
-cd ../web
-npm install
-npm run dev        # HMR on :3000 (proxies /api/*, /mcp, /chat/* to :8000)
-npx eslint . && npm test && npm run build
+```text
+  MCP Clients (stdio / HTTP) ──┐
+  Web Browser (/)            ──┼──▶ Starlette ASGI Server (mcp/)
+  REST & Optional /chat      ──┘       ├── /mcp          (12 tools · 8 resources · 4 prompts)
+                                       ├── /api/*        (REST endpoints for web & clients)
+                                       ├── /chat/*       (Optional LangGraph + NVIDIA NIM)
+                                       └── /             (Next.js 16 static export)
+                                              │
+                 ┌────────────────────────────┼────────────────────────────┐
+                 ▼                            ▼                            ▼
+       Baked SQLite Core          S3-Compatible Object Storage     AWS Open Data PDFs
+    (nyaya-core.sqlite, FTS5)     (LanceDB BM25 + ZSTD Parquet)    (Anonymous HTTPS S3)
+    • Statutes & Constitution     • Full-text BM25 chunks          • SC & HC judgment PDFs
+    • Concordance & Invalidations • 20.7M+ HC & Tribunal analytics • pypdfium2 extraction
+    • SC metadata & citations     • DuckDB httpfs (256 MB / 10s)   • 256 MB zstd disk LRU
 ```
 
-## Licensing & Attribution
+### Repository layout
 
-- **Source code:** Apache-2.0 — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
-- **Legal corpus & exclusions:** Primary Indian statutes and judgments are reproduced under **Indian Copyright Act, 1957 s. 52(1)(q)** and ***Eastern Book Company v. D.B. Modak*, (2008) 1 SCC 1** (commercial reporter headnotes and s. 228A / BNS s. 72 / POCSO protected orders are excluded).
-- **Non-commercial datasets:** Default research packs bundle DDL 81M District Courts (`CC-BY-NC-SA-4.0`) and ILDC (`CC-BY-NC-4.0`) tagged `commercial_safe=false`. Commercial operators must set `NYAYA_COMMERCIAL_SAFE_ONLY=1` or pass `commercial_safe_only=true`. See [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md).
+| Component | Version | Role & Stack | Documentation |
+|---|---|---|---|
+| [`mcp/`](mcp/) | `2.0.0` | Core `nyaya-mcp` Python package: 12 MCP tools, 8 resources, 4 prompts, REST `/api/*`, SQLite/LanceDB/DuckDB/PDF storage layers, security/rate-limit middleware, and `nyaya-ingest` CLI. | [`mcp/README.md`](mcp/README.md) |
+| [`web/`](web/) | `2.0.0` | Next.js 16 + React 19 static SPA (`web/out/`) providing the Home, Corpus Explorer, Citation Anatomy, and Architecture pages. | [`web/README.md`](web/README.md) |
+| [`chat/`](chat/) | `2.0.0` | Optional FastAPI + LangGraph assistant (`nyaya-chat`) using an 8-tool allowlist, shared citation verification, and `ChatNVIDIA` (mounted at `/chat` only when `NVIDIA_API_KEY` is set). | [`chat/README.md`](chat/README.md) |
 
-## Security
+---
 
-Nyaya treats all primary legal text as **untrusted data** (`<corpus_text ... trust="untrusted_primary_law">`, OWASP LLM01). Rate limits, streaming body caps, security headers, DuckDB/S3 isolation, and vulnerability disclosure are documented in [`SECURITY.md`](SECURITY.md) and [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md).
+## Licensing, Sources & Security
+
+- **Code license:** Apache-2.0 — see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+- **Legal corpus & exclusions:** Primary Indian statutes and judgments are reproduced under **Indian Copyright Act, 1957 s. 52(1)(q)** and ***Eastern Book Company v. D.B. Modak*, (2008) 1 SCC 1** (commercial reporter headnotes and s. 228A / BNS s. 72 / POCSO protected orders are excluded). See [`TRUSTED_SOURCES.md`](TRUSTED_SOURCES.md).
+- **Non-commercial datasets:** Research packs can include `DDL` 81M District Courts (`CC-BY-NC-SA-4.0`) and `ILDC` (`CC-BY-NC-4.0`) tagged `commercial_safe=false`. Commercial deployments should set `NYAYA_COMMERCIAL_SAFE_ONLY=1`.
+- **Security & prompt-injection isolation:** All retrieved legal text is framed as untrusted data (`<corpus_text ... trust="untrusted_primary_law">`, OWASP LLM01). Rate limits, streaming body caps, security headers, and vulnerability reporting are documented in [`SECURITY.md`](SECURITY.md).
+- **Contributing & releases:** See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), and [`CHANGELOG.md`](CHANGELOG.md).
