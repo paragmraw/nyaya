@@ -12,7 +12,7 @@ const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
 export const metadata: Metadata = {
   title: "Home",
   description:
-    "Zero-DB-ops Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 15 tribunals, 38k+ Supreme Court judgments, and 20.7M+ High Court orders.",
+    "Database-free Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 15 tribunals, 38k+ Supreme Court judgments, and 20.7M+ High Court orders.",
   openGraph: pageOpenGraph({
     title: "Nyaya v2.0 - Indian Law MCP & Legal Research Assistant",
     description:
@@ -29,7 +29,7 @@ function HomePageContent() {
           <p className="eyebrow">INDIAN LAW MCP v{API_VERSION} · PURE LEXICAL &amp; CITATION GRAPH</p>
           <h1>Verify Indian statutes, transitions &amp; case law.</h1>
           <p className="lead">
-            A zero-DB-ops legal MCP server and research assistant. Every reply resolves to numbered articles, sections, neutral citations, or judgments with license and validity metadata.
+            A database-free legal MCP server and research assistant. Every reply resolves to numbered articles, sections, neutral citations, or judgments with license and validity metadata.
           </p>
           <HomeStats />
         </div>

@@ -86,7 +86,7 @@ export const INFRA: StackRow[] = [
   },
   {
     name: "Bucket Object Storage",
-    role: "Private Tigris S3-compatible Railway Storage Bucket holding LanceDB BM25 tables and compacted ZSTD Parquet partitions with scale-to-zero compute.",
+    role: "Private Tigris S3-compatible Railway Storage Bucket holding LanceDB BM25 tables and compacted ZSTD Parquet partitions with on-demand serverless compute.",
     tool: "Railway Storage Bucket",
   },
   {
@@ -134,7 +134,7 @@ export const TODAY: OpennessItem[] = [
 ];
 
 export const PLANNED: OpennessItem[] = [
-  { on: false, text: "Phase 2 optional hybrid dense vectors & reranking", meta: "phase 2" },
+  { on: false, text: "Optional hybrid dense vectors & reranking", meta: "planned" },
   { on: false, text: "OCR pipeline for pre-2010 scanned High Court PDFs", meta: "planned" },
   { on: false, text: "Pre-1950 Privy Council & Federal Court archives", meta: "planned" },
   { on: false, text: "Expert-curated overruled/distinguished treatment labels", meta: "planned" },

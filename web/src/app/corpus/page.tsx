@@ -110,9 +110,9 @@ export default function CorpusPage() {
             </div>
             <div className="roadmap">
               <div className="roadmap-item">
-                <div className="ri-name">Phase 2 hybrid dense retrieval</div>
+                <div className="ri-name">Optional hybrid dense retrieval</div>
                 <div className="ri-desc">Pluggable <code>RetrievalEngine</code> support for optional vector search and cross-encoder reranking alongside FTS5 / BM25.</div>
-                <div className="ri-eta">Phase 2</div>
+                <div className="ri-eta">Planned</div>
               </div>
               <div className="roadmap-item">
                 <div className="ri-name">Pre-2010 scanned PDF OCR</div>
