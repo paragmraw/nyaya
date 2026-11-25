@@ -119,10 +119,12 @@ test("legal pages avoid overclaims about data handling", () => {
 
 test("contact page names the real channels", () => {
   const src = pageSrc("/contact/");
-  assert.ok(src.includes("mail@parag.tech"), "contact page missing the operator email");
+  // The page single-sources identifiers from legal-facts.ts; the guard
+  // asserts the constants are actually used (their values are pinned by
+  // the constants test above).
   assert.ok(
-    src.includes("github.com/paragmraw/nyaya"),
-    "contact page missing the GitHub repository",
+    /CONTACT_EMAIL/.test(src) && /REPO_URL/.test(src),
+    "contact page must reach out via legal-facts CONTACT_EMAIL and REPO_URL",
   );
   // Security reporting must NOT invite public issue disclosure (SECURITY.md).
   const lower = src.toLowerCase();
