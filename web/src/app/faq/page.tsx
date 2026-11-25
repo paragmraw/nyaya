@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Breadcrumb from "@/components/Breadcrumb";
-import StructuredData, { faqSchema } from "@/components/StructuredData";
+import StructuredData from "@/components/StructuredData";
+// Import the schema from the pure-data module: a named export read off a
+// "use client" module is a client reference in a server component, so
+// faqSchema.mainEntity would be undefined at prerender time.
+import { faqSchema } from "@/lib/schema";
 import { pageOpenGraph } from "@/lib/site";
 
 export const metadata: Metadata = {
