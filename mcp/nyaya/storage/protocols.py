@@ -1,4 +1,4 @@
-"""Protocol contracts for Nyaya v2.0 zero-Supabase storage and retrieval."""
+"""Protocol contracts for Nyaya v2.0 embedded and object-storage retrieval."""
 
 from __future__ import annotations
 
@@ -133,7 +133,7 @@ class CorpusBackend(Protocol):
 
 @runtime_checkable
 class RetrievalEngine(Protocol):
-    """Pluggable search contract: Phase 1 = pure lexical+metadata; Phase 2 swaps hybrid+rerank."""
+    """Pluggable search contract supporting pure lexical+metadata retrieval and optional hybrid/reranked implementations."""
 
     def search_statutes(self, q: StatuteSearchQuery) -> StatuteSearchResponse: ...
 

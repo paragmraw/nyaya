@@ -403,12 +403,12 @@ def publish_release(
         return result
 
     if use_bucket and bucket_client is not None:
-        # Phase 1: Upload all immutable release objects + LanceDB files
+        # Step 1: Upload all immutable release objects + LanceDB files
         for remote_key, payload, ctype in immutable_items:
             _upload_payload(bucket_client, remote_key, payload, ctype)
         for remote_key, fpath, ctype in lancedb_items:
             _upload_payload(bucket_client, remote_key, fpath, ctype)
-        # Phase 2: Atomically swap `current/manifest.json` ONLY after all immutable objects succeed
+        # Step 2: Atomically swap `current/manifest.json` ONLY after all immutable objects succeed
         bucket_client.upload_bytes("current/manifest.json", manifest_bytes, content_type="application/json")
         fin = getattr(bucket_client, "finalize", None)
         if callable(fin):

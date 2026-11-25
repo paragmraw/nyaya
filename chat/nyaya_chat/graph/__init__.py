@@ -1,9 +1,8 @@
 """Graph assembly: agent → parallel tools → agent, with gated reflection.
 
-Phase 1 pipeline collapse: ONE streaming, tool-bound agent node replaces the
-old supervisor (structured ToolPlan planner + corrective retry) and synthesis
-nodes — ``START → agent → (tools → agent | END)``. One LLM round trip on the
-answer path replaces up to three.
+Single-node streaming pipeline: one streaming, tool-bound agent node handles
+both retrieval planning and answer composition — ``START → agent → (tools → agent | END)``.
+This avoids separate planner and synthesis LLM round trips on the answer path.
 
 This module builds the compiled ``StateGraph`` and holds its module-level
 lifecycle state (:func:`get_graph` / :func:`get_graph_if_ready` /

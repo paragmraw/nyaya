@@ -1,4 +1,4 @@
-"""Zero-Supabase runtime configuration for nyaya v2.0.
+"""Stateless runtime configuration for nyaya v2.0.
 
 Importing this module or ``nyaya`` has zero I/O side effects: ``get_settings()``
 is evaluated lazily only when requested by the runtime, CLI, or HTTP server.

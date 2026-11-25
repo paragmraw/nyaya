@@ -40,7 +40,7 @@ def test_commercial_safe_only_env(monkeypatch):
 
 
 def test_agent_pipeline_defaults(monkeypatch):
-    """The overhaul's pipeline-collapse defaults: one agent model with thinking
+    """Default single-agent pipeline configuration: one agent model with thinking
     off, a single gated reflection round, and a 60s turn budget (TTFT <4s /
     total <20s targets)."""
     from nyaya_chat import config

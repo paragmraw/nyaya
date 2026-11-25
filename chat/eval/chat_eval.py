@@ -277,7 +277,7 @@ class Scenario:
     category: str
     expected_behavior: str = ""
     history: list[dict[str, str]] | None = None
-    # Hard budgets post-overhaul (plan target: TTFT <4s, full answer <20s).
+    # Hard latency gating budgets (target: TTFT <4s, full answer <20s).
     max_latency_ms: float = 20000
     max_ttft_ms: float = 4000
 
@@ -358,14 +358,13 @@ SCENARIOS: list[Scenario] = [
 # ---------------------------------------------------------------------------
 
 # Soft checks: recorded and reported as warnings, but excluded from the
-# gating pass/fail arithmetic. Phase 0 used this to record the pre-change
-# baseline without red-gating latency/TTFT; Phase 4 emptied the set — every
-# check, including the hard 20000ms latency / 4000ms TTFT budgets, gates.
+# gating pass/fail arithmetic. Empty by default so every check — including
+# the hard 20000ms latency and 4000ms TTFT budgets — is gating.
 SOFT_CHECKS: frozenset[str] = frozenset()
 
 # Canned-path latency budgets are 200ms of SERVER compute; the harness measures
-# end-to-end from the runner, so a live host (DNS + TLS + RTT to Railway — the
-# Phase 0 baseline recorded canned latencies up to 1.1s from network alone)
+# end-to-end from the runner, so a live host (DNS + TLS + RTT to Railway — where
+# remote canned requests can see up to ~1.1s from network RTT alone)
 # fails healthy runs on jitter. When the target is not local, canned scenarios
 # get a network-tolerant cap instead. Local runs keep the strict 200ms.
 CANNED_LIVE_LATENCY_MS = 1500.0
@@ -432,9 +431,9 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
         f"latency={result.latency_ms:.0f}ms (max={scenario.max_latency_ms:.0f}ms)",
     ))
 
-    # Time-to-first-token budget (hard since the overhaul: the plan target is
-    # TTFT <4s for legal scenarios; guardrail scenarios are canned so ttft is
-    # 0 by the time the response body is fully read in one chunk).
+    # Time-to-first-token gating budget (TTFT <4s for legal scenarios; guardrail
+    # scenarios are canned so ttft is 0 by the time the response body is fully
+    # read in one chunk).
     result.checks.append((
         "ttft_ok",
         result.time_to_first_token_ms == 0 or result.time_to_first_token_ms <= scenario.max_ttft_ms,

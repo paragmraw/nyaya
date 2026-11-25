@@ -1,4 +1,4 @@
-"""Unit tests for the zero-Supabase v2 runtime config loader."""
+"""Unit tests for the v2 stateless runtime config loader."""
 
 from __future__ import annotations
 
