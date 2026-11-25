@@ -17,7 +17,7 @@ A clear and concise description of any alternative solutions or features you've 
 
 ## Component
 Which component(s) would this affect?
-- [ ] `mcp/` (MCP v2.0 server: 12 tools, 8 `nyaya://` resources, 4 prompts, REST `/api/*`, Option R2 storage/retrieval)
+- [ ] `mcp/` (MCP v2.0 server: 12 tools, 8 `nyaya://` resources, 4 prompts, REST `/api/*`, SQLite/LanceDB/DuckDB/S3 storage/retrieval)
 - [ ] `ingest/` (`mcp/nyaya/ingest/`: `nyaya-ingest` CLI, `sources.lock.yaml`, reference YAML data, `verify-gate`)
 - [ ] `chat/` (Optional LangGraph + FastAPI `/chat` assistant, shared `nyaya.citations` verifier, `retrieval_eval.py`)
 - [ ] `web/` (Next.js 16 static export SPA)

@@ -12,7 +12,7 @@ Briefly describe the changes in this PR.
 - [ ] CI/CD / Infra change
 
 ## Component(s) affected
-- [ ] `mcp/` (MCP v2.0 server, storage/retrieval, REST `/api/*`, Option R2)
+- [ ] `mcp/` (MCP v2.0 server, storage/retrieval, REST `/api/*`, SQLite/LanceDB/DuckDB/S3)
 - [ ] `ingest/` (`mcp/nyaya/ingest/` pipeline, reference YAML tables, `verify-gate`)
 - [ ] `chat/` (Optional LangGraph + FastAPI `/chat` sub-app, shared citation verifier, evals)
 - [ ] `web/` (Next.js 16 static export SPA)

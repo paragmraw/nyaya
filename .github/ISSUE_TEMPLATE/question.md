@@ -18,7 +18,7 @@ Provide any relevant context:
 ## Environment (if relevant)
 - OS:
 - Python / Node version:
-- Mode / Deployment: [`uvx nyaya-mcp` (`stdio`) / Local HTTP / Docker Compose / Railway (`Option R2`) / `mini_corpus` fixture]
+- Mode / Deployment: [`uvx nyaya-mcp` (`stdio`) / Local HTTP / Docker Compose / Railway (`SQLite/LanceDB/DuckDB/S3`) / `mini_corpus` fixture]
 - Commercial-safe setting (`NYAYA_COMMERCIAL_SAFE_ONLY`):
 
 ## Additional information
