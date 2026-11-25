@@ -34,7 +34,7 @@ export default function Footer() {
     else window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // The home page is a single-viewport layout (overflow: hidden) — no footer.
+  // The home page is a single-viewport layout (overflow: hidden), so no footer.
   // Info pages scroll and show the footer with a back-to-top button.
   if (isHome) return null;
 

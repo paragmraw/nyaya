@@ -55,11 +55,11 @@ export default function DisclaimerPage() {
             </p>
             <p>
               <strong>Verification statuses are evidence, not verdicts.</strong>{" "}
-              The citation auditor reports concrete outcomes &mdash; an exact
+              The citation auditor reports concrete outcomes: an exact
               canonical tuple resolved in the corpus (<code>VERIFIED</code>),
               a repealed or struck-down statute, a verbatim quote matched or
               mismatched, a syntax-valid citation with no matching record
-              (<code>NOT_FOUND_IN_CORPUS</code>) &mdash; but a VERIFIED result
+              (<code>NOT_FOUND_IN_CORPUS</code>); but a VERIFIED result
               means the tuple exists and is in force <em>in the indexed
               corpus</em>, and nothing more.
             </p>
@@ -79,7 +79,7 @@ export default function DisclaimerPage() {
           <div className="section-head">
             <h2>Honest corpus gaps</h2>
             <p className="sec-desc">
-              Known holes in coverage &mdash; the same limits the /citations
+              Known holes in coverage, the same limits the /citations
               page documents.
             </p>
           </div>
@@ -131,7 +131,7 @@ export default function DisclaimerPage() {
               (especially across the IPC&nbsp;/ CrPC&nbsp;/ IEA to
               BNS&nbsp;/ BNSS&nbsp;/ BSA transition of 2024-07-01, with BNSS
               s. 531 savings), and never file from a secondary description.
-              Nyaya is built to make those checks faster &mdash; it cannot do
+              Nyaya is built to make those checks faster. It cannot do
               them for you.
             </p>
             <p>
@@ -139,7 +139,7 @@ export default function DisclaimerPage() {
               available&rdquo;. See the <a href="/terms/">Terms of use</a> for
               the warranty and liability provisions, the{" "}
               <a href="/faq/">FAQ</a> for common questions, and the{" "}
-              <a href="/contact/">Contact page</a> &mdash; reports of a wrong
+              <a href="/contact/">Contact page</a>; reports of a wrong
               quote or wrong status are welcome at{" "}
               <code>{CONTACT_EMAIL}</code>.
             </p>

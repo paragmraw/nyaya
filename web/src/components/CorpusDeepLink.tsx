@@ -46,7 +46,7 @@ export default function CorpusDeepLink({ acts }: { acts: ActLike[] | undefined }
       return (
         <div role="status" className="deep-link-notice" style={noticeStyle}>
           <span>
-            Cited source <strong>{link.ref ? `${matched} · ${link.ref}` : matched}</strong> —
+            Cited source <strong>{link.ref ? `${matched} · ${link.ref}` : matched}</strong>,
             highlighted among the indexed sources below. Provision and judgment text is
             retrieved via MCP or the chat API.
           </span>

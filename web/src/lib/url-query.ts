@@ -136,7 +136,7 @@ export function getUrlQueryServer(): string {
   return "";
 }
 
-// Write a patch to the URL (replaceState — no history entry) preserving the
+// Write a patch to the URL (replaceState: no history entry) preserving the
 // path and hash.
 export function writeUrlQuery(patch: Partial<Omit<ViewParams, "sort"> & { sort?: number }>) {
   try {
@@ -149,6 +149,6 @@ export function writeUrlQuery(patch: Partial<Omit<ViewParams, "sort"> & { sort?:
       `${window.location.pathname}${query ? `?${query}` : ""}${hash}`,
     );
   } catch {
-    /* navigation history unavailable (e.g. sandboxed frame) — view still works */
+    /* navigation history unavailable (e.g. sandboxed frame); view still works */
   }
 }

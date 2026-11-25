@@ -1,4 +1,4 @@
-/* ─── tokens (Paper — bright, clean, deep-blue accent) ─────────────── */
+/* ─── tokens (Paper: bright, clean, deep-blue accent) ─────────────── */
 /* Verbatim from scratch/Web-Prototype/indian-law-ai.html :root  */
 :root {
   color-scheme: light;
@@ -7,7 +7,7 @@
   --surface-2: oklch(95.5% 0.004 95);   /* recessed surface */
   --fg:        oklch(20% 0.02 264);      /* deep cool ink */
   --muted:     oklch(50% 0.012 264);     /* muted slate */
-  --border:    oklch(84% 0.008 264);     /* hairline — darkened from 91% for WCAG 1.4.11 (3:1 UI boundaries) */
+  --border:    oklch(84% 0.008 264);     /* hairline: darkened from 91% for WCAG 1.4.11 (3:1 UI boundaries) */
   --accent:    oklch(47% 0.145 252);     /* authoritative deep blue */
   --error:     #d44430;                  /* error text / borders (light scheme) */
 
@@ -47,7 +47,7 @@
    is the default; an explicit user choice from the Topnav toggle is stamped
    on <html> as `data-theme` pre-paint (src/lib/theme.ts) and wins.
    Specificity: :root defaults < media-scoped :not() < [data-theme="dark"].
-   Plain CSS variables only — no Tailwind-dependent syntax — so P5's
+   Plain CSS variables only (no Tailwind-dependent syntax), so P5's
    preflight removal cannot break these tokens. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -91,7 +91,7 @@
 }
 
 /* ─── vendored reset (replaces Tailwind preflight) ────────────────
-   Tailwind's toolchain was removed in P5 (zero utilities were used — all
+   Tailwind's toolchain was removed in P5 (zero utilities were used: all
    styling is hand-written below). This is the subset of preflight behavior
    the component CSS actually relies on; every rule here reproduces what
    @tailwind base was emitting, so removal is pixel-neutral:
@@ -99,7 +99,7 @@
    • universal border-box + 0-width solid border default (styles that set only
      border-color/border-width keep working; full `border:` declarations win)
    • heading/paragraph/list margin + intrinsic-size stripping (h1–h6, p,
-     blockquote, pre, figure, ul/ol) — page and markdown styles re-add their
+     blockquote, pre, figure, ul/ol): page and markdown styles re-add their
      own sizes and spacing downstream
    • form controls/button chrome: font/color inherit, no UA padding/margin or
      gray button background, text-transform reset
@@ -156,7 +156,7 @@ body {
   display: flex;
   flex-direction: column;
 }
-/* Home page: lock the viewport — no page scroll, single-viewport split frame.
+/* Home page: lock the viewport: no page scroll, single-viewport split frame.
    The .home class is set on <body> by RouteBodyClass based on usePathname().
    height:100% gives .frame a definite height so .pane-left scrolls internally. */
 body.home {
@@ -176,7 +176,7 @@ img { height: auto; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; cursor: pointer; }
 
-/* ─── focus visibility (keyboard a11y — 2.4.7 / 1.4.11) ───────────── */
+/* ─── focus visibility (keyboard a11y: 2.4.7 / 1.4.11) ───────────── */
 :focus { outline: none; }
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -268,7 +268,7 @@ body.home .lead { max-width: 46ch; }
 .num  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* ─── chrome: topnav ─────────────────────────────────────────────── */
-/* Base topnav: non-sticky (home page uses this — sticky breaks inside
+/* Base topnav: non-sticky (home page uses this: sticky breaks inside
    overflow: hidden). Info pages add .topnav-sticky via the Topnav component. */
 .topnav {
   flex-shrink: 0;
@@ -290,7 +290,7 @@ body.home .lead { max-width: 46ch; }
 .topnav .meta { color: var(--muted); }
 .topnav .github-link { display: inline-flex; align-items: center; color: var(--muted); padding: 4px; border-radius: 6px; transition: color 0.2s ease, background 0.2s ease; }
 .topnav .github-link:hover { color: var(--fg); background: var(--accent-soft); }
-/* Theme toggle — same chrome as the github link. Both sun and moon icons are
+/* Theme toggle: same chrome as the github link. Both sun and moon icons are
    always in the DOM; visibility is CSS-driven by [data-theme] on <html> (set
    pre-paint by src/lib/theme.ts), so there is no hydration flicker. */
 .topnav .theme-toggle {
@@ -311,7 +311,7 @@ html[data-theme="dark"] .theme-icon-moon { display: none; }
   html:not([data-theme="light"]):not([data-theme="dark"]) .theme-icon-sun { display: none; }
   html:not([data-theme="light"]):not([data-theme="dark"]) .theme-icon-moon { display: block; }
 }
-/* Mobile menu toggle — hidden on desktop, shown at ≤640px */
+/* Mobile menu toggle: hidden on desktop, shown at ≤640px */
 .topnav .menu-toggle {
   display: none;
   flex-direction: column; justify-content: center; gap: 4px;
@@ -332,7 +332,7 @@ html[data-theme="dark"] .theme-icon-moon { display: none; }
 .topnav .menu-toggle[aria-expanded="true"] .menu-bar:nth-child(1) { transform: translateY(6px) rotate(45deg); }
 .topnav .menu-toggle[aria-expanded="true"] .menu-bar:nth-child(2) { opacity: 0; transform: scaleX(0.4); }
 .topnav .menu-toggle[aria-expanded="true"] .menu-bar:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
-/* Mobile dropdown nav — hidden on desktop (display:none), shown at ≤640px.
+/* Mobile dropdown nav: hidden on desktop (display:none), shown at ≤640px.
    Animates height via the grid-template-rows 0fr→1fr trick (the only
    reliable way to transition to height:auto without a pixel max-height). */
 .topnav .mobile-nav {
@@ -343,7 +343,7 @@ html[data-theme="dark"] .theme-icon-moon { display: none; }
 }
 .topnav .mobile-nav > .mobile-nav-scroll { overflow: hidden; min-height: 0; }
 .topnav .mobile-nav.open { grid-template-rows: 1fr; }
-/* Accent wipe line across the top of the panel — scales from 0→1 on open.
+/* Accent wipe line across the top of the panel: scales from 0→1 on open.
    Absolutely positioned so it doesn't become a grid item (which would add
    an auto-sized row and break the 0fr→1fr height animation). */
 .topnav .mobile-nav::before {
@@ -569,7 +569,7 @@ pre.mcp-json .n { color: var(--fg); }
   box-shadow: var(--shadow-sm);
 }
 
-/* Locked/disabled state — non-interactive but readable. The composer carries
+/* Locked/disabled state: non-interactive but readable. The composer carries
    the explicit reason copy (ChatComposer disabledHint); blurring the whole
    panel hid exactly the information (coverage, model) a visitor needs to
    decide to come back. */
@@ -601,7 +601,7 @@ pre.mcp-json .n { color: var(--fg); }
   color: var(--accent);
 }
 .chat-head .ch-logo { height: 14px; width: auto; display: block; }
-/* The NVIDIA wordmark SVG is near-black on transparent — lift it out of the
+/* The NVIDIA wordmark SVG is near-black on transparent: lift it out of the
    dark bubble (icon stays CSS-driven; the <img> cannot inherit color). */
 html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(180deg) saturate(1.1); }
 @media (prefers-color-scheme: dark) {
@@ -660,7 +660,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
 }
 /* User bubbles keep raw text wrapping. */
 .msg.user .bubble { white-space: pre-wrap; }
-/* Bot bubbles render markdown — let the .md block own its spacing. */
+/* Bot bubbles render markdown: let the .md block own its spacing. */
 .msg.bot .bubble .md > *:first-child { margin-top: 0; }
 .msg.bot .bubble .md > *:last-child { margin-bottom: 0; }
 .msg.bot .bubble .md p { margin: 0 0 8px; }
@@ -814,7 +814,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
 }
 .composer .send:disabled { opacity: 0.5; cursor: not-allowed; }
 .composer .send svg { width: 17px; height: 17px; }
-/* Stop variant — same footprint as send, but signals halt. */
+/* Stop variant: same footprint as send, but signals halt. */
 .composer .send.stop {
   background: var(--fg); border-color: var(--fg);
 }
@@ -831,7 +831,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
 .msg.bot .bubble .tools {
   margin-top: 8px;
   /* Guard against the global .mcp-tools-wrap .tools table styles leaking
-     in — the chat tool-calls container is a plain wrapper, not a bordered
+     in: the chat tool-calls container is a plain wrapper, not a bordered
      table; the chips carry their own borders. */
   border: none; border-radius: 0; overflow: visible;
 }
@@ -990,7 +990,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   white-space: pre-wrap; word-break: break-word;
 }
 
-/* Phase status indicator with spinner — shown while the agent is working
+/* Phase status indicator with spinner: shown while the agent is working
    (analyzing / searching / composing) and no content has arrived yet. */
 .chat-phase {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1005,7 +1005,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   flex-shrink: 0;
 }
 
-/* Agent plan (planning trace, collapsible — like reasoning). */
+/* Agent plan (planning trace, collapsible: like reasoning). */
 .plan-trace {
   margin-top: 8px; font-size: 11px;
 }
@@ -1022,7 +1022,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   white-space: pre-wrap; word-break: break-word;
 }
 
-/* Tool chip with args — allow slightly wider to fit args label. */
+/* Tool chip with args: allow slightly wider to fit args label. */
 .tool-chip-name { white-space: nowrap; max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 
 /* ─── home page split frame ─────────────────────────────────────── */
@@ -1047,7 +1047,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   padding: var(--gap-md) var(--gap-lg) var(--gap-lg) var(--gap-lg);
   position: relative;
   /* Grid items default to min-height/min-width: auto, so they grow to fit
-     content instead of staying within the track — which prevents the chat
+     content instead of staying within the track: which prevents the chat
      body from ever overflowing (and thus from scrolling). Force them to 0
      so the pane is constrained to the grid track height. */
   min-height: 0;
@@ -1169,7 +1169,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   display: inline; font-family: var(--font-mono); font-size: 11px;
   color: var(--accent); cursor: pointer; border-bottom: 1px dashed var(--accent);
   transition: background 0.15s; padding: 4px 2px; border-radius: 2px;
-  /* Touch-friendly tap target — inline elements don't honor height, so we use
+  /* Touch-friendly tap target: inline elements don't honor height, so we use
      vertical padding to expand the hit area to ≥24px for WCAG 2.5.5. */
   line-height: 1.4;
 }
@@ -1281,7 +1281,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     border-top: 1px solid color-mix(in oklch, var(--fg) 8%, transparent);
     border-bottom: 1px solid color-mix(in oklch, var(--fg) 8%, transparent);
-    /* Top-edge inner highlight — the signature glass sheen */
+    /* Top-edge inner highlight: the signature glass sheen */
     box-shadow: 0 8px 32px -12px color-mix(in oklch, var(--fg) 22%, transparent), inset 0 1px 0 color-mix(in oklch, var(--bg) 60%, transparent);
   }
   .topnav .mobile-nav > .mobile-nav-scroll {
@@ -1302,7 +1302,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
     transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.32, 0.72, 0, 1), color 0.18s ease, background 0.22s ease, box-shadow 0.22s ease;
   }
   .topnav .mobile-nav a:last-child { border-bottom: none; }
-  /* Per-link stagger — revealed when the panel is open */
+  /* Per-link stagger: revealed when the panel is open */
   .topnav .mobile-nav.open a { opacity: 1; transform: translateY(0); }
   .topnav .mobile-nav.open a:nth-child(1) { transition-delay: 0.06s; }
   .topnav .mobile-nav.open a:nth-child(2) { transition-delay: 0.10s; }
@@ -1390,7 +1390,7 @@ html[data-theme="dark"] .chat-head .ch-logo { filter: invert(0.92) hue-rotate(18
   .btn, .mcp-card, .tag, .cap-table tbody tr, .corpus-table tbody tr,
   .pipe-card, .stack-row, .tool-row, .filter-chip, .topnav nav a,
   .inline-cite, .source-card, .pipe-step { transition: none; }
-  /* Keep mobile menu functional but instant — no slide/stagger/wipe */
+  /* Keep mobile menu functional but instant: no slide/stagger/wipe */
   .topnav .mobile-nav, .topnav .mobile-nav::before,
   .topnav .mobile-nav a, .topnav .mobile-nav a::before,
   .topnav .mobile-nav a::after, .topnav .menu-toggle .menu-bar { transition: none; }

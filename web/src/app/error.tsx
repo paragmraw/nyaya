@@ -26,7 +26,7 @@ export default function ErrorBoundary({
           <p className="eyebrow">Something broke</p>
           <h1>This page hit an unexpected error</h1>
           <p className="lead" style={{ marginInline: "auto" }}>
-            Try loading it again. If the error repeats, it is on us — the
+            Try loading it again. If the error repeats, it is on us. The
             reference below helps pinpoint it.
           </p>
           {error.digest && (

@@ -34,7 +34,7 @@ export default function CorpusPage() {
             <p className="eyebrow">Corpus · v{API_VERSION}</p>
             <h1>Open-India-Law Pack</h1>
             <p className="lead lead-wide">
-              Three judicial tiers, 37 legislative jurisdictions, 12 financial and sectoral regulators, and 15 tribunals — stored across baked SQLite FTS5, LanceDB native BM25, DuckDB ZSTD Parquet, and on-demand AWS Open Data PDFs.
+              Three judicial tiers, 37 legislative jurisdictions, 12 financial and sectoral regulators, and 15 tribunals; stored across baked SQLite FTS5, LanceDB native BM25, DuckDB ZSTD Parquet, and on-demand AWS Open Data PDFs.
             </p>
           </section>
 

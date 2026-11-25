@@ -49,11 +49,11 @@ export default function CitationAnatomy() {
             resolve directly without bare integer ambiguity.
           </p>
           <p>
-            Statutory references parse sub-sections and Orders/Rules — e.g.{" "}
+            Statutory references parse sub-sections and Orders/Rules, e.g.{" "}
             <a href="#statute-iea-cpc" className="inline-cite" onClick={(e) => { e.preventDefault(); onCiteClick("statute-iea-cpc"); }}>
               IEA s.65B(4) (repealed → BSA s.63) &amp; CPC O.7 R.11
             </a>
-            {" "}— surfacing automatic repeal, savings (BNSS s.531), and invalidation flags alongside raw citation-graph edges (<code>unverified_automated</code>).
+            , surfacing automatic repeal, savings (BNSS s.531), and invalidation flags alongside raw citation-graph edges (<code>unverified_automated</code>).
           </p>
         </div>
 

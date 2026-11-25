@@ -26,7 +26,7 @@ const markdownComponents = {
 export type MarkdownContentProps = {
   text: string;
   // Streaming-plain mode: render the raw accumulated text with pre-wrap and
-  // NO markdown parse. Used while a message is still streaming — re-parsing
+  // NO markdown parse. Used while a message is still streaming, since re-parsing
   // growing content through react-markdown every animation frame is the
   // O(n²) that made long answers stutter; the plain render is a single text
   // node swap per frame. Callers flip plain=false on the authoritative final
@@ -52,7 +52,7 @@ function MarkdownContentImpl({ text, plain = false }: MarkdownContentProps) {
 }
 
 // Memoized: identical (text, plain) props skip the react-markdown parse
-// entirely — the render of a finished message re-uses the previous parse when
+// entirely: the render of a finished message re-uses the previous parse when
 // only surrounding state changed.
 const MarkdownContent = memo(MarkdownContentImpl);
 export default MarkdownContent;

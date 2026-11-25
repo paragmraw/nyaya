@@ -4,8 +4,8 @@
 // (chat/session.ts). This hook owns only what needs React state: the message
 // list, the assistant-bubble patch scoping, history building, retry
 // trimming, and (debounced) sessionStorage persistence. Everything between
-// "send" and the final assistant patch — fetch, SSE parsing, rAF batching,
-// citation stripping, tool events, corrections, errors, timeouts, cancel —
+// "send" and the final assistant patch (fetch, SSE parsing, rAF batching,
+// citation stripping, tool events, corrections, errors, timeouts, cancel)
 // lives in createChatSession and is node-tested in tests/chat-session.test.ts.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -44,7 +44,7 @@ export function useChat(): UseChat {
   // A mirror of the streaming flag for the same reason.
   const isStreamingFlagRef = useRef(false);
   const runIdRef = useRef(0);
-  // One session and one persist writer for the hook's lifetime — stable
+  // One session and one persist writer for the hook's lifetime: stable
   // non-render values, built once via a lazy useState initializer (the
   // if-null ref-init pattern is rejected by react-hooks/refs).
   const [session] = useState(() => createChatSession());
@@ -76,7 +76,7 @@ export function useChat(): UseChat {
   const retry = useCallback(() => {
     if (retryTextRef.current !== null || isStreamingRef.current) return;
     // Compute the trim from the messages mirror, then mutate refs and set
-    // state with plain values — never inside a state updater (strict mode).
+    // state with plain values, never inside a state updater (strict mode).
     const { trimmed, text } = trimForRetry(messagesRef.current);
     if (text === null) return;
     retryTextRef.current = text;

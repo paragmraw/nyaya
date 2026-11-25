@@ -31,7 +31,7 @@ export default function AccessibilityPage() {
             relying on colour alone (statuses always carry a text label).
             <strong>We have not commissioned a formal
             third-party conformance audit</strong>, so this page describes
-            what is implemented and what is known to fall short &mdash; not a
+            what is implemented and what is known to fall short, not a
             certification. If you hit a barrier, we want to hear about it:{" "}
             <code>{CONTACT_EMAIL}</code>.
           </p>
@@ -64,7 +64,7 @@ export default function AccessibilityPage() {
               and completion through an off-screen <code>aria-live</code>{" "}
               region; once done, the reply is read from the messages list
               like any other content. When a message nears the cap, the
-              remaining character count is exposed as text &mdash; currently
+              remaining character count is exposed as text: currently
               once fewer than 500 characters remain, before the
               4000-character cap stops further input.
             </p>
@@ -73,7 +73,7 @@ export default function AccessibilityPage() {
               follows your operating system&apos;s{" "}
               <code>prefers-color-scheme</code> light/dark setting, with an
               explicit toggle that persists locally (that preference is the
-              only <code>localStorage</code> entry &mdash; see the{" "}
+              only <code>localStorage</code> entry; see the{" "}
               <a href="/privacy/">Privacy statement</a>). Colour contrast and
               focus indicators are handled in the theme, and statuses carry
               text labels so state does not depend on colour alone.
@@ -106,7 +106,7 @@ export default function AccessibilityPage() {
               <strong>Scanned, image-only court PDFs are not
               transcribed.</strong> Documents that are effectively images are
               rejected by the extractor rather than run through OCR, so their
-              content is not text-accessible at all &mdash; an
+              content is not text-accessible at all, an
               accuracy-versus-availability trade-off, documented on the{" "}
               <a href="/disclaimer/">Disclaimer page</a>.
             </p>
@@ -130,7 +130,7 @@ export default function AccessibilityPage() {
               short description of what blocked you, and your assistive
               technology (screen reader, magnifier, switch device) if known.
               Accessibility reports are treated the same way as other
-              corrections &mdash; there is no rapid-response commitment
+              corrections; there is no rapid-response commitment
               beyond the security window, but they are read and acted on. See
               the <a href="/contact/">Contact page</a> for the full channel
               list.

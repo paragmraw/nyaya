@@ -4,7 +4,7 @@
 // <html>, set pre-paint by THEME_PREPAINT_SCRIPT (no FOUC) and persisted in
 // localStorage under THEME_STORAGE_KEY.
 //
-// Everything here is plain CSS-variable-compatible CSS — the tokens live on
+// Everything here is plain CSS-variable-compatible CSS: the tokens live on
 // `:root` / `[data-theme]` selectors with no Tailwind-dependent syntax, so
 // P5's Tailwind/preflight removal cannot break it (handoff noted in the
 // task-9 report).
@@ -28,7 +28,7 @@ export function resolveTheme(
 /**
  * Runs inline in <head>, before first paint, so the initial scheme is
  * correct with zero flash: stored choice wins, otherwise the OS setting.
- * Wrapped in try/catch — blocked storage or odd embeds must never break
+ * Wrapped in try/catch: blocked storage or odd embeds must never break
  * page load. Also sets `data-theme` on <html>, which globals.css reads.
  */
 export function themePrepaintScript(): string {
@@ -62,7 +62,7 @@ export function applyTheme(theme: Theme, persist: boolean): void {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
-      // storage unavailable (private mode, blocked) — theme still applies
+      // storage unavailable (private mode, blocked); theme still applies
       // for this document instance.
     }
   }

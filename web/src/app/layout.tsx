@@ -65,8 +65,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-// Browser-chrome tint per scheme. (Previously emitted twice — once via
-// `metadata.other` and once as a hand-written <meta> — and never adapted to
+// Browser-chrome tint per scheme. (Previously emitted twice, once via
+// `metadata.other` and once as a hand-written <meta>, and never adapted to
 // dark mode.)
 export const viewport: Viewport = {
   themeColor: [
@@ -89,7 +89,7 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <head>
-        {/* Pre-paint theme: stored choice wins, else OS preference — no FOUC. */}
+        {/* Pre-paint theme: stored choice wins, else OS preference; no FOUC. */}
         <script dangerouslySetInnerHTML={{ __html: themePrepaintScript() }} />
       </head>
       <body>

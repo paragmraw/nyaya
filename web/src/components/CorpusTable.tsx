@@ -102,7 +102,7 @@ export function resolveSourceMetadata(
 }
 
 // highlightAct: short_name (case-insensitive) of a row to highlight and scroll
-// into view — driven by citation deep-links (/corpus/?act=IPC&ref=s.302).
+// into view, driven by citation deep-links (/corpus/?act=IPC&ref=s.302).
 export default function CorpusTable({
   acts,
   sources,

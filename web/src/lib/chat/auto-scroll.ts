@@ -1,7 +1,7 @@
 // Follow-the-stream auto-scroll for the chat transcript.
 //
 // The old ChatPanel effect read scrollHeight/clientHeight on every message
-// flush — a forced layout per animation frame while tokens streamed. The
+// flush, a forced layout per animation frame while tokens streamed. The
 // scroller instead keeps a near-bottom flag updated by a PASSIVE scroll
 // listener (no forced layout, never blocks the scroll thread); the per-flush
 // hook only writes scrollTop when the user is still at the bottom.

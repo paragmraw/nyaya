@@ -178,7 +178,7 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
           disabledHint={disabled ? "Chat is currently disabled." : undefined}
           placeholder={
             unavailable
-              ? "Nyaya is unavailable right now — you can still retry or send anyway."
+              ? "Nyaya is unavailable right now; you can still retry or send anyway."
               : undefined
           }
         />

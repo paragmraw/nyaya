@@ -27,7 +27,7 @@ export default function ContactPage() {
           <p className="lead lead-wide">
             The primary channel is email: <code>{CONTACT_EMAIL}</code>. Send
             the purpose in the subject line and include the identifiers listed
-            below &mdash; they cut the round-trips dramatically. For bugs and
+            below: they cut the round-trips dramatically. For bugs and
             contributions, the repository&apos;s issue tracker is the right
             place:{" "}
             <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
@@ -65,7 +65,7 @@ export default function ContactPage() {
               <strong>Failed requests and chat errors.</strong> The chat and
               API error messages surface a request id (<code>rid</code>);
               the browser error screen shows a short error digest. Include
-              either in your email &mdash; neither contains your message
+              either in your email; neither contains your message
               content, but both point straight at the incident in server logs.
             </p>
             <p>
@@ -85,7 +85,7 @@ export default function ContactPage() {
               fix is released.
             </p>
             <p>
-              <strong>Bugs and contributions &mdash; not security.</strong>{" "}
+              <strong>Bugs and contributions, not security.</strong>{" "}
               For everything except security reports, the{" "}
               <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
                 GitHub repository

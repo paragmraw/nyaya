@@ -11,7 +11,7 @@ interface WebVitalMetric {
 }
 
 function sendToAnalytics(metric: WebVitalMetric) {
-  // Dev-only console reporting — there is no analytics endpoint, so keep
+  // Dev-only console reporting: there is no analytics endpoint, so keep
   // production builds free of any reporter call sites. Next statically
   // replaces NODE_ENV, so the dynamic import below is dead-code-eliminated
   // from production bundles entirely.

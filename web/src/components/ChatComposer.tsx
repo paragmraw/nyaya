@@ -5,12 +5,12 @@ import { useEffect, useRef, useState } from "react";
 // Composer limits. MAX mirrors the backend contract exactly
 // (chat/nyaya_chat/schemas.py: message max_length=4000) so the browser blocks
 // oversize submits instead of round-tripping a 422. The counter appears only
-// near the limit — a permanently visible counter is noise.
+// near the limit, since a permanently visible counter is noise.
 const MAX_MESSAGE_CHARS = 4000;
 const COUNTER_THRESHOLD = 3500;
 
 // Draft persistence: the typed-but-unsent message survives navigation within
-// the tab (sessionStorage is per-tab and cleared when the tab closes — the
+// the tab (sessionStorage is per-tab and cleared when the tab closes, the
 // right scope for a draft). Wrapped in try/catch: browsers set to block site
 // data, and some embedded contexts, throw on access.
 const DRAFT_KEY = "nyaya.chat.draft";
@@ -28,7 +28,7 @@ function writeDraft(text: string) {
     if (text) globalThis.sessionStorage?.setItem(DRAFT_KEY, text);
     else globalThis.sessionStorage?.removeItem(DRAFT_KEY);
   } catch {
-    /* storage unavailable — draft simply doesn't persist */
+    /* storage unavailable; draft simply doesn't persist */
   }
 }
 

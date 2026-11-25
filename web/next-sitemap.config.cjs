@@ -1,5 +1,5 @@
 /** @type {import('next-sitemap').IConfig} */
-// siteUrl mirrors SITE in web/src/lib/site.ts — keep in sync (this file is
+// siteUrl mirrors SITE in web/src/lib/site.ts; keep in sync (this file is
 // plain CJS run by npx, it cannot import the TS constant).
 module.exports = {
   siteUrl: 'https://nyaya.parag.tech',

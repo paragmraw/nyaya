@@ -2,7 +2,7 @@
 //
 // Extracted from components/ChatMessage.tsx (Task 10, item 1): the streamed
 // token path re-runs this on every render, so it lives in a plain module with
-// an input-keyed memo cache — re-renders that pass the same accumulated text
+// an input-keyed memo cache: re-renders that pass the same accumulated text
 // (tool-chip clicks, toggles, sibling updates) cost a Map lookup, and the
 // O(n) normalisation runs only when the text actually grew.
 
@@ -31,7 +31,7 @@ export function normaliseMd(src: string): string {
   const result = normaliseMdUncached(src);
   const cost = src.length + result.length;
   if (cost <= NORMALISE_CACHE_CAP_BYTES) {
-    // Map iterates in insertion order — evict oldest (FIFO) until the new
+    // Map iterates in insertion order; evict oldest (FIFO) until the new
     // entry fits within the byte budget.
     while (normaliseCache.size > 0 && normaliseCacheBytes + cost > NORMALISE_CACHE_CAP_BYTES) {
       const oldest = normaliseCache.keys().next().value;
@@ -151,7 +151,7 @@ function normaliseMdUncached(src: string): string {
   // list items (- * +), ordered list items (1.), fenced code (```), tables
   // (a line starting & ending with |), and horizontal rules (--- / *** / ___).
   //
-  // EXCEPTION: GFM table rows must NOT be separated from each other — GFM
+  // EXCEPTION: GFM table rows must NOT be separated from each other; GFM
   // requires the header, separator, and data rows on consecutive lines.
   const blockStart =
     /^(#{1,6}\s|>\s?|[-*+]\s|\d+[.)]\s|```| {4,}|\|.*\|\s*$|([-*_]\s?){3,}$)/;
@@ -161,7 +161,7 @@ function normaliseMdUncached(src: string): string {
     const cur = lines[i];
     const prev = out[out.length - 1];
     // Insert a blank line before a block-start marker, but not between
-    // consecutive GFM table rows (header, separator, data) — those must
+    // consecutive GFM table rows (header, separator, data); those must
     // stay on consecutive lines for GFM to recognise the table.
     const isTableSep = tableSeparator.test(cur.trim());
     const isTableData = tableDataRow.test(cur.trim());
