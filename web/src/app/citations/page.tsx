@@ -32,8 +32,8 @@ export default function CitationsPage() {
       <StructuredData data={citationsSchema} />
       <StructuredData data={faqSchema} />
       <main id="content" className="page">
-        <Breadcrumb />
         <div className="container">
+          <Breadcrumb />
           {/* hero */}
           <section>
             <p className="eyebrow">Citations</p>

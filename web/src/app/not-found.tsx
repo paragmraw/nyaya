@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 export default function NotFound() {
   return (
     <main id="content" className="page">
-      <Breadcrumb />
       <div className="container">
+        <Breadcrumb />
         <section style={{ paddingBlock: "8vh 12vh", textAlign: "center" }}>
           <p className="eyebrow">404</p>
           <h1>Page not found</h1>

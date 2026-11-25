@@ -23,8 +23,8 @@ export default function ArchitecturePage() {
     <>
       <StructuredData data={architectureSchema} />
       <main id="content" className="page">
-        <Breadcrumb />
         <div className="container">
+          <Breadcrumb />
           {/* hero */}
           <section>
             <p className="eyebrow">Architecture · v{API_VERSION}</p>

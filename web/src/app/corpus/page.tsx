@@ -27,8 +27,8 @@ export default function CorpusPage() {
     <>
       <StructuredData data={corpusSchema} />
       <main id="content" className="page">
-        <Breadcrumb />
         <div className="container">
+          <Breadcrumb />
           {/* hero */}
           <section>
             <p className="eyebrow">Corpus · v{API_VERSION}</p>
