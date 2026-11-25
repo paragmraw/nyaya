@@ -1,6 +1,6 @@
 // Unit tests for the debounced persistence writer (chat/persistence.ts).
 //
-// The old hook wrote sessionStorage on EVERY messages change — per animation
+// The old hook wrote sessionStorage on EVERY messages change, once per
 // frame during streaming. createPersistWriter coalesces those writes into one
 // trailing-debounce write (500ms default), with an immediate flushNow for run
 // end / reset. Timers and the sink are injected so this runs in node.
@@ -84,7 +84,7 @@ test("cancel drops the pending write without flushing", () => {
   assert.equal(writes.length, 0);
 });
 
-// Review finding: the debounced write must also defer SERIALIZATION — the old
+// Review finding: the debounced write must also defer SERIALIZATION: the old
 // code stringified the whole transcript on every schedule() call, so streaming
 // still paid one full JSON.stringify per frame patch even though the write
 // itself was debounced.

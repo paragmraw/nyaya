@@ -74,7 +74,7 @@ def fake_tools(monkeypatch):
     """Patch ``tools_layer.load_tools`` AND the rebound reference in
     ``nyaya_chat.graph`` to return scripted LangChain tools. (``graph.py``
     does ``from ..tools_layer import load_tools``, so patching only the
-    package function is not enough — the bound name in ``graph`` also needs
+    package function is not enough; the bound name in ``graph`` also needs
     patching.)"""
     from nyaya_chat import graph as graph_mod
     from nyaya_chat import tools_layer as tools_layer_mod
@@ -150,14 +150,16 @@ class FakeChatModel:
     or a dict turned into one.
 
     For structured output tests, set ``fm._structured_result`` to the
-    expected structured object (e.g. a ToolPlan or Intent).
+    expected structured object (e.g. an ``Intent`` or a plain scripted
+    value; ``Intent`` is the only structured-output schema the package
+    defines, in ``schemas_llm.py``).
 
     Fake protocol for ``graph._make_model``: the class attribute
     ``nyaya_fake_model = True`` marks an instance as a test fake, and
     ``with_generation_params(temperature=..., max_tokens=...)`` receives the
     phase's generation settings. Fakes are scripted, so "honouring" the
     settings means recording them (on ``.temperature`` /
-    ``.max_completion_tokens``) for assertions — not changing the scripted
+    ``.max_completion_tokens``) for assertions, not changing the scripted
     output.
     """
 
@@ -193,7 +195,7 @@ class FakeChatModel:
     def invoke(self, messages, **kw):
         self.calls.append(messages)
         # A structured-output model returns the parsed schema object, not a
-        # scripted AIMessage — honour _structured_result when it is set.
+        # scripted AIMessage; honour _structured_result when it is set.
         if self._structured_result is not None:
             return self._structured_result
         if self._i < len(self.responses):
@@ -221,7 +223,8 @@ class _FakeStructuredRunnable:
     """Stand-in for the Runnable returned by ``with_structured_output``.
 
     Tests set ``FakeChatModel._structured_result`` to control what
-    ``ainvoke`` returns (typically a ``ToolPlan`` instance or ``None``).
+    ``ainvoke`` returns (typically an ``Intent``, a plain scripted value,
+    or ``None``).
     """
 
     def __init__(self, result):

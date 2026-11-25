@@ -129,7 +129,7 @@ def register(mcp: Any) -> None:
     @mcp.tool(
         name="search_judgments",
         description=(
-            "Multi-facet search across Indian Supreme Court (35k+), 25 High Courts (17.77M+), "
+            "Multi-facet search across Indian Supreme Court (38k+), 25 High Courts (20.7M+), "
             "15 Tribunals (NCLT, NCLAT, ITAT, NGT, SAT, etc.), and DDL District Courts (81M metadata). "
             "Supports authority-weighted sorting for a target forum via binding_for_court, automatic "
             "IPC<->BNS / CrPC<->BNSS / IEA<->BSA pari-materia expansion via include_equivalent_provisions=True, "

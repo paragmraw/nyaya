@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.tools_layer.native — direct-import LangChain v2 tools."""
+"""Tests for nyaya_chat.tools_layer.native: direct-import LangChain v2 tools."""
 
 from __future__ import annotations
 

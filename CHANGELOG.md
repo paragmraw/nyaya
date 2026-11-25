@@ -40,7 +40,7 @@ Full monorepo re-architecture to a **database-free embedded and object-storage a
 
 ### Added
 - **Embedded + Object-Storage Hybrid Retrieval (`mcp/nyaya/storage/`, `mcp/nyaya/retrieval/`):**
-  - Baked read-only immutable SQLite core (`nyaya-core.sqlite`) with FTS5 (`porter unicode61 remove_diacritics 2 tokenchars '.-/()'`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry, SC metadata, citation graph edges, and courts directory.
+  - Baked read-only immutable SQLite core (`nyaya-core.sqlite`) with FTS5 (`porter unicode61 remove_diacritics 2`; tokenchars `'.-/()'` for `provisions_fts`, `'.-:/()'` for `judgments_meta_fts`, so neutral citations like `2024:DHC:1234` stay searchable), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry, SC metadata, citation graph edges, and courts directory.
   - Railway Storage Bucket (Tigris S3) cold tiers: 3 LanceDB native Rust BM25 FTS tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and DuckDB `httpfs` over compacted ZSTD Parquet partitions (17.77M HC, 81M DDL District Courts, 15 Tribunals, 12 Regulators, SC mirror) with `manifest.json` partition pruning.
   - Direct anonymous AWS Open Data PDF extraction via Apache-2.0 `pypdfium2` (`pdf_fetcher.py`) with strict bucket/key regex allowlist, `follow_redirects=False`, 15 MB / 500-page caps, `%PDF-` magic check, `chars_per_page >= 50` scanned-PDF detection, ephemeral `ParagraphBM25`, and a 256 MB disk zstd LRU cache.
   - Pure-lexical `RetrievalEngine` (`QueryAnalyzer`, `LexicalEngine`, weighted RRF `k=60`, court-hierarchy prior, exact-match top-3 floor).
@@ -73,7 +73,7 @@ Full monorepo re-architecture to a **database-free embedded and object-storage a
 ### Removed
 - Completely removed Supabase, Postgres, `pgvector`, `DATABASE_URL`, `psycopg`, `psycopg-pool`, `openai` (from `mcp/`), `mcp/schema.sql`, `mcp/notebooks/hydrate.ipynb`, `mcp/nyaya/db.py`, `mcp/nyaya/embeddings.py`, and all 16 legacy v0.2 MCP tools.
 
-## [0.2.0] - 2026-08-18
+## [0.2.0] - 2026-09-05
 
 ### Security
 - Restricted CORS to `https://nyaya.parag.tech` (was `*`).
@@ -94,8 +94,8 @@ Full monorepo re-architecture to a **database-free embedded and object-storage a
 - Deployment config migrated from `railway.toml` to `.railway/railway.ts`, `NEXT_PUBLIC_CHAT_ENABLED` Dockerfile default flipped to `true`, fail-fast tool registration, `cross_reference` closed Literal `direction`, `Kind`/`HitKind` alias, opt-in `NYAYA_DOTENV=1`, merged `eval/chat_eval.py` harness, and strict `mypy` on `nyaya.db` (subsequently superseded in v2.0.0).
 
 ### Added
-- `articles_affected` stays a CSV column inside `documents.metadata` in the v0.2 unified schema (the old `article_amendments` junction table is dropped by schema.sql, not added — the original entry here claimed the opposite).
-- Self-contained hydration notebook (`mcp/notebooks/hydrate.ipynb`) replaces the old CLI-based ingestion pipeline — fetches all sources live, embeds via NVIDIA API, writes to Postgres.
+- `articles_affected` stays a CSV column inside `documents.metadata` in the v0.2 unified schema (the old `article_amendments` junction table is dropped by schema.sql, not added; the original entry here claimed the opposite).
+- Self-contained hydration notebook (`mcp/notebooks/hydrate.ipynb`) replaces the old CLI-based ingestion pipeline: it fetches all sources live, embeds via NVIDIA API, and writes to Postgres.
 - `EmbeddingService` class with injectable caches for testing.
 - Structured error contract: `NotFound` errors now return `ToolResult(is_error=True, structured_content={"error": {"code", "message", "kind", "hint"}})` via `@structured_errors` decorator (`tools/_error.py`).
 - `get_judgment` fuzzy substring matching for inputs ≥ 8 chars (exact citation/title match tried first).
@@ -118,12 +118,12 @@ Full monorepo re-architecture to a **database-free embedded and object-storage a
 - 4 MCP tools folded into `semantic_query`: `search_law`, `search_judgments`, `search_by_kind`, `hybrid_search`.
 - 4 MCP tools folded into other tools or dropped: `get_chapter` (use `list_chapters`), `get_definition` (use `semantic_query` with `promote_definitions`), `resolve_citation` (folded into `get_section`/`get_article`), `get_sections_by_range` (use `list_sections` with `start`/`end`).
 - `nyaya-ingest` CLI and `mcp/scripts/` directory (replaced by hydration notebook).
-- `mcp/data/manual/` directory (judgments, amendments, schedules, IPC-BNS map — now ingested live).
+- `mcp/data/manual/` directory (judgments, amendments, schedules, IPC-BNS map, now ingested live).
 - `Dockerfile.slim` references from `mcp/README.md`.
 - `--extra semantic` and `--extra ingest` from `pyproject.toml`.
 - Build artifacts from working tree: `.venv/`, `node_modules/`, `.next/`, `out/`, `__pycache__/`, `scratch/`.
 
-## [0.1.0] - 2026-07-01
+## [0.1.0] - 2026-08-02
 
 ### Added
 - Initial release of the nyaya MCP server for Indian law.

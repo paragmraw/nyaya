@@ -3,7 +3,7 @@
 // Run with:  npx tsx --test tests/route-prepaint.test.ts
 //
 // The script is inlined as the first child of <body> and must stamp
-// body.home / body.info before first paint (home locks the viewport — a
+// body.home / body.info before first paint (home locks the viewport; a
 // post-paint application visibly reflows). Assertions mirror theme.test.ts.
 
 import { test } from "node:test";
@@ -15,7 +15,7 @@ test("route pre-paint script distinguishes home from info routes", () => {
   assert.ok(script.includes("location.pathname"), "script must read the current path");
   assert.ok(script.includes("classList.toggle('home'"), "script must toggle the home class");
   assert.ok(script.includes("classList.toggle('info'"), "script must toggle the info class");
-  // Home is exactly "/" or "" — anything else (corpus, citations, …) is info.
+  // Home is exactly "/" or ""; anything else (corpus, citations, …) is info.
   assert.ok(script.includes("'/'"), "home test is the root path");
 });
 

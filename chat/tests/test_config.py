@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.config — required key, defaults, redaction."""
+"""Tests for nyaya_chat.config: required key, defaults, redaction."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def test_agent_pipeline_defaults(monkeypatch):
 
 
 def test_supervisor_constants_dropped(monkeypatch):
-    """The separate supervisor phase is gone — its config surface is too."""
+    """The separate supervisor phase is gone; its config surface is too."""
     from nyaya_chat import config
     config.reset_settings_cache()
     monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-abcdef1234567890")

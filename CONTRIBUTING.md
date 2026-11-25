@@ -61,7 +61,7 @@ npm run build      # static export to web/out/
 
 - **Linter:** ESLint 9 flat config (`next`, `@typescript-eslint`, `react-hooks`, `jsx-a11y`)
 - **Type checking:** Strict TypeScript (`tsc --noEmit` via `npm run build`)
-- **Static export constraint:** `web/` builds with `output: "export"` — do not introduce dynamic `[slug]` routes; use query/hash deep-linking (`src/lib/deep-link.ts`)
+- **Static export constraint:** `web/` builds with `output: "export"`. Do not introduce dynamic `[slug]` routes; use query/hash deep-linking (`src/lib/deep-link.ts`)
 
 ## Testing & Supply-Chain Guidelines
 

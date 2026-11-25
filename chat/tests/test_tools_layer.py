@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.tools_layer — tool loading (native + MCP fallback)."""
+"""Tests for nyaya_chat.tools_layer: tool loading (native + MCP fallback)."""
 
 from __future__ import annotations
 

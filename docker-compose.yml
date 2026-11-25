@@ -14,7 +14,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      # Disk-backed volume mount (NOT tmpfs — Linux tmpfs counts against mem_limit: 1g).
+      # Disk-backed volume mount (NOT tmpfs: Linux tmpfs counts against mem_limit: 1g).
       - NYAYA_CACHE_DIR=/var/cache/nyaya
       - NYAYA_BUCKET_ENDPOINT=${NYAYA_BUCKET_ENDPOINT:-}
       - NYAYA_BUCKET_NAME=${NYAYA_BUCKET_NAME:-}

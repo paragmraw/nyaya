@@ -372,7 +372,8 @@ def register(mcp: Any) -> None:
         name="get_judgment",
         description=(
             "Windowed judgment reader supporting 5 views: 'overview' (metadata card + opening and "
-            "operative paragraphs), 'paragraphs' (1-based para_start..para_end window, max 30 paras / 25 KB), "
+            "operative paragraphs), 'paragraphs' (1-based para_start..para_end window, max 30 paras / "
+            "24,000 chars by default, max_chars clamped to 1,000-30,000), "
             "'pages' (1-based page_start..page_end window, max 10 pages / 30 KB), 'search_within' "
             "(ephemeral BM25 ranking inside the judgment PDF for within_query), and 'docket' "
             "(structured case-level docket metadata). Never guesses on ambiguous case names "

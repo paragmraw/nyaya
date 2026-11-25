@@ -2,7 +2,7 @@
 // conversation persistence (chat.ts).
 //
 // The `oldTrimForRetry` helper below is a verbatim port of the pre-Task-8
-// implementation (git show HEAD:web/src/lib/chat.ts — the retry() callback).
+// implementation (git show HEAD:web/src/lib/chat.ts, the retry() callback).
 // The "repro" tests pin the two bugs it caused; the tests against the real
 // exported trimForRetry pin the fix. Run with:  npm test
 
@@ -22,7 +22,7 @@ const A2_FAIL = msg("a2", "assistant", "", { error: "Something went wrong" });
 
 // Verbatim port of the pre-fix retry trim (side-effect-free subset: the ref
 // mutation inside the updater was the other half of the bug and cannot be
-// expressed in a pure helper — see the strict-mode notes in chat.ts).
+// expressed in a pure helper; see the strict-mode notes in chat.ts).
 function oldTrimForRetry(prev: ChatMessage[]): ChatMessage[] {
   const lastUser = [...prev].reverse().find((m) => m.role === "user");
   if (lastUser) {

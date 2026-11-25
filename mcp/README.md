@@ -25,7 +25,7 @@ All 12 tools are read-only (`readOnlyHint=True`, `destructiveHint=False`, `idemp
 | `verify_citations` | `True` | Deterministic brief/citation audit (`VERIFIED`, `VERIFIED_REPEALED`, `VERIFIED_STRUCK_DOWN_OR_READ_DOWN`, `NOT_FOUND_IN_CORPUS`, `QUOTE_VERIFIED`, `QUOTE_MISMATCH`, etc.) |
 | `corpus_status` | `False` (local SQLite core) | Unified coverage matrix, backend health, and `commercial_safe` licensing metadata |
 
-*Live corpus counts (`corpus-v2026.11.25-p1`): 1,569 central acts, 8,544 state acts, 12,152 regulator instruments, 15 tribunals, 40,353 core provisions, 38,292 SC judgments (`38k+`), 20,696,054 HC judgments (`20.7M+`), 813,168 tribunal orders, 615 citation edges, 46 concordance mappings, and 9 judicial invalidations. (Some internal tool description strings still reference baseline `35k+` SC / `17.77M+` HC figures.)*
+*Live corpus counts (`corpus-v2026.11.25-p1`): 1,569 central acts, 8,544 state acts, 12,152 regulator instruments, 15 tribunals, 40,353 core provisions, 38,292 SC judgments (`38k+`), 20,696,054 HC judgments (`20.7M+`), 813,168 tribunal orders, 615 citation edges, 46 concordance mappings, and 9 judicial invalidations.*
 
 ### 8 `nyaya://` Resources
 
@@ -35,22 +35,22 @@ All 12 tools are read-only (`readOnlyHint=True`, `destructiveHint=False`, `idemp
 - `nyaya://provision/{act}/{ref}`
 - `nyaya://amendment/{act}/{number}`
 - `nyaya://judgment/{identifier}`
-- `nyaya://judgment/{identifier}/paragraphs/{start}-{end}` *(capped at 30 paragraphs / 25 KB)*
+- `nyaya://judgment/{identifier}/paragraphs/{start}-{end}` *(capped at 30 paragraphs, 24,000 characters by default, 30,000-character maximum)*
 - `nyaya://courts` *(Supreme Court, 25 High Courts & 45 Benches, 15 Tribunals, 12 Regulators, DDL state codes)*
 
 ### 4 MCP Prompts
 
-- `audit_legal_draft` — Filing-readiness citation and statutory-validity audit table
-- `transition_criminal_code` — IPC/CrPC/IEA to BNS/BNSS/BSA transition matrix with BNSS s. 531 savings check
-- `precedent_research_memo` — Binding SC vs binding home HC vs persuasive precedent memo
-- `irac_case_brief` — Paragraph-pinned IRAC case brief with subsequent citations
+- `audit_legal_draft`: Filing-readiness citation and statutory-validity audit table
+- `transition_criminal_code`: IPC/CrPC/IEA to BNS/BNSS/BSA transition matrix with BNSS s. 531 savings check
+- `precedent_research_memo`: Binding SC vs binding home HC vs persuasive precedent memo
+- `irac_case_brief`: Paragraph-pinned IRAC case brief with subsequent citations
 
 ## Quickstart
 
 ### Local `stdio` (zero configuration)
 
 ```bash
-# Zero secrets needed — automatically fetches/verifies public core pack when NYAYA_MANIFEST_URL is set
+# Zero secrets needed: automatically fetches/verifies public core pack when NYAYA_MANIFEST_URL is set
 uvx nyaya-mcp
 
 # Restrict to commercial-safe datasets only (excludes CC-BY-NC DDL 81M & ILDC)
@@ -141,7 +141,7 @@ uv run nyaya-ingest all --fixture --dry-run
 
 ## Client Configuration
 
-### Local (`uvx` over `stdio` — Recommended for Private Client Briefs)
+### Local (`uvx` over `stdio`, Recommended for Private Client Briefs)
 
 ```json
 {

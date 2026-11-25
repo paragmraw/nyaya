@@ -35,7 +35,7 @@ http = [
 dotenv = [
     "python-dotenv>=1.0,<2",
 ]
-# Offline ingestion CLI extra (nyaya-ingest) — not installed in slim runtime containers.
+# Offline ingestion CLI extra (nyaya-ingest): not installed in slim runtime containers.
 ingest = [
     "pyarrow>=23.0.1,<25",
     "beautifulsoup4>=4.12,<5",

@@ -18,7 +18,7 @@ class HistoryTurn(BaseModel):
 
 
 class ChatRequest(BaseModel):
-    """Body for ``POST /chat``.
+    """Body for ``POST /chat/turn``.
 
     ``message`` is the new user turn. ``history`` is an optional list of prior
     turns (capped by ``Settings.max_history`` server-side). We do not persist
@@ -40,7 +40,7 @@ class ChatSubHealthResponse(BaseModel):
     """Health payload for the chat sub-app (served at GET /chat/health).
 
     ``reason`` explains a ``degraded`` status (agent still initializing, or
-    no corpus tools loaded); ``None`` when healthy. Optional — the field the
+    no corpus tools loaded); ``None`` when healthy. Optional: the field the
     frontend actually consumes is ``model`` (the model badge in
     ``ChatPanel.tsx``), which is present in every response.
     """

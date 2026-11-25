@@ -45,7 +45,7 @@ test("onContentChanged does NOT scroll when the user scrolled away", () => {
   s.attach(el);
   // User scrolled up: bottom gap > threshold. In the browser any scroll change
   // fires the scroll event, so the fake dispatches it too (the passive
-  // listener is what maintains the flag — a bare property write would not).
+  // listener is what maintains the flag; a bare property write would not).
   el.scrollTop = 100;
   el.listeners.get("scroll")!();
   assert.ok(bottomOf(el) > 120);

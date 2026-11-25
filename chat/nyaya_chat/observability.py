@@ -72,7 +72,7 @@ _langfuse_enabled = False
 def get_langfuse_handler() -> Any | None:
     """Return a Langfuse CallbackHandler if configured, else None.
 
-    The handler is a singleton — created once on first call. When Langfuse
+    The handler is a singleton, created once on first call. When Langfuse
     env vars are not set, returns None (tracing disabled).
     """
     global _langfuse_handler, _langfuse_enabled
@@ -126,7 +126,7 @@ def flush_langfuse() -> None:
     The Langfuse handler batches spans and uploads them on a background
     thread; without an explicit flush, the final turn's spans can be lost on
     process exit or in short-lived tasks. A no-op when Langfuse is not
-    configured, and never raises — flushing must not break a turn.
+    configured, and never raises; flushing must not break a turn.
     """
     handler = _langfuse_handler
     if handler is None:

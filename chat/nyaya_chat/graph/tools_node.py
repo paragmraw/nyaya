@@ -1,7 +1,7 @@
 """Parallel tool-execution node with per-request deduplication.
 
 A ``ToolNode`` wrapper that skips duplicate (name+args) calls within one
-request (dedup memory lives in ``ChatState`` — the compiled graph is shared
+request (dedup memory lives in ``ChatState``; the compiled graph is shared
 across requests, so instance-level state would leak tool calls between
 users) and emits a ``tool_result`` SSE event per completion through the
 custom stream. Results are cleaned (``tools_layer.cleaning``) before they

@@ -27,7 +27,7 @@ from .storage.protocols import (
 MCP_INSTRUCTIONS = (
     "Nyaya v2.0 is an Indian legal intelligence MCP server covering 37 Central & State/UT "
     "legislation packs, the Constitution (with verified Amendments 1-106), 12 regulators, "
-    "15 tribunals, Supreme Court (35k+), 25 High Courts (17.77M+), and DDL District Courts (81M metadata).\n\n"
+    "15 tribunals, Supreme Court (38k+), 25 High Courts (20.7M+), and DDL District Courts (81M metadata).\n\n"
     "Tool Guidance:\n"
     "- Use `search_statutes` / `browse_statute` / `get_provision` for statutes, Constitution articles, "
     "schedules, CPC Orders/Rules, and regulator circulars. Always check the `StatutoryValidity` envelope "

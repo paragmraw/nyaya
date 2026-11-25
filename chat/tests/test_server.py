@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.server — the chat FastAPI sub-app.
+"""Tests for nyaya_chat.server: the chat FastAPI sub-app.
 
 The sub-app is mounted by the host nyaya server at ``/chat``, so these tests
 hit the sub-app directly (routes are ``/health``, ``/turn``, ``/`` without the
@@ -94,7 +94,7 @@ def test_health_degraded_when_no_graph(monkeypatch):
 
 
 def test_health_degraded_without_building_agent(monkeypatch):
-    """With no agent built, /health returns the degraded payload IMMEDIATELY —
+    """With no agent built, /health returns the degraded payload IMMEDIATELY:
     the builder is never called (a cold health probe must not pay the
     seconds-long agent build). The model field is still present for the
     frontend badge."""
@@ -163,7 +163,7 @@ def test_turn_no_graph_503(monkeypatch):
 
 def test_turn_guardrail_fast_path_unified_shapes(monkeypatch):
     """The canned fast path emits the unified shapes: meta, status with rid,
-    token, done — and no citations/correction/error events."""
+    token, done, and no citations/correction/error events."""
     from nyaya_chat.guardrail import Intent, get_canned_response
 
     app = _make_test_app(monkeypatch, graph=_Graph(), tools=["t"], intent=Intent.GREETING)

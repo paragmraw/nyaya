@@ -2,7 +2,7 @@
 
 Unlike ``test_chat_eval.py`` (live-server, ``eval`` marker), these run in the
 default hermetic pytest pass: they import the harness module directly and
-exercise its pure pieces — the Scenario latency/TTFT fields and the
+exercise its pure pieces: the Scenario latency/TTFT fields and the
 soft-vs-gating check accounting.
 """
 
@@ -73,7 +73,7 @@ def test_ttft_check_fails_over_budget():
 
 
 def test_no_checks_are_soft():
-    """All checks are gating — over-budget latency and TTFT are hard
+    """All checks are gating: over-budget latency and TTFT are hard
     failures in live evaluation runs."""
     mod = _load()
     assert mod.SOFT_CHECKS == frozenset()

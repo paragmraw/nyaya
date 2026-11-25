@@ -6,7 +6,7 @@ execution (zero ``DATABASE_URL``, zero ``NVIDIA_API_KEY`` required).
 
 Fixes the v0.2 act-only recall bug: scoring requires an exact canonical
 ``(act, ref)`` or ``(court/judgment, citation/cnr/case_id)`` match via
-``nyaya_chat.citations`` — retrieving a different section of the same act
+``nyaya_chat.citations``; retrieving a different section of the same act
 (e.g. ``IPC 420`` when ``IPC 302`` is expected) or a different reporter page
 (e.g. ``AIR 1973 SC 9999`` when ``AIR 1973 SC 1461`` is expected) scores 0.0.
 
@@ -402,7 +402,7 @@ def print_report(report: EvalReport, k: int) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     print(f"\n{'=' * 68}")
-    print(f"Nyaya v2.0 Offline Retrieval Evaluation — Recall@{k} & MRR@{k}")
+    print(f"Nyaya v2.0 Offline Retrieval Evaluation: Recall@{k} & MRR@{k}")
     print(f"{'=' * 68}")
     print(f"Cases:          {report.total}")
     print(f"Mean Recall@{k}:  {report.mean_recall:.2%}")

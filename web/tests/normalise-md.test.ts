@@ -2,7 +2,7 @@
 //
 // Run with:  npx tsx --test tests/normalise-md.test.ts
 //
-// These tests assert on the *normalised markdown text* — the contract is that
+// These tests assert on the *normalised markdown text*: the contract is that
 // after normalisation, GFM tables (header row + separator row + data rows)
 // must appear on consecutive lines with no blank lines between them, and
 // malformed headings like "##3." must be repaired to "## 3.".
@@ -112,7 +112,7 @@ test("does not split a valid no-leading-pipe header row (repair pass only)", () 
   // sentence-ending punctuation). NOTE: a no-leading-pipe GFM header row is
   // not recognised by the blank-line inserter's table-row detector (which
   // requires a leading |), so we only assert that the repair pass leaves the
-  // header intact — the broader leading-pipe handling is a separate concern.
+  // header intact; the broader leading-pipe handling is a separate concern.
   const src = [
     "Intro.",
     "",
@@ -134,7 +134,7 @@ test("leaves a heading mid-sentence split intact", () => {
 });
 
 // Spaced dashes in legal prose ("death - or life imprisonment") must NOT be
-// promoted to list bullets — only a dash after sentence-ending punctuation
+// promoted to list bullets: only a dash after sentence-ending punctuation
 // plausibly starts an item.
 test("does not turn a mid-sentence prose dash into a list bullet", () => {
   const src = "Punishable with death - or life imprisonment - for the remainder.";

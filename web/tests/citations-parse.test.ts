@@ -82,7 +82,7 @@ test("stripCitationMarkers handles multiple markers", () => {
 // CodeQL js/polynomial-redos regression: the marker regex runs on uncontrolled
 // streamed model output. The old `\s*([^,\]]+?)\s*,` form let a space run be
 // split between the two quantifiers at every character (quadratic backtracking
-// on "[[act:" + many spaces + no comma). The fixed regex is linear — this must
+// on "[[act:" + many spaces + no comma). The fixed regex is linear; this must
 // finish in milliseconds, not seconds.
 test("citation regex stays linear-time on pathological input", () => {
   const evil = "[[act:" + " ".repeat(50_000);
@@ -104,7 +104,7 @@ test("citation markers with extra whitespace still parse", () => {
 });
 
 // Second-order ReDoS regression: the FIRST fix (linear per-attempt, 8701129)
-// still left quadratic inter-position cost — CodeQL pump semantics put the
+// still left quadratic inter-position cost: CodeQL pump semantics put the
 // marker prefix `[[act:` at many positions inside a comma-free stream, and
 // each occurrence re-ran the act class to the end of the string before
 // failing. Measured quadratic on the old regex (n=1k -> 3ms, n=4k -> 38ms,

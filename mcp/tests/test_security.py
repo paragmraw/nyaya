@@ -245,7 +245,7 @@ def test_redis_backend_window_key_uses_wall_clock(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# RateLimitMiddleware — /health, buckets, right-most XFF
+# RateLimitMiddleware: /health, buckets, right-most XFF
 # ---------------------------------------------------------------------------
 
 

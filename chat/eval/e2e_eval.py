@@ -15,7 +15,7 @@ Usage::
     cd chat
     python -m eval.e2e_eval [--golden eval/golden.jsonl] [--timeout 120]
 
-This is a standalone script, not a pytest module — run it directly with the
+This is a standalone script, not a pytest module; run it directly with the
 command above. (An earlier version of this docstring claimed it could be run
 via ``pytest -m eval``, which was never wired up.) The live-server SSE harness
 is ``eval/chat_eval.py``; offline golden-dataset scoring is

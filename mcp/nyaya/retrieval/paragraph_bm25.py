@@ -1,4 +1,4 @@
-"""Pure-Python BM25Okapi over extracted judgment paragraphs (<80 LOC, zero deps)."""
+"""Pure-Python BM25Okapi over extracted judgment paragraphs (zero deps)."""
 
 from __future__ import annotations
 

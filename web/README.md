@@ -10,6 +10,12 @@ Next.js 16 + React 19 static-export frontend (**v2.0.0**) for [nyaya](../README.
 | `/corpus/` | Open-India-Law corpus explorer with category/status/commercial-safe filters, deep-link highlighting (`?act=...&ref=...`), and licensing notice | `/api/corpus-status`, `/api/acts`, build-time `corpus-stats.json` |
 | `/citations/` | Interactive citation anatomy (`nyaya/citations.py`), supported Indian citation formats, 4-stage verification pipeline, and audit status reference | Static documentation |
 | `/architecture/` | Embedded & object-storage architecture overview, interactive pipeline stages, runtime/governance stack, MCP config, and live tool/resource/prompt surface | `/api/tools` (with `MCP_TOOLS_FALLBACK`) |
+| `/faq/` | Frequently asked questions on setup, data scope, and usage; emits FAQPage JSON-LD via `StructuredData` | Static documentation |
+| `/privacy/` | Privacy policy | Static documentation |
+| `/terms/` | Terms of use | Static documentation |
+| `/disclaimer/` | Disclaimer and licensing notice | Static documentation |
+| `/accessibility/` | Accessibility statement | Static documentation |
+| `/contact/` | Contact information | Static documentation |
 
 ## Tech Stack
 
@@ -53,7 +59,7 @@ During `npm run dev`, `next.config.mjs` proxies `/api/:path*`, `/mcp`, and `/cha
 ```bash
 cd web
 npx eslint .      # ESLint 9 flat config (also `npm run lint`)
-npm test          # Runs generate:corpus-stats + 17 node:test suites via tsx
+npm test          # Runs generate:corpus-stats + 18 node:test suites via tsx
 npm run build     # Runs generate:corpus-stats + next build + next-sitemap -> out/
 ```
 
@@ -66,11 +72,11 @@ web/
 │   ├── generate-corpus-stats.ts # Emits src/data/corpus-stats.json + public/corpus-stats.json
 │   └── generate-og.ts          # Generates 1200x630 PNG OG image
 ├── src/
-│   ├── app/                    # App Router pages (/, /corpus/, /citations/, /architecture/)
+│   ├── app/                    # App Router pages (/, /corpus/, /citations/, /architecture/, /faq/, /privacy/, /terms/, /disclaimer/, /accessibility/, /contact/)
 │   ├── components/             # UI, chat, MCP config/tools, corpus table, and JSON-LD components
 │   ├── data/corpus-stats.json  # Build-time CorpusStatusResponse snapshot
 │   └── lib/                    # API client, SWR hooks, curated metadata, schemas, chat state
-├── tests/                      # 17 node:test unit & structural validation suites
+├── tests/                      # 18 node:test unit & structural validation suites
 ├── eslint.config.mjs           # ESLint 9 flat configuration
 ├── next.config.mjs             # Static export + dev-only proxy rewrites
 └── next-sitemap.config.cjs     # Sitemap & robots.txt configuration

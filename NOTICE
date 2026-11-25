@@ -28,7 +28,7 @@ record in `provenance` (`license_spdx`, `commercial_safe`, `terms_status`).
      HIV/AIDS Act s. 34) are excluded from publication and indexing.
 
 2. Commercial-Safe Open Legal Data Compilations (CC-BY-4.0 / Statutory)
-   - Dattam Labs — Indian Supreme Court & High Court Judgments
+   - Dattam Labs: Indian Supreme Court & High Court Judgments
      License: CC-BY-4.0 (https://creativecommons.org/licenses/by/4.0/)
      Sources: s3://indian-supreme-court-judgments, s3://indian-high-court-judgments
      Attribution: Dattam Labs Open Data; original public records of the Supreme
@@ -57,23 +57,23 @@ record in `provenance` (`license_spdx`, `commercial_safe`, `terms_status`).
    corpus pack and are strictly tagged `commercial_safe=false`. Commercial
    operators MUST set `NYAYA_COMMERCIAL_SAFE_ONLY=1` or pass
    `commercial_safe_only=true` to exclude them:
-   - Development Data Lab (DDL) — Indian Judicial Dataset (2010–2018)
+   - Development Data Lab (DDL): Indian Judicial Dataset (2010–2018)
      License: CC-BY-NC-SA-4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
      Source: https://www.devdatalab.org/judicial-data
      Attribution: Elliott Ash, Sam Asher, Aditi Bhowmick, Sandeep Bhupatiraju,
      Daniel L. Chen, Tanaya Devi, Christoph Goessmann, Paul Novosad, Bilal
-     Siddiqi (Development Data Lab) — Non-Commercial, ShareAlike Use Only.
+     Siddiqi (Development Data Lab): Non-Commercial, ShareAlike Use Only.
      (Predicted religion/caste columns are stripped at ingest time.)
    - Indian Legal Documents Corpus (ILDC) Research Annotations
      License: CC-BY-NC-4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
      Attribution: Vijit Malik, Rishabh Sanjay, Shubham Kumar Nigam, Kripabandhu
-     Ghosh, Shouvik Kumar Guha, Arnab Bhattacharya, Ashutosh Modi —
+     Ghosh, Shouvik Kumar Guha, Arnab Bhattacharya, Ashutosh Modi:
      Non-Commercial Research Use Only.
 
 4. Key Open-Source Runtime Components
-   - pypdfium2 & PDFium — Apache-2.0 / BSD-3-Clause
+   - pypdfium2 & PDFium: Apache-2.0 / BSD-3-Clause
      (Used for direct PDF text extraction; copyleft PDF/OCR libraries such as
      PyMuPDF/fitz, ecourts, and surya-ocr are intentionally excluded.)
-   - DuckDB & httpfs extension — MIT License
-   - LanceDB — Apache-2.0
-   - FastMCP — Apache-2.0
+   - DuckDB & httpfs extension: MIT License
+   - LanceDB: Apache-2.0
+   - FastMCP: Apache-2.0

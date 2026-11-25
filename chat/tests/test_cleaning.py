@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.tools_layer.cleaning — the shared v2 tool-result cleaner."""
+"""Tests for nyaya_chat.tools_layer.cleaning: the shared v2 tool-result cleaner."""
 
 from __future__ import annotations
 

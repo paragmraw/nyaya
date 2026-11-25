@@ -6,7 +6,7 @@ in the same process), the chat agent imports these wrappers which call
 overhead and removes any startup dependency on the HTTP server being reachable.
 
 Each tool's interface (name, description, args schema) comes from
-``tools_layer.spec`` — the single source of truth — so the native and MCP
+``tools_layer.spec``, the single source of truth, so the native and MCP
 paths expose the SAME interface to the model. Errors from the storage/retrieval
 layer (``NyayaError`` subclasses) are caught and returned as JSON error strings
 so the model can self-correct.
@@ -63,7 +63,7 @@ def _error_json(exc: Exception) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool implementations — async wrappers around nyaya.tools.*
+# Tool implementations: async wrappers around nyaya.tools.*
 # ---------------------------------------------------------------------------
 
 

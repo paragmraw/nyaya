@@ -1,4 +1,4 @@
-# Trusted Sources & Corpus Provenance — Nyaya v2.0
+# Trusted Sources & Corpus Provenance: Nyaya v2.0
 
 This document describes the legal provenance, copyright basis, licensing
 boundaries, automated integrity gates, and LLM security posture for data
@@ -9,7 +9,7 @@ ingested and served by **Nyaya (`nyaya-mcp`)**.
 Nyaya does **not** rely on US public-domain doctrines. Primary Indian legal
 materials are reproduced and indexed under **Indian law**:
 
-1. **Indian Copyright Act, 1957 — Section 52(1)(q):**
+1. **Indian Copyright Act, 1957, Section 52(1)(q):**
    - **Section 52(1)(q)(ii):** Reproduction or publication of any Act of a
      Legislature (and rules/regulations made thereunder), subject to statutory
      conditions.
@@ -80,8 +80,8 @@ build or publish.
 | Source | URI / Bucket | Coverage | License (`SPDX`) | `commercial_safe` | Verification |
 |---|---|---|---|---|---|
 | **Vaquill Open India Law (`v2026.08.1`)** | `https://oss-data-in.vaquill.ai/v2026.08.1/` | Central + 36 State/UT Acts, 12 Regulators, 15 Tribunals, SC/HC compilations | `CC-BY-4.0` (`coverage.yml` `red` rejected) | `true` | `SHA256SUMS.json` + domain allowlist |
-| **Dattam Labs — Supreme Court** | `s3://indian-supreme-court-judgments` | 38k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
-| **Dattam Labs — High Courts** | `s3://indian-high-court-judgments` | 20.7M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
+| **Dattam Labs: Supreme Court** | `s3://indian-supreme-court-judgments` | 38k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
+| **Dattam Labs: High Courts** | `s3://indian-high-court-judgments` | 20.7M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
 | **PRS Legislative Research** | `https://prsindia.org` | BNS / BNSS / BSA 2023 & legislative act deltas | `CC-BY-4.0` | `true` | Pinned SHA-256 + domain allowlist |
 | **Legislative Department / India Code** | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
 | **India Code Digital Repository** | `https://indiacode.nic.in` | Central Acts official statutory repository | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + domain allowlist |

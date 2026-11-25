@@ -9,8 +9,10 @@ Tier 1: Rule-based regex/keyword classifier (instant, 0ms). Catches the
 most common patterns deterministically.
 
 Tier 2: LLM intent classifier (~0.5-1s, only if Tier 1 returns "unknown").
-Uses the already-loaded Nemotron model with a short classification prompt
-and max_tokens=32. Fails open to LEGAL on timeout or error.
+Uses a dedicated classifier client (same Nemotron model id, temperature 0.0,
+max_completion_tokens from GUARDRAIL_CLASSIFIER_MAX_TOKENS), built lazily on
+the first Tier-2 hit and cached per Settings, invoked with
+with_structured_output(Intent). Fails open to LEGAL on timeout or error.
 
 When the intent is not LEGAL, the server emits a canned SSE response
 directly -- no agent call, no tool calls, no answer stream.
@@ -44,7 +46,7 @@ _RESPONSES: dict[Intent, str] = {
         "about the Constitution of India, IPC, CrPC, CPC, Evidence Act, BNS/BNSS/BSA 2023, "
         "Central and State/UT statutes, regulators (SEBI, RBI), tribunals (NCLT, NCLAT, ITAT), "
         "and Supreme Court and High Court judgments. "
-        "Ask me about any provision, section, or case — I'll cite the exact source."
+        "Ask me about any provision, section, or case. I'll cite the exact source."
     ),
     Intent.CAPABILITY: (
         "I'm Nyaya, a retrieval-grounded assistant for Indian law. I can:\n\n"
@@ -234,7 +236,7 @@ _CLASSIFIER_PROMPT = (
 # One classifier client per distinct Settings instance, built on the first
 # Tier-2 hit (see :func:`get_classifier_model`). Keyed by Settings rather than
 # a single slot so a changed/reloaded configuration never silently reuses a
-# stale client — and so tests that pass fresh Settings objects get a fresh
+# stale client, and so tests that pass fresh Settings objects get a fresh
 # client without a reset.
 _classifier_models: dict[Settings, Any] = {}
 _classifier_build_lock = threading.Lock()
@@ -246,7 +248,7 @@ def _build_classifier_model(settings: Settings):
     This is the seam for tests: monkeypatch
     ``nyaya_chat.guardrail._build_classifier_model`` (or, as the existing
     tests do, ``langchain_nvidia_ai_endpoints.ChatNVIDIA``) to count
-    constructions or inject a fake — whatever this returns is cached and
+    constructions or inject a fake. Whatever this returns is cached and
     handed to every Tier-2 classification for the same Settings.
     """
     from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -265,7 +267,7 @@ def get_classifier_model(settings: Settings) -> Any:
 
     One client per distinct Settings, created on the first Tier-2
     classification (the first ambiguous message pays the one-time build
-    cost) and reused for the process lifetime — ambiguous messages used to
+    cost) and reused for the process lifetime; ambiguous messages used to
     pay connection setup on every call. Double-checked locking keeps
     concurrent first calls from building duplicates; the dict-based cache
     means per-test Settings instances get their own client.

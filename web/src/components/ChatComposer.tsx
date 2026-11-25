@@ -59,7 +59,9 @@ export default function ChatComposer({
   const [value, setValue] = useState<string>(() => readDraft());
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-grow the textarea up to its max-height (CSS caps at 90px).
+  // Auto-grow the textarea up to its max height: globals.css sets
+  // max-height: 110px on .composer textarea, and the JS clamp below caps the
+  // inline height at 90px, which becomes the effective visual cap.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;

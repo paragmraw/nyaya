@@ -1,6 +1,6 @@
 """Tool loading for the chat agent.
 
-The primary path is **native tools** (direct Python imports of ``nyaya.db``
+The primary path is **native tools** (direct Python imports of ``nyaya.tools``
 wrapped as LangChain ``StructuredTool`` objects). If native tools fail to
 load (e.g. the ``nyaya`` package is not importable in a standalone chat
 deployment), we fall back to the MCP-over-HTTP client via

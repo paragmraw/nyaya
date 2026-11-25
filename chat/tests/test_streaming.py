@@ -1,10 +1,10 @@
-"""Tests for nyaya_chat.streaming — SSE projection of custom-stream payloads.
+"""Tests for nyaya_chat.streaming: SSE projection of custom-stream payloads.
 
 The graph's nodes emit typed event dicts on LangGraph's custom stream mode;
 ``stream_turn`` is a pure projection onto ``event: <type>`` SSE frames. The
 old dual-mode (messages/updates) inference and its node-name string coupling
 are gone, so tests here cover the projection, keepalive, error bookends, and
-per-turn usage logging — semantic event content is asserted at the node level
+per-turn usage logging; semantic event content is asserted at the node level
 (test_graph.py).
 """
 
@@ -88,7 +88,7 @@ async def test_stream_turn_projects_payload_dicts_to_sse():
 
 @pytest.mark.asyncio
 async def test_stream_turn_unwraps_mode_tuples():
-    """With stream_mode as a list, LangGraph yields (mode, data) tuples —
+    """With stream_mode as a list, LangGraph yields (mode, data) tuples:
     the data half is projected, the mode marker is dropped."""
     parts = [
         ("custom", {"type": "token", "content": "hi"}),
@@ -121,8 +121,8 @@ async def test_stream_turn_passes_config_to_astream():
 
 @pytest.mark.asyncio
 async def test_stream_turn_maps_turn_error_to_code():
-    """A TurnError from a node projects its code as ``error.message`` — the
-    stable machine key the frontend humanizer maps — instead of the generic
+    """A TurnError from a node projects its code as ``error.message``, the
+    stable machine key the frontend humanizer maps, instead of the generic
     agent_error bookend."""
     from nyaya_chat.errors import TurnError
 

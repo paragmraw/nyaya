@@ -10,9 +10,9 @@ Starlette app, so this sub-app deliberately omits them.
 
 Routes
 ------
-* ``POST /chat/turn`` — stream a chat turn as Server-Sent Events.
-* ``GET  /chat/health`` — sub-app health (cheap; does not call NVIDIA).
-* ``GET  /chat/`` — small info payload.
+* ``POST /chat/turn``: stream a chat turn as Server-Sent Events.
+* ``GET  /chat/health``: sub-app health (cheap; does not call NVIDIA).
+* ``GET  /chat/``: small info payload.
 """
 
 from __future__ import annotations
@@ -82,7 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             # a cold health check (which is also what load balancers hit).
             # Report the prewarmed graph if the host lifespan (or an earlier
             # request) built one; otherwise return the degraded payload
-            # immediately — the build happens on the first /turn instead.
+            # immediately; the build happens on the first /turn instead.
             # ``get_graph_if_ready`` only reads already-built module state, so
             # this is O(1).
             graph, tools = get_graph_if_ready()

@@ -1,6 +1,6 @@
 import { defineRailway, github, preserve, project, service } from "railway/iac";
 
-// Railway IaC (https://docs.railway.com/infrastructure-as-code) — replacement
+// Railway IaC (https://docs.railway.com/infrastructure-as-code), the replacement
 // for the deprecated railway.toml Config-as-Code, which Railway stops reading
 // on 2026-12-01.
 //
@@ -20,9 +20,9 @@ import { defineRailway, github, preserve, project, service } from "railway/iac";
 // Managed with `railway config plan` (dry run) and `railway config apply`.
 //
 // NOTE: reconciled against the live project via `railway config plan`. The
-// builder (DOCKERFILE, root Dockerfile — auto-detected), deployment region
+// builder (DOCKERFILE, root Dockerfile, auto-detected), deployment region
 // (`asia-southeast1`), restart policy (ON_FAILURE, max 3 retries), and
-// healthcheck interval (30 s) are dashboard service settings — verify them in
+// healthcheck interval (30 s) are dashboard service settings; verify them in
 // the service Settings panel. Always review `railway config plan --detailed-exit-code`
 // before applying: variables absent from `env` are deleted on apply.
 

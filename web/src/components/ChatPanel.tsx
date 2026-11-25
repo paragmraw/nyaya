@@ -8,9 +8,12 @@ import { RetryButton } from "./ErrorRow";
 import { createAutoScroller, type AutoScroller } from "@/lib/chat/auto-scroll";
 import { useChat } from "@/lib";
 
-// ChatPanel: optional conversational assistant over /chat/turn (mounted when
-// NVIDIA_API_KEY is configured). Streams SSE tokens, tool events, and grounded
-// citation chips verified against shared nyaya.citations.
+// ChatPanel: optional conversational assistant over /chat/turn. Rendered on
+// the home page via a dynamic ssr:false import; the build flag
+// NEXT_PUBLIC_CHAT_ENABLED="true" unlocks the composer, and the backend
+// serves /chat only when NVIDIA_API_KEY is configured (otherwise /chat/* 404s).
+// Streams SSE tokens, tool events, and grounded citation chips verified
+// against shared nyaya.citations.
 const GREETING =
   "Hello. I'm Nyaya v2.0. I verify statutes, BNS/BNSS/BSA transitions, 12 regulators, 15 tribunals, and Supreme Court / High Court precedents. Ask in plain English or legalese; I'll cite exact provisions and neutral citations.";
 

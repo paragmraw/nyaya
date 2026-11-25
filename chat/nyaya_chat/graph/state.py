@@ -39,6 +39,6 @@ class ChatState(TypedDict, total=False):
     # Per-phase wall-clock timings, accumulated across rounds (ms). Logged by
     # the streamer's per-turn completion line; not part of the SSE contract.
     phase_ms: dict[str, float]
-    # Last usage_metadata seen on a model chunk (cumulative per model call —
+    # Last usage_metadata seen on a model chunk (cumulative per model call;
     # the final synthesis round's totals). Consumed by the per-turn log.
     usage: dict[str, int]

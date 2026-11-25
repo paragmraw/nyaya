@@ -12,7 +12,7 @@ into the answer body. When the buffered stream ends with tool calls, the
 buffered text is replayed as a ``plan`` event and ``tool_start`` events are
 emitted; when it ends without calls, the buffered text is replayed as
 ``token`` events after a ``composing`` status (a direct answer). Post-tools
-legs (last message is a ``ToolMessage``) stream tokens live — that is the
+legs (last message is a ``ToolMessage``) stream tokens live; that is the
 leg whose TTFT the user feels. The degraded ``has_tools=False`` graph also
 streams live (nothing to buffer for).
 
@@ -23,7 +23,7 @@ of the turn budget remains.
 
 The returned AIMessage is THE authoritative answer: citation verification
 (if enabled) runs here, once, and the disclaimer is appended here when the
-model omitted it — so the streamed-and-verified text is final. The node
+model omitted it, so the streamed-and-verified text is final. The node
 itself emits the ``citations`` and (when the verified text differs from the
 streamed tokens) ``correction`` events, so the streamer never re-verifies
 or re-derives anything.
@@ -74,13 +74,13 @@ def _is_reasoning_leak(text: str, reasoning_buffer: str) -> bool:
 
     The NVIDIA API has been observed to re-send the entire accumulated
     ``reasoning_content`` as ONE giant content delta (a server-side flush of
-    an unclosed think block — seen live as an 8.6K-char chunk byte-identical
+    an unclosed think block; seen live as an 8.6K-char chunk byte-identical
     to the reasoning buffer, right as the stream was truncated). Streaming
     that to the user leaks the model's deliberation into the answer body.
     Such a chunk is routed to the reasoning trace instead.
 
     A legitimate answer delta that verbatim-repeats 200+ consecutive chars
-    of the model's reasoning would be a degenerate echo — hiding it is
+    of the model's reasoning would be a degenerate echo; hiding it is
     correct either way, so the heuristic errs toward suppression.
     """
     if not reasoning_buffer or len(text) < REASONING_LEAK_MIN_CHARS:
@@ -276,7 +276,7 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
     """Build the agent node for the given tool-bound model.
 
     ``has_tools=False`` builds the degraded no-tools variant (a single-node
-    graph that streams an answer directly, with no verification) — the
+    graph that streams an answer directly, with no verification); the
     SYSTEM_PROMPT applies there because there is nothing to retrieve with.
     """
 
@@ -292,7 +292,7 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
         messages = state["messages"]
         last = messages[-1] if messages else None
         # Buffered leg: the first leg of a turn (or a reflection re-entry)
-        # streams a tool-call decision — its text must never leak into the
+        # streams a tool-call decision: its text must never leak into the
         # answer body. Post-tools and degraded legs stream live.
         post_tools = isinstance(last, ToolMessage)
         emit_tokens = (not has_tools) or post_tools
@@ -357,7 +357,7 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
                 # in the reasoning trace, never in the answer body.
                 log.warning(
                     "agent: suppressed reasoning-leak content chunk "
-                    "(%d chars) — routed to the reasoning trace", len(text),
+                    "(%d chars), routed to the reasoning trace", len(text),
                 )
                 leaked_parts.append(text)
                 reasoning_event(text)
@@ -385,7 +385,7 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
                 usage(um)
 
         if chunks == 0:
-            # An empty stream is NOT a silent success — the client would see
+            # An empty stream is NOT a silent success: the client would see
             # "composing"/"analyzing" forever followed by a message with no
             # body. Fail the turn with a code the frontend humanizes into
             # real copy.
@@ -412,7 +412,7 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
                 calls = [tc for tc in calls if tc.get("name") in TOOL_NAMES]
             if not post_tools and raw_text:
                 # The buffered preamble tells the client what retrieval is
-                # starting — plan text, never answer tokens.
+                # starting: plan text, never answer tokens.
                 plan_event(raw_text)
             _emit_tool_starts(state, calls)
             if calls:
@@ -458,7 +458,7 @@ def make_agent_node(settings: Any, agent_model: Any, *, has_tools: bool = True):
         # Keep-better across reflection rounds. A reflection leg re-runs on
         # the SAME tool results and its answer can degenerate (observed
         # live: a 63-char tool-call echo). Such an answer must not replace a
-        # previous round's answer that already cites the corpus — keep the
+        # previous round's answer that already cites the corpus; keep the
         # previous one and let a ``correction`` event restore the client's
         # view.
         prev_answer = state.get("last_answer", "")

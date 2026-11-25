@@ -4,7 +4,7 @@
 //
 // The SSE spec says: multiple `data:` lines are joined with a literal "\n",
 // and only the single leading space after `data:` is stripped. The backend's
-// encoder emits single-line JSON payloads, so this is a hardening — but the
+// encoder emits single-line JSON payloads, so this is a hardening, but the
 // parser must not blind-trim data (that would corrupt payloads with
 // meaningful leading/trailing whitespace inside the JSON string).
 

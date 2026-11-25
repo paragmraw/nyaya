@@ -1,7 +1,7 @@
 """Turn-level exceptions with a user-facing SSE error code.
 
 Nodes raise :class:`TurnError` for failures that are *expected* outcomes of a
-turn — an empty synthesis stream, a dead corpus, a blown time budget — so the
+turn: an empty synthesis stream, a dead corpus, a blown time budget, so the
 SSE layer can emit a specific, human-explainable ``error`` event (with the
 code the frontend's humanizer maps or gracefully falls back on) instead of
 the generic ``agent_error``/“internal server error” bookend.

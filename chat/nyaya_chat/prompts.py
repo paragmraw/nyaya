@@ -1,7 +1,7 @@
 """System prompts for the chat graph (Nyaya v2.0).
 
 The tool list in the agent prompt is rendered from
-``tools_layer.spec.TOOL_SPECS`` — the single source of truth — so a tool
+``tools_layer.spec.TOOL_SPECS``, the single source of truth, so a tool
 whose description changes is automatically reflected here instead of
 silently drifting.
 """
@@ -111,7 +111,7 @@ REFLECTION_PROMPT = (
     "\n\nREFLECTION ROUND: A previous retrieval round did not produce a "
     "grounded answer. Retry using search_statutes or search_judgments with "
     "DIFFERENT, broader, or rephrased lexical queries (or set "
-    "include_equivalent_provisions=True) than before — do not repeat a "
+    "include_equivalent_provisions=True) than before; do not repeat a "
     "query you already issued.\n"
 )
 

@@ -1,4 +1,4 @@
-// Unit tests for createFrameBatcher (src/lib/chat.ts) — the rAF token-batching
+// Unit tests for createFrameBatcher (src/lib/chat.ts): the rAF token-batching
 // contract behind plan user-decision 4.
 //
 // Run with:  npx tsx --test tests/raf-batch.test.ts
@@ -6,7 +6,7 @@
 // node has no requestAnimationFrame, so the batcher's frame scheduler is
 // injected: a fake "frame clock" that models browser frame cadence. The core
 // guarantee under test: N schedule() calls between two frames coalesce into
-// exactly ONE flush() when the frame fires — i.e. per-token DOM work becomes
+// exactly ONE flush() when the frame fires, i.e. per-token DOM work becomes
 // per-frame work.
 
 import { test } from "node:test";
