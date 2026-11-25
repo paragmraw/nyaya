@@ -91,7 +91,7 @@ RUN mkdir -p /app/data \
         && apt-get update \
         && apt-get install -y --no-install-recommends curl ca-certificates zstd \
         && rm -rf /var/lib/apt/lists/* \
-        && curl -fsSL "$NYAYA_CORE_SQLITE_URL" -o /tmp/nyaya-core.sqlite.zst \
+        && curl -fsSL --retry 4 --retry-delay 5 --retry-all-errors "$NYAYA_CORE_SQLITE_URL" -o /tmp/nyaya-core.sqlite.zst \
         && echo "${NYAYA_CORE_SQLITE_SHA256}  /tmp/nyaya-core.sqlite.zst" | sha256sum -c - \
         && zstd -d --rm /tmp/nyaya-core.sqlite.zst -o /app/data/nyaya-core.sqlite \
         && find /app/data -mindepth 1 ! -name 'nyaya-core.sqlite' -exec rm -rf {} + \
