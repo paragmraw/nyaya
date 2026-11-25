@@ -9,7 +9,7 @@ Next.js 16 + React 19 static-export frontend (**v2.0.0**) for [nyaya](../README.
 | `/` | Home workspace: capabilities summary, live corpus counters, `uvx`/HTTP MCP config generator, and optional `/chat` panel | `/api/corpus-status`, `/chat/health`, `/chat/turn` (SSE) |
 | `/corpus/` | Open-India-Law corpus explorer with category/status/commercial-safe filters, deep-link highlighting (`?act=...&ref=...`), and licensing notice | `/api/corpus-status`, `/api/acts`, build-time `corpus-stats.json` |
 | `/citations/` | Interactive citation anatomy (`nyaya/citations.py`), supported Indian citation formats, 4-stage verification pipeline, and audit status reference | Static documentation |
-| `/architecture/` | Option R2 architecture overview, interactive pipeline stages, runtime/governance stack, MCP config, and live tool/resource/prompt surface | `/api/tools` (with `MCP_TOOLS_FALLBACK`) |
+| `/architecture/` | Embedded & object-storage architecture overview, interactive pipeline stages, runtime/governance stack, MCP config, and live tool/resource/prompt surface | `/api/tools` (with `MCP_TOOLS_FALLBACK`) |
 
 ## Tech Stack
 

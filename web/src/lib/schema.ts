@@ -20,7 +20,7 @@ export const siteSchema = {
       logo: `${SITE}/logo.svg`,
       sameAs: ["https://github.com/paragmraw/nyaya"],
       description:
-        "Zero-DB-ops Indian legal MCP server and research assistant covering statutes, regulators, tribunals, Supreme Court, High Courts, and District metadata.",
+        "Database-free Indian legal MCP server and research assistant covering statutes, regulators, tribunals, Supreme Court, High Courts, and District metadata.",
     },
     {
       "@type": "WebSite",
@@ -212,7 +212,7 @@ export const architectureSchema = {
   "@type": ["SoftwareApplication", "APIReference"],
   name: "Nyaya Architecture",
   description:
-    "Option R2 zero-DB-ops pure-lexical legal MCP pipeline: SQLite FTS5, LanceDB BM25, DuckDB ZSTD Parquet, direct S3 pypdfium2, 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
+    "Database-free pure-lexical legal MCP pipeline: SQLite FTS5, LanceDB BM25, DuckDB ZSTD Parquet, direct S3 pypdfium2, 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
   url: `${SITE}/architecture/`,
   publisher: { "@id": ORG_ID },
   applicationCategory: "DeveloperApplication",

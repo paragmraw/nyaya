@@ -21,7 +21,7 @@ const STAGES: Stage[] = [
         <strong>Input:</strong> natural-language query, CNR, INSC, HC Neutral, AIR/SCC, or draft brief.<br />
         <strong>Parser:</strong> priority-ordered <code>nyaya/citations.py</code> (no bare first-number matching).<br />
         <strong>Expansion:</strong> pari-materia IPC↔BNS, CrPC↔BNSS, IEA↔BSA equivalence.<br />
-        <strong>Embeddings:</strong> zero dense vectors or GPU dependencies in Phase 1.
+        <strong>Embeddings:</strong> zero dense vectors or GPU dependencies in the v2.0 lexical pipeline.
       </>
     ),
   },
@@ -59,7 +59,7 @@ const STAGES: Stage[] = [
     detail: (
       <>
         <strong>Local stdio:</strong> <code>uvx nyaya-mcp</code> auto-fetches verified packs when <code>NYAYA_MANIFEST_URL</code> is configured (zero secrets).<br />
-        <strong>Hosted HTTP:</strong> single <code>python:3.12-slim-bookworm</code> container on Railway (&lt;1 GB RAM, scale-to-zero).<br />
+        <strong>Hosted HTTP:</strong> single <code>python:3.12-slim-bookworm</code> container on Railway (&lt;1 GB RAM, sleeps when idle).<br />
         <strong>Optional /chat:</strong> stateless FastAPI + LangGraph agent mounted only when <code>NVIDIA_API_KEY</code> is configured.
       </>
     ),

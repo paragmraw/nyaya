@@ -10,9 +10,9 @@ import { API_VERSION, pageOpenGraph } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Architecture",
   description:
-    "How Nyaya v2.0 works: Option R2 zero-DB-ops pure-lexical pipeline (SQLite FTS5 + LanceDB BM25 + DuckDB ZSTD Parquet + direct S3 pypdfium2) serving 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
+    "How Nyaya v2.0 works: database-free pure-lexical pipeline (SQLite FTS5 + LanceDB BM25 + DuckDB ZSTD Parquet + direct S3 pypdfium2) serving 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
   openGraph: pageOpenGraph({
-    title: "Nyaya v2.0 Architecture - Option R2 Pure-Lexical Legal MCP",
+    title: "Nyaya v2.0 Architecture - Database-Free Pure-Lexical Legal MCP",
     description:
       "Baked SQLite FTS5 core, LanceDB BM25 & DuckDB ZSTD Parquet on Railway Storage Bucket, direct AWS S3 pypdfium2, and dual uvx stdio + HTTP transport.",
   }),
@@ -27,8 +27,8 @@ export default function ArchitecturePage() {
         <div className="container">
           {/* hero */}
           <section>
-            <p className="eyebrow">Architecture · Option R2 · v{API_VERSION}</p>
-            <h1>Pure lexical, zero DB ops</h1>
+            <p className="eyebrow">Architecture · v{API_VERSION}</p>
+            <h1>Pure lexical, database-free</h1>
             <p className="lead lead-wide">
               Baked SQLite FTS5 core + LanceDB native BM25 + DuckDB ZSTD Parquet + direct S3 <code>pypdfium2</code> — serving 12 MCP tools, 8 <code>nyaya://</code> resources, 4 practitioner prompts, REST APIs, and optional <code>/chat</code> inside a single &lt;1 GB RAM container.
             </p>
@@ -47,7 +47,7 @@ export default function ArchitecturePage() {
           <section className="section">
             <div className="section-head">
               <h2>Stack</h2>
-              <p className="sec-desc">Option R2 components: zero managed database servers, zero dense vectors in Phase 1, and zero API keys required for MCP.</p>
+              <p className="sec-desc">Embedded &amp; object-storage components: zero managed database servers, zero dense-vector dependencies in v2.0, and zero API keys required for MCP.</p>
             </div>
             <div className="stack-grid">
               <div className="stack-col">
