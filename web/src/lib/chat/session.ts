@@ -1,7 +1,7 @@
 // The chat streaming state machine, extracted from the useChat hook so the
-// whole turn — fetch, SSE read loop, rAF-batched accumulators, incremental
+// whole turn (fetch, SSE read loop, rAF-batched accumulators, incremental
 // citation stripping, tool events, the composing reset, the correction
-// rebase, error bookends, stream timeout, and cancel — runs headless against
+// rebase, error bookends, stream timeout, and cancel) runs headless against
 // injected fakes (node-testable, no React, no DOM).
 //
 // useChat stays a thin adapter: it owns the message list, history building,
@@ -69,7 +69,7 @@ class RequestError extends Error {
 }
 
 // Final assistant-message patch when the reader loop exits. With `done` seen
-// (a `correction` counts — it already rebased the accumulator onto the
+// (a `correction` counts, since it already rebased the accumulator onto the
 // authoritative text) the tokens become the verified answer: one full
 // parseCitations pass, contentFinal flips the bubble to the markdown render.
 // Without `done` the connection dropped before the stream was bookended, so
@@ -178,12 +178,12 @@ export function createChatSession(options: ChatSessionOptions = {}): ChatSession
     // The `citations` event carries the backend's VERIFIED citation list (the
     // verification pass may have stripped ungrounded markers, so it can
     // disagree with a re-parse of the answer text). It is authoritative: the
-    // final flush below must not clobber it with a re-derived list — least
+    // final flush below must not clobber it with a re-derived list; least
     // surprise rule, an explicit event beats a re-parse.
     let eventCitations: ChatCitation[] | null = null;
     // Set once the response is OK and reading has begun: an error thrown from
     // here on is a mid-stream failure (connection drop), which reads as an
-    // interruption (the answer was partial and retryable) — not as the raw
+    // interruption (the answer was partial and retryable), not as the raw
     // transport error text.
     let streamOpen = false;
 
@@ -343,7 +343,7 @@ export function createChatSession(options: ChatSessionOptions = {}): ChatSession
               if (correctedText) {
                 // Authoritative replacement: drop any pending batched flush so
                 // it cannot overwrite the correction with stale accumulated
-                // tokens, and rebase the accumulator onto the corrected text —
+                // tokens, and rebase the accumulator onto the corrected text,
                 // otherwise the final flush below would re-apply the raw
                 // pre-correction tokens and win over the verified answer.
                 batcher.cancel();
@@ -353,7 +353,7 @@ export function createChatSession(options: ChatSessionOptions = {}): ChatSession
                 display = correctedText;
                 stripper.restart(correctedText);
                 const { text, citations } = parseCitations(correctedText);
-                // The corrected text is authoritative — final markdown render
+                // The corrected text is authoritative: final markdown render
                 // starts here even though the stream is still open (done
                 // follows immediately).
                 onPatch({ content: text, citations, status: undefined, contentFinal: true });
@@ -386,7 +386,7 @@ export function createChatSession(options: ChatSessionOptions = {}): ChatSession
       }
       // Stream complete: flush the final accumulated text authoritatively.
       // With `done` seen, ONE full parseCitations pass (markdown links +
-      // citations list) — the bubble switches from streaming-plain to markdown
+      // citations list), and the bubble switches from streaming-plain to markdown
       // render. Without `done` the connection dropped before the bookend:
       // finalizeAssistantPatch keeps the partial text plain and marks the run
       // interrupted (retryable) instead of rendering truncated markdown.
@@ -432,7 +432,7 @@ export function createChatSession(options: ChatSessionOptions = {}): ChatSession
       reasoningDirty = false;
       planDirty = false;
       // Shared abort plumbing only resets while this is still the current
-      // run — see the sequence guard above.
+      // run, see the sequence guard above.
       if (myRun === runSeq) {
         clearStreamTimeout();
         abortController = null;

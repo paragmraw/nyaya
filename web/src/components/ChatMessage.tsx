@@ -1,7 +1,7 @@
 "use client";
 
 // ChatMessageView: renders a single chat turn (user or assistant). Since the
-// P4 decomposition this is a thin composition layer — the tool chips
+// P4 decomposition this is a thin composition layer: the tool chips
 // (ToolChips), traces (Trace), citations (CitationList), error row
 // (ErrorRow) and markdown rendering (MarkdownContent) each live in their own
 // component; this file owns only the per-message layout and the
@@ -9,7 +9,7 @@
 //
 // Memoized: during streaming only the tail message's object identity changes
 // (updateAssistant replaces just that entry), so earlier bubbles skip
-// re-render entirely — their props keep identity. The streaming tail always
+// re-render entirely; their props keep identity. The streaming tail always
 // re-renders (its msg object changes each flush).
 
 import { memo, useMemo } from "react";
@@ -37,15 +37,15 @@ export function phaseLabel(status: string): string {
 function ChatMessageViewImpl({ msg, isStreaming = false, onRetry }: { msg: ChatMessage; isStreaming?: boolean; onRetry?: () => void }) {
   const isBot = msg.role === "assistant";
   // Streaming-plain: while this bubble is actively streaming and its content
-  // is not yet the authoritative verified text, render raw pre-wrap text —
+  // is not yet the authoritative verified text, render raw pre-wrap text:
   // react-markdown re-parsing growing content per animation frame is O(n²).
   // The plan/reasoning traces (which grow for hundreds of deltas before the
   // answer starts) get the same treatment. A failed run whose text never
   // became authoritative (no final parse: stream interrupted/errored
-  // mid-answer) also stays plain — a truncated answer can contain half-finished
+  // mid-answer) also stays plain: a truncated answer can contain half-finished
   // markdown (unclosed **bold**, a torn table) that would render as artifacts.
   const streamingPlain = isBot && !msg.contentFinal && (isStreaming || !!msg.error);
-  // Memoize normaliseMd — it's O(n) and the full content can be long.
+  // Memoize normaliseMd: it's O(n) and the full content can be long.
   // Skipped entirely during streaming-plain (raw display needs no markdown
   // normalisation); recomputed once when the final text lands.
   const normalisedContent = useMemo(
@@ -66,7 +66,7 @@ function ChatMessageViewImpl({ msg, isStreaming = false, onRetry }: { msg: ChatM
           </span>
         )}
 
-        {/* Tool calls — shown above content for prominence during streaming */}
+        {/* Tool calls: shown above content for prominence during streaming */}
         {isBot && <ToolChips tools={msg.tools} />}
 
         {/* Content (streams in token-by-token; plain while streaming,
@@ -92,7 +92,7 @@ function ChatMessageViewImpl({ msg, isStreaming = false, onRetry }: { msg: ChatM
           />
         )}
 
-        {/* Agent plan and reasoning trace — plain while streaming, markdown after */}
+        {/* Agent plan and reasoning trace: plain while streaming, markdown after */}
         {isBot && msg.plan && msg.plan.trim() && (
           <Trace kind="plan" text={msg.plan} plain={streamingPlain} />
         )}

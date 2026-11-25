@@ -2,12 +2,12 @@
 // constant feeds sitemap, OG, JSON-LD, breadcrumbs").
 //
 // `next-sitemap.config.cjs` cannot import this TS module (plain CJS run by
-// npx), so its siteUrl is duplicated there — keep the two in sync.
+// npx), so its siteUrl is duplicated there; keep the two in sync.
 
 export const SITE = "https://nyaya.parag.tech";
 
 // API/server version displayed in UI copy (mirrors __version__ in
-// mcp/nyaya/__init__.py — Python is the canonical source for the backend).
+// mcp/nyaya/__init__.py; Python is the canonical source for the backend).
 export const API_VERSION = "2.0.0";
 
 export const OG_IMAGE = "/og-default.png";
@@ -15,7 +15,7 @@ export const OG_IMAGE = "/og-default.png";
 /**
  * openGraph block for a page. Next replaces (not deep-merges) the layout
  * openGraph when a page defines its own, which silently dropped the default
- * og:image — this helper keeps images (and type) present on every page.
+ * og:image. This helper keeps images (and type) present on every page.
  */
 export function pageOpenGraph(opts: { title: string; description: string }) {
   return {

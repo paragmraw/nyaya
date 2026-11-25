@@ -3,7 +3,7 @@
 //
 // Every site-absolute URL is built from SITE (src/lib/site.ts) so identity
 // stays single-sourced. URL fragments are only used when a matching DOM id
-// exists on the target route — the test asserts this.
+// exists on the target route: the test asserts this.
 
 import { API_VERSION, OG_IMAGE, SITE } from "./site";
 
@@ -271,7 +271,7 @@ export const faqSchema = {
       name: "Is my conversation stored anywhere?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Only in your browser tab. The transcript lives in sessionStorage under nyaya.chat.v1 (and the composer draft under nyaya.chat.draft) and is cleared when the tab closes or via the New chat button. The server holds no conversation database; chat logs carry request ids and message lengths, not message text. Your message is, however, sent to NVIDIA's hosted model for processing — retention there is governed by NVIDIA's terms. See the Privacy page for details.",
+        text: "Only in your browser tab. The transcript lives in sessionStorage under nyaya.chat.v1 (and the composer draft under nyaya.chat.draft) and is cleared when the tab closes or via the New chat button. The server holds no conversation database; chat logs carry request ids and message lengths, not message text. Your message is, however, sent to NVIDIA's hosted model for processing; retention there is governed by NVIDIA's terms. See the Privacy page for details.",
       },
     },
     {
@@ -279,7 +279,7 @@ export const faqSchema = {
       name: "How often is the corpus updated?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "The Supreme Court and High Court judgment packs and the central legislation deltas follow a daily scheduled ingest; other packs refresh with their upstream releases. Updates ship as versioned corpus releases after an 8-suite verification gate — the current published baseline is corpus-v2026.11.25-p1. Coverage is a release snapshot, not a real-time feed.",
+        text: "The Supreme Court and High Court judgment packs and the central legislation deltas follow a daily scheduled ingest; other packs refresh with their upstream releases. Updates ship as versioned corpus releases after an 8-suite verification gate. The current published baseline is corpus-v2026.11.25-p1. Coverage is a release snapshot, not a real-time feed.",
       },
     },
     {
@@ -287,7 +287,7 @@ export const faqSchema = {
       name: "Do I need an account or an API key to use Nyaya?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. There are no accounts or sign-in anywhere in the product, and local MCP use needs no LLM or embedding keys — retrieval is purely lexical over local indexes. The hosted chat uses the server's own model key; you never share credentials with the service.",
+        text: "No. There are no accounts or sign-in anywhere in the product, and local MCP use needs no LLM or embedding keys; retrieval is purely lexical over local indexes. The hosted chat uses the server's own model key; you never share credentials with the service.",
       },
     },
     {
@@ -295,7 +295,7 @@ export const faqSchema = {
       name: "What are the usage limits?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Per client IP, per minute: 15 chat turns, 120 REST requests, 30 MCP calls, and 20 analytics requests, with a 1 MB request-body cap and a 4000-character limit per chat message. Exceeding a rate limit returns HTTP 429 — retry after waiting.",
+        text: "Per client IP, per minute: 15 chat turns, 120 REST requests, 30 MCP calls, and 20 analytics requests, with a 1 MB request-body cap and a 4000-character limit per chat message. Exceeding a rate limit returns HTTP 429. Retry after waiting.",
       },
     },
   ],

@@ -24,7 +24,7 @@ function subscribeToTheme(onChange: () => void): () => void {
 
 // Sun / moon glyphs for the theme toggle. Both icons are always rendered and
 // visibility is driven purely by CSS ([data-theme] on <html>), so the markup
-// matches the server HTML exactly — no hydration flicker. The moon shows in
+// matches the server HTML exactly, so there is no hydration flicker. The moon shows in
 // light mode, the sun in dark mode (the icon names the current scheme).
 function ThemeIcon({ variant }: { variant: "sun" | "moon" }) {
   return variant === "sun" ? (
@@ -138,12 +138,12 @@ export default function Topnav() {
 
   // Theme toggle. The effective theme lives on <html data-theme> (set
   // pre-paint; globals.css implements both schemes as token redefinitions).
-  // useSyncExternalStore subscribes to that attribute (MutationObserver) —
+  // useSyncExternalStore subscribes to that attribute (MutationObserver);
   // during hydration React reads getServerSnapshot ("light"), then swaps to
   // the real value without a hydration mismatch.
   const theme = useSyncExternalStore(subscribeToTheme, currentTheme, () => "light");
 
-  // Follow live OS changes only while the user has not pinned a choice —
+  // Follow live OS changes only while the user has not pinned a choice;
   // once they toggle, their stored entry wins and this becomes a no-op.
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -151,7 +151,7 @@ export default function Topnav() {
       try {
         if (localStorage.getItem(THEME_STORAGE_KEY)) return;
       } catch {
-        /* storage blocked — treat as unpinned */
+        /* storage blocked, treat as unpinned */
       }
       applyTheme(e.matches ? "dark" : "light", false);
     };

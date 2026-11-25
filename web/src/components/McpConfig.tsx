@@ -30,7 +30,7 @@ function buildLocalMcpJson(commercialSafeOnly: boolean): string {
 }
 
 function buildRemoteMcpJson(origin: string): string {
-  // Streamable HTTP form — connects to the hosted HTTP MCP endpoint.
+  // Streamable HTTP form: connects to the hosted HTTP MCP endpoint.
   return JSON.stringify(
     {
       mcpServers: {

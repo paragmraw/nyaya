@@ -30,7 +30,7 @@ export default function ArchitecturePage() {
             <p className="eyebrow">Architecture · v{API_VERSION}</p>
             <h1>Pure lexical, database-free</h1>
             <p className="lead lead-wide">
-              Baked SQLite FTS5 core + LanceDB native BM25 + DuckDB ZSTD Parquet + direct S3 <code>pypdfium2</code> — serving 12 MCP tools, 8 <code>nyaya://</code> resources, 4 practitioner prompts, REST APIs, and optional <code>/chat</code> inside a single &lt;1 GB RAM container.
+              Baked SQLite FTS5 core + LanceDB native BM25 + DuckDB ZSTD Parquet + direct S3 <code>pypdfium2</code>, serving 12 MCP tools, 8 <code>nyaya://</code> resources, 4 practitioner prompts, REST APIs, and optional <code>/chat</code> inside a single &lt;1 GB RAM container.
             </p>
           </section>
 

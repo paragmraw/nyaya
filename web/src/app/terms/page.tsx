@@ -35,7 +35,7 @@ export default function TermsPage() {
             and its Model Context Protocol (MCP) server. By using any of them
             you accept these terms. Effective{" "}
             <time dateTime="2026-11-25">{EFFECTIVE_DATE}</time>. The service
-            is operated by the nyaya contributors &mdash; reach us at{" "}
+            is operated by the nyaya contributors; reach us at{" "}
             <code>{CONTACT_EMAIL}</code> or on{" "}
             <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
               GitHub
@@ -81,7 +81,7 @@ export default function TermsPage() {
           <div className="stack">
             <p>
               <strong>Code</strong> is open source under the Apache License
-              2.0 (see the repository NOTICE file) &mdash; for{" "}
+              2.0 (see the repository NOTICE file), for{" "}
               <code>mcp/</code>, <code>chat/</code>, and <code>web/</code>{" "}
               alike.
             </p>
@@ -149,14 +149,14 @@ export default function TermsPage() {
         {/* no warranty / liability */}
         <section className="section">
           <div className="section-head">
-            <h2>No warranty &mdash; and what that means</h2>
+            <h2>No warranty, and what that means</h2>
             <p className="sec-desc">Plain-language disclaimers.</p>
           </div>
           <div className="stack">
             <p>
               The service, its corpus, and its outputs are provided &ldquo;as
               is&rdquo; and &ldquo;as available&rdquo;, without warranties of
-              any kind, express or implied &mdash; including accuracy,
+              any kind, express or implied, including accuracy,
               completeness, availability, fitness for a particular purpose,
               and non-infringement. The corpus is a snapshot of upstream
               open-data releases and is updated by published releases, not in
@@ -164,8 +164,8 @@ export default function TermsPage() {
             </p>
             <p>
               To the maximum extent permitted by law, the nyaya contributors
-              are not liable for loss or damage arising from your use of &mdash;
-              or reliance on &mdash; the service or its outputs. For legal
+              are not liable for loss or damage arising from your use of, or
+              reliance on, the service or its outputs. For legal
               work, the value of the service is as a research aid: verify
               everything against primary texts before filing.
             </p>

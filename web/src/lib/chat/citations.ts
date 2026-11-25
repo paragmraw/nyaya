@@ -5,14 +5,14 @@ import type { ChatCitation } from "../api";
 
 // Linear-time by construction (CodeQL js/polynomial-redos): every quantifier
 // is BOUNDED, so no unbounded repetition exists for CodeQL's superlinear
-// backtracking analysis to pump, and per-start-position cost is capped —
+// backtracking analysis to pump, and per-start-position cost is capped:
 // total cost is O(bound × length). Two independent quadratic shapes are
 // covered:
 //   1. intra-marker: whitespace runs split across adjacent quantifiers
 //      (fixed by disjoint classes; whitespace tolerance moved to .trim()).
 //   2. inter-position (pump): the marker prefix "[[act:" recurs inside a
 //      comma-free stream, and each occurrence re-ran the unbounded act class
-//      to the end of the string before failing — quadratic even with (1)
+//      to the end of the string before failing, quadratic even with (1)
 //      fixed. Bounding the classes caps each failed attempt.
 // Bounds are generous vs real markers (~30–60 chars): act ≤ 512, ref ≤ 2048,
 // ≤ 16 whitespace chars between "," and "ref:".
@@ -54,7 +54,7 @@ export function parseCitations(text: string): { text: string; citations: ChatCit
   }
   // The whitespace collapse is horizontal-only and never touches line-leading
   // indentation: `\s{2,}` would destroy `\n\n` paragraph breaks, and a plain
-  // `[ \t]{2,}` would still eat the leading 2+ spaces of a nested list item —
+  // `[ \t]{2,}` would still eat the leading 2+ spaces of a nested list item;
   // both mangle the markdown the bubble is about to render. Anchoring the run
   // to a preceding non-newline char collapses runs between words but keeps
   // line-leading indentation (the char before it is `\n` or start-of-text).
@@ -66,7 +66,7 @@ export function parseCitations(text: string): { text: string; citations: ChatCit
 }
 
 // Streaming-plain display: convert [[act: X, ref: Y]] markers to a compact
-// plain-text chip ([X · Y]) — no markdown link conversion, no citations list,
+// plain-text chip ([X · Y]): no markdown link conversion, no citations list,
 // no whitespace collapse. The full parseCitations pass runs ONCE on the
 // authoritative final text (the correction event or the post-done flush); the
 // per-frame streaming path uses the incremental StreamingCitationStripper

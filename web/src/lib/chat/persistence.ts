@@ -1,7 +1,7 @@
 // Conversation persistence: sessionStorage serialize/restore plus a debounced
 // writer.
 //
-// The old hook wrote sessionStorage on EVERY messages change — every
+// The old hook wrote sessionStorage on EVERY messages change, every
 // animation frame during a stream. createPersistWriter coalesces those into
 // one trailing-debounce write (500ms default), with flushNow() for the
 // synchronous run-end / reset write. The sink is injected: the hook passes

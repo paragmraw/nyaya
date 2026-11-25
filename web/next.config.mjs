@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Static HTML/CSS/JS export — no Node server at runtime.
+  // Static HTML/CSS/JS export; no Node server at runtime.
   // The Python MCP container serves the built `out/` via Starlette StaticFiles.
   output: "export",
 

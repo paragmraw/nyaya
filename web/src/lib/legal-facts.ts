@@ -10,12 +10,12 @@
 // Deliberately NOT asserted here (hedged on the pages, not claimed away):
 // - Railway platform log retention, NVIDIA prompt-data retention;
 // - whether uvicorn access logging is enabled on a given deployment;
-// - any operator legal entity (the repo names none — the pages speak as
+// - any operator legal entity (the repo names none; the pages speak as
 //   "the nyaya contributors" with the security/contact email below).
 
 export const EFFECTIVE_DATE = "2026-11-25";
 
-/** SECURITY.md:14 — vulnerability + general contact. */
+/** SECURITY.md:14: vulnerability + general contact. */
 export const CONTACT_EMAIL = "mail@parag.tech";
 
 /** Footer.tsx / Topnav.tsx external link. */
@@ -24,7 +24,7 @@ export const REPO_URL = "https://github.com/paragmraw/nyaya";
 /** mcp/nyaya/config.py:27-30 (per-minute, per client IP). */
 export const RATE_LIMITS = { chat: 15, rest: 120, mcp: 30, analytics: 20 } as const;
 
-/** mcp/nyaya/config.py:31 — streaming body cap. */
+/** mcp/nyaya/config.py:31: streaming body cap. */
 export const BODY_CAP_BYTES = 1_048_576;
 
 /** Frontend localStorage/sessionStorage keys:
@@ -49,5 +49,5 @@ export const HISTORY_TURNS = 8;
  *  with a 4000-char cap (ChatComposer.tsx:5-10). */
 export const MESSAGE_MAX_CHARS = 4000;
 
-/** CHANGELOG.md:10 / mcp/README.md:28 — latest published corpus release. */
+/** CHANGELOG.md:10 / mcp/README.md:28: latest published corpus release. */
 export const CORPUS_BASELINE = "corpus-v2026.11.25-p1";

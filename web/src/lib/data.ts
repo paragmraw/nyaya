@@ -287,7 +287,7 @@ export const PIPE_STEPS: PipeStep[] = [
   {
     num: "02",
     title: "Resolve",
-    desc: "Matches exact canonical tuple keys against baked SQLite and Bucket indices — eliminating AIR 1973 SC 9999 ≠ 1461 false hits.",
+    desc: "Matches exact canonical tuple keys against baked SQLite and Bucket indices, eliminating AIR 1973 SC 9999 ≠ 1461 false hits.",
     eg: "resolve(\"IEA s.65B(4)\") → EvidenceAct 65B (repealed → BSA 63)",
   },
   {

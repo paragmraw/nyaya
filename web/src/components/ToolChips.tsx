@@ -29,7 +29,7 @@ function toolArgsLabel(name: string, args?: Record<string, unknown>): string {
 }
 
 // Render a tool-result value as a compact, readable string. Long strings are
-// left intact — the panel truncates with CSS ellipsis + a scroll fallback so
+// left intact: the panel truncates with CSS ellipsis + a scroll fallback so
 // nothing overflows the bubble.
 function formatToolValue(v: unknown): string {
   if (v == null) return "N/A";

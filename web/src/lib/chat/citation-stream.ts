@@ -1,11 +1,11 @@
 // Incremental citation-marker stripping for the streaming path.
 //
 // The old streaming flush re-ran stripCitationMarkers on the ENTIRE
-// accumulated text every animation frame — quadratic cumulative work over a
+// accumulated text every animation frame, quadratic cumulative work over a
 // long answer. StreamingCitationStripper scans only the new delta: it converts
 // complete [[act: X, ref: Y]] markers to [X · Y] chips as they close, and
 // holds back a tail that could still grow into a marker (a trailing "[" or an
-// incomplete "[[act:…"). flush() emits whatever is still held, literally —
+// incomplete "[[act:…"). flush() emits whatever is still held, literally:
 // a tail that never completed is plain text, matching stripCitationMarkers.
 //
 // The holdback logic mirrors the CITE_RE bounds (act ≤ 512, ref ≤ 2048, ≤ 16
@@ -13,7 +13,7 @@
 // marker can ever be is emitted literally, so nothing can stall the stream.
 
 // Keep in sync with the bounds in chat/citations.ts (imported there; the
-// duplicated literals below avoid a circular import — both modules are leaf
+// duplicated literals below avoid a circular import: both modules are leaf
 // pure modules re-exported by the facade).
 const MARKER_PREFIX = "[[act:";
 
@@ -25,7 +25,7 @@ function mightBecomeMarker(s: string): boolean {
   const rest = s.slice(MARKER_PREFIX.length);
   const comma = rest.indexOf(",");
   const bracket = rest.indexOf("]");
-  if (bracket !== -1 && (comma === -1 || bracket < comma)) return false; // "]" before "," — dead
+  if (bracket !== -1 && (comma === -1 || bracket < comma)) return false; // "]" before ",": dead
   if (comma === -1) return rest.length <= 512; // act part still growing (≥1 char comes later)
   const act = rest.slice(0, comma);
   if (act.length < 1 || act.length > 512) return false;
@@ -37,7 +37,7 @@ function mightBecomeMarker(s: string): boolean {
     let ref = after.slice(refIdx + 4);
     // A trailing "]" may be the marker's OWN first closing bracket with the
     // second one still in flight (a feed boundary can fall between the two
-    // "]"s of "]]") — that is holdable. Any "]" BEFORE the trailing one is a
+    // "]"s of "]]"), which is holdable. Any "]" BEFORE the trailing one is a
     // real bracket inside the ref text: dead.
     if (ref.endsWith("]")) {
       const body = ref.slice(0, -1);
@@ -46,7 +46,7 @@ function mightBecomeMarker(s: string): boolean {
       // within bounds and non-empty ([^\]]{1,2048}).
       return body.length >= 1 && body.length <= 2048;
     }
-    return ref.length <= 2048; // ref may still be empty — holdable
+    return ref.length <= 2048; // ref may still be empty, so holdable
   }
   // No "ref:" yet: allow whitespace run (≤16) plus a prefix of "ref:".
   if (after.length > 16 + 3) return false;
