@@ -136,9 +136,14 @@ test("privacy page discloses the LLM processor and browser storage", () => {
   const src = pageSrc("/privacy/");
   assert.ok(/NVIDIA/.test(src), "privacy page must name the LLM processor");
   assert.ok(src.includes("sessionStorage"), "privacy page must describe browser storage");
-  assert.ok(src.includes("nyaya.chat.v1"), "privacy page must name the transcript key");
+  // The page sources the key from legal-facts.ts (single-sourced), so the
+  // guard asserts the constant's usage rather than the hand-copied string.
   assert.ok(
-    /governed by NVIDIA/i.test(src),
+    /STORAGE\.chatTranscript/.test(src),
+    "privacy page must disclose the transcript key via legal-facts STORAGE",
+  );
+  assert.ok(
+    /governed by\s+NVIDIA/i.test(src),
     "NVIDIA data handling must be framed as governed by NVIDIA's terms",
   );
 });

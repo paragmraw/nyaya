@@ -77,7 +77,13 @@ function* pairs(value: unknown, key = ""): Generator<[string, string]> {
 test("known routes exist exactly once each", () => {
   assert.deepEqual(
     [...KNOWN_ROUTES].sort(),
-    ["/", "/architecture/", "/citations/", "/corpus/"],
+    [
+      "/",
+      "/architecture/",
+      "/citations/",
+      "/corpus/",
+      "/privacy/",
+    ],
   );
 });
 
