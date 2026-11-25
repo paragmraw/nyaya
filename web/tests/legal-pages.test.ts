@@ -180,7 +180,23 @@ test("faq page renders from the faq schema, not re-typed copy", () => {
 
 test("accessibility page is honest about conformance posture", () => {
   const src = pageSrc("/accessibility/");
-  assert.ok(/skip/i.test(src), "accessibility page must mention the skip link");
+  // Statement cross-checks the features it names exist in source, so
+  // deleting the feature (not just the prose) fails the guard.
+  const layout = readFileSync(join(APP, "layout.tsx"), "utf8");
+  assert.ok(
+    layout.includes('className="skip-link"') && layout.includes('href="#content"'),
+    "skip-link feature referenced by the accessibility statement is missing from layout",
+  );
+  const topnav = readFileSync(join(APP, "..", "components", "Topnav.tsx"), "utf8");
+  assert.ok(
+    /Escape/.test(topnav) && /focus\(\)/.test(topnav) && /preventDefault/.test(topnav),
+    "focus-trap/Escape feature referenced by the accessibility statement is missing from Topnav",
+  );
+  const architecture = readFileSync(join(APP, "architecture", "page.tsx"), "utf8");
+  assert.ok(
+    architecture.includes("PipelineStage"),
+    "Enter/Space cards referenced by the accessibility statement must live on /architecture",
+  );
   assert.ok(
     /prefers-color-scheme|prefers-color/i.test(src),
     "accessibility page must mention OS color-scheme honoring",

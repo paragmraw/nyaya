@@ -4,18 +4,17 @@ import Link from "next/link";
 import { useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { API_VERSION } from "@/lib/site";
+import { REPO_URL } from "@/lib/legal-facts";
 
+// Product links in the first nav; legal/help/meta links in the second.
 // Exported for tests/legal-pages.test.ts (site-link route validation).
+// REPO_URL is single-sourced from legal-facts.ts rather than hand-copied.
 export const FOOTER_LINKS = [
   { href: "/corpus/", label: "Corpus" },
   { href: "/citations/", label: "Citations" },
   { href: "/architecture/", label: "Architecture" },
-  { href: "https://github.com/paragmraw/nyaya", label: "GitHub", external: true },
+  { href: REPO_URL, label: "GitHub", external: true },
 ];
-
-// Product links in the first nav; legal/help/meta links in the second.
-// Sourced from src/lib/legal-facts.ts-style constants where values repeat
-// (REPO_URL lives here too, matching FOOTER_LINKS above).
 export const SITE_LINKS = [
   { href: "/privacy/", label: "Privacy" },
   { href: "/terms/", label: "Terms" },

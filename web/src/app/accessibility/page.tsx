@@ -25,10 +25,11 @@ export default function AccessibilityPage() {
           <p className="eyebrow">Accessibility</p>
           <h1>Accessibility statement</h1>
           <p className="lead lead-wide">
-            Nyaya aims to follow the practices of WCAG 2.2 Level AA: the
-            interface is fully keyboard-navigable, content is served to
-            screen readers from semantic HTML, and no information is conveyed
-            by colour alone. <strong>We have not commissioned a formal
+            Nyaya is designed to follow the practices of WCAG 2.2 Level AA:
+            keyboard navigation is a design requirement, content is served to
+            screen readers from semantic HTML, and the interface avoids
+            relying on colour alone (statuses always carry a text label).
+            <strong>We have not commissioned a formal
             third-party conformance audit</strong>, so this page describes
             what is implemented and what is known to fall short &mdash; not a
             certification. If you hit a barrier, we want to hear about it:{" "}
@@ -46,11 +47,12 @@ export default function AccessibilityPage() {
             <p>
               <strong>Keyboard access.</strong> A &quot;Skip to main
               content&quot; link is the first focusable element on every page
-              and jumps to the main region. All controls are reachable and
-              operable by keyboard: Escape closes the mobile navigation with a
-              Tab focus-trap while it is open, and interactive cards on the
-              citations page expand with Enter or Space. The back-to-top
-              footer control respects <code>prefers-reduced-motion</code>.
+              and jumps to the main region. Escape closes the mobile
+              navigation with a Tab focus-trap while it is open, and the
+              pipeline-stage cards on the <a href="/architecture/">
+              Architecture page</a> expand with Enter or Space. The
+              back-to-top footer control respects{" "}
+              <code>prefers-reduced-motion</code>.
             </p>
             <p>
               <strong>Screen readers.</strong> Pages use semantic landmarks
@@ -58,9 +60,13 @@ export default function AccessibilityPage() {
               <code>nav</code>) with labelled regions; navigation links mark
               the active page with <code>aria-current=&quot;page&quot;</code>.
               The chat panel labels its controls with{" "}
-              <code>aria-label</code>, announces streaming status through an
-              off-screen <code>aria-live</code> region, and exposes the
-              character count as text long before the limit cuts input off.
+              <code>aria-label</code> and announces streaming status phases
+              and completion through an off-screen <code>aria-live</code>{" "}
+              region; once done, the reply is read from the messages list
+              like any other content. When a message nears the cap, the
+              remaining character count is exposed as text &mdash; currently
+              once fewer than 500 characters remain, before the
+              4000-character cap stops further input.
             </p>
             <p>
               <strong>Visual design.</strong> The interface automatically
@@ -69,15 +75,15 @@ export default function AccessibilityPage() {
               explicit toggle that persists locally (that preference is the
               only <code>localStorage</code> entry &mdash; see the{" "}
               <a href="/privacy/">Privacy statement</a>). Colour contrast and
-              focus indicators are handled in the theme, and state is never
-              signalled by colour alone.
+              focus indicators are handled in the theme, and statuses carry
+              text labels so state does not depend on colour alone.
             </p>
             <p>
               <strong>Motion and behaviour.</strong> Animated transitions are
               limited and respect reduced-motion preferences; the interface
               does not flash, autoplay moving content, or impose time limits
-              on interaction. Chat streams announce progressively rather than
-              popping in all at once, with explicit cancel and retry controls.
+              on interaction. Chat offers explicit cancel and retry controls,
+              and its progress state is announced as it changes.
             </p>
           </div>
         </section>

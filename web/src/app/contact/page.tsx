@@ -23,7 +23,7 @@ export default function ContactPage() {
         {/* hero */}
         <section>
           <p className="eyebrow">Contact</p>
-          <h1>Every message reaches a person</h1>
+          <h1>Reaching the project</h1>
           <p className="lead lead-wide">
             The primary channel is email: <code>{CONTACT_EMAIL}</code>. Send
             the purpose in the subject line and include the identifiers listed
@@ -49,9 +49,9 @@ export default function ContactPage() {
               citation or quote involved, the status the service returned (for
               example <code>QUOTE_MISMATCH</code> or{" "}
               <code>NOT_FOUND_IN_CORPUS</code> and its request id), and what
-              the primary source says. The audit-status vocabulary on the{" "}
-              <a href="/citations/">Citations page</a> maps one-to-one onto
-              the reports.
+              the primary source says. The audit-status vocabulary documented
+              on the <a href="/citations/">Citations page</a> is the right
+              vocabulary for these reports.
             </p>
             <p>
               <strong>Corpus errors and takedown / correction requests.</strong>{" "}

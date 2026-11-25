@@ -56,9 +56,11 @@ export default function PrivacyPage() {
             </p>
             <p>
               <strong>No cookies and no analytics.</strong> The application
-              sets none, and none are needed: production builds ship with
-              analytics code removed entirely, so this site makes no requests
-              to advertising or tracking services.
+              sets none, and none are needed: the only analytics
+              instrumentation in the codebase is a development-only console
+              reporter, unreachable in production, and there is no analytics
+              endpoint &mdash; the site makes no requests to advertising,
+              analytics, or tracking services.
             </p>
             <p>
               <strong>Chat history is browser-local.</strong> Your
@@ -91,22 +93,26 @@ export default function PrivacyPage() {
           </div>
           <div className="stack">
             <p>
-              The site is a static web bundle served from the same origin as
-              its own API. Browsing the site and searching the corpus sends no
-              profile-identifying data: corpus retrieval is purely lexical
-              lookups over a read-only, locally indexed database &mdash; no
-              LLM, no profile, no history.
+              The application itself builds no profile: corpus retrieval is
+              purely lexical lookups over a read-only, locally indexed
+              database &mdash; no LLM, no history. But like any web request,
+              the search terms you enter are sent to the same-origin API as
+              URL query strings, and standard HTTP access logging &mdash;
+              described under <a href="#server-logs">Server logs</a> below
+              &mdash; may record them alongside your address.
             </p>
             <p>
               Like nearly every internet service, the server sees your IP
-              address. It is used for exactly one thing: per-client-IP rate
-              limiting ({RATE_LIMITS.chat} chat requests, {RATE_LIMITS.rest}{" "}
+              address. The application itself uses it for exactly one thing:
+              per-client-IP rate limiting ({RATE_LIMITS.chat} chat requests,{" "}
+              {RATE_LIMITS.rest}{" "}
               REST requests, {RATE_LIMITS.mcp} MCP calls, and{" "}
               {RATE_LIMITS.analytics} analytics requests per minute, with a{" "}
               {Math.round(BODY_CAP_BYTES / 1024 / 1024)} MB request-body cap).
-              The counter lives in a bounded in-process memory cache (or an
-              optional shared Redis counter when the operator enables one) and
-              is never written to a database, a file, or any analytics system.
+              The rate-limit counter lives in a bounded in-process memory
+              cache (or, if the operator enables one, a shared Redis counter
+              for the same purpose); the standard access log described below
+              also records your address.
             </p>
           </div>
         </section>
@@ -192,7 +198,7 @@ export default function PrivacyPage() {
         </section>
 
         {/* server logs */}
-        <section className="section">
+        <section className="section" id="server-logs">
           <div className="section-head">
             <h2>Server logs</h2>
             <p className="sec-desc">What is written, what is not, and what we cannot decide.</p>
@@ -204,14 +210,20 @@ export default function PrivacyPage() {
               the source of truth for its own history. Application logs record
               request and turn ids, processing phase, latency, token counts,
               and the <em>length</em> of your message and the number of history
-              turns &mdash; the content of messages is not logged.
+              turns. The application&apos;s own logging does not write message
+              content; if a request fails, an error report generated at that
+              moment could incidentally capture fragments of the failing
+              request.
             </p>
             <p>
               The web server component&apos;s standard HTTP access logging is
-              not disabled, so request lines with client addresses may also be
-              logged. Where those logs persist and for how long is controlled
-              by the hosting platform (Railway), not by this codebase &mdash;
-              we cannot state or guarantee a retention period for them.
+              not disabled, so request lines &mdash; that is, the URL path
+              including its query string, so search terms you type into the
+              corpus table can appear in them &mdash; together with client
+              addresses may also be recorded. Where those logs persist and for
+              how long is controlled by the hosting platform (Railway), not by
+              this codebase &mdash; we cannot state or guarantee a retention
+              period for them.
             </p>
           </div>
         </section>
@@ -254,8 +266,10 @@ export default function PrivacyPage() {
             </p>
             <p>
               <strong>Questions:</strong> see the{" "}
-              <a href="/contact/">Contact page</a> &mdash; we read every
-              message sent to <code>{CONTACT_EMAIL}</code>.
+              <a href="/contact/">Contact page</a> &mdash; messages sent to{" "}
+              <code>{CONTACT_EMAIL}</code> are read as part of maintaining
+              the project (with a response commitment only for security
+              reports, on the terms set out there).
             </p>
           </div>
         </section>
