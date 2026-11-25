@@ -68,18 +68,18 @@ def test_publish_uploads_immutable_release_before_atomic_current_manifest_swap(
 ) -> None:
     build_dir = _build_gated_dir(tmp_path)
     bucket_client = InMemoryUploadClient()
-    hf_client = InMemoryUploadClient()
+    public_client = InMemoryUploadClient()
 
     result = publish_release(
         build_dir,
         tag="v2026.11.22",
         target="all",
         bucket_client=bucket_client,
-        public_client=hf_client,
+        public_client=public_client,
     )
     assert result.tag == "v2026.11.22"
     assert len(bucket_client.upload_order) >= 5
-    assert len(hf_client.upload_order) >= 5
+    assert len(public_client.upload_order) >= 5
 
     # Blue/green invariant: every immutable `releases/v2026.11.22/...` and `lancedb/...` key
     # is uploaded BEFORE `current/manifest.json` is atomically swapped at the very end!
@@ -92,12 +92,12 @@ def test_publish_uploads_immutable_release_before_atomic_current_manifest_swap(
     assert "releases/v2026.11.22/nyaya-core.sqlite.zst" in bucket_client.uploads
     assert "releases/v2026.11.22/nyaya-core.sqlite.zst.sha256" in bucket_client.uploads
 
-    assert hf_client.upload_order[-1] == "current/manifest.json"
-    for key in hf_client.upload_order[:-1]:
+    assert public_client.upload_order[-1] == "current/manifest.json"
+    for key in public_client.upload_order[:-1]:
         assert key.startswith("releases/v2026.11.22/"), f"Unexpected public pre-swap key: {key}"
 
     # Verify manifest.json partitions point to releases/<tag>/... S3 keys and preserve NC metadata
-    swapped_manifest = json.loads(hf_client.uploads["current/manifest.json"].decode("utf-8"))
+    swapped_manifest = json.loads(public_client.uploads["current/manifest.json"].decode("utf-8"))
     ddl_meta = swapped_manifest["datasets"]["district_court"]
     assert ddl_meta["commercial_safe"] is False
     assert ddl_meta["license_spdx"] == "CC-BY-NC-SA-4.0"
@@ -128,13 +128,6 @@ def test_nyaya_ingest_cli_end_to_end_with_fixture(tmp_path: Path) -> None:
     assert (build_dir / "gate-pass.json").is_file()
 
 
-def test_resolve_publish_clients_hf_dataset_warns_not_implemented(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    from nyaya.ingest.cli import _resolve_publish_clients
-
-    with caplog.at_level("WARNING", logger="nyaya.ingest.cli"):
-        bucket, public = _resolve_publish_clients(target="hf-dataset", tag="t", dry_run=False)
-
-    assert (bucket, public) == (None, None)
-    assert "not implemented" in caplog.text
+def test_publish_rejects_removed_hf_dataset_target() -> None:
+    with pytest.raises(SystemExit):
+        ingest_cli_main(["publish", "--target", "hf-dataset"])

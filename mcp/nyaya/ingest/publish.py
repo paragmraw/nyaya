@@ -1,5 +1,5 @@
 """Atomic blue/green publisher (`publish.py`) for Railway Storage Bucket (Tigris S3)
-and public HuggingFace Datasets / GitHub Releases mirrors.
+and public GitHub Releases mirrors.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ import zstandard as zstd
 from ..storage.manifest import CorpusManifest, load_manifest
 from .gate import collect_artifact_sha256s
 
-PublishTarget = Literal["railway-bucket", "hf-dataset", "gh-release", "all"]
+PublishTarget = Literal["railway-bucket", "gh-release", "all"]
 
 
 class PublishGateError(RuntimeError):
@@ -27,7 +27,7 @@ class PublishGateError(RuntimeError):
 
 
 class UploadClient(Protocol):
-    """Protocol for injectable S3/Tigris or HuggingFace/GitHub upload clients."""
+    """Protocol for injectable S3/Tigris or GitHub upload clients."""
 
     def upload_bytes(
         self,
@@ -389,7 +389,7 @@ def publish_release(
             lancedb_items.append((f"lancedb/{rel_posix}", fpath, "application/octet-stream"))
 
     use_bucket = target in ("railway-bucket", "all") and bucket_client is not None
-    use_public = target in ("hf-dataset", "gh-release", "all") and public_client is not None
+    use_public = target in ("gh-release", "all") and public_client is not None
 
     result = PublishResult(tag=tag, target=target, dry_run=dry_run)
     for key, _, _ in immutable_items:

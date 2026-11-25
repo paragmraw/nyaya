@@ -747,6 +747,3 @@ class CorpusStatusResponse(BaseModel):
     sources: list[SourceStatusEntry] = Field(default_factory=list)
     licensing: dict[str, Any] = Field(default_factory=dict)
     court_detail: dict[str, Any] | None = None
-
-
-CorpusStatus = CorpusStatusResponse

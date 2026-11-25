@@ -142,13 +142,6 @@ def irac_case_brief(
     )
 
 
-# Aliases for convenience / backwards callers
-case_brief = irac_case_brief
-new_criminal_code_transition = transition_criminal_code
-precedent_check = precedent_research_memo
-statutory_interpretation = audit_legal_draft
-
-
 def register(mcp: Any) -> None:
     """Register the 4 canonical MCP v2.0 prompts."""
 

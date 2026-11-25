@@ -19,7 +19,6 @@ on:
         options:
           - all
           - railway-bucket
-          - hf-dataset
           - gh-release
           - none
         default: all
@@ -132,15 +131,14 @@ jobs:
           NYAYA_BUCKET_SECRET_ACCESS_KEY: ${{ secrets.NYAYA_BUCKET_SECRET_ACCESS_KEY }}
           NYAYA_BUCKET_REGION: auto
           NYAYA_BUCKET_URL_STYLE: vhost
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TARGET="${{ inputs.publish_target || 'all' }}"
           # Same `corpus-v<date>-<n>` scheme as the live release (corpus-v2026.11.25-p1);
           # keeps corpus GitHub Releases distinct from application version tags.
           TAG="corpus-v$(date -u +%Y.%m.%d)-${{ github.run_number }}"
-          if [ -z "${NYAYA_BUCKET_ACCESS_KEY_ID:-}" ] && [ -z "${HF_TOKEN:-}" ] && [ "$TARGET" != "gh-release" ]; then
-            echo "::notice::Publish credentials (NYAYA_BUCKET_ACCESS_KEY_ID / HF_TOKEN) not configured; skipping remote upload after verify-gate pass."
+          if [ -z "${NYAYA_BUCKET_ACCESS_KEY_ID:-}" ] && [ "$TARGET" != "gh-release" ]; then
+            echo "::notice::Publish credentials (NYAYA_BUCKET_ACCESS_KEY_ID) not configured; skipping remote upload after verify-gate pass."
             exit 0
           fi
           uv run --no-sync nyaya-ingest publish \

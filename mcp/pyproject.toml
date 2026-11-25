@@ -41,7 +41,6 @@ ingest = [
     "beautifulsoup4>=4.12,<5",
     "lxml>=6.1.0,<7",
     "boto3>=1.35,<2",
-    "huggingface-hub>=0.26,<1",
 ]
 dev = [
     "pytest>=9.0.3,<10",

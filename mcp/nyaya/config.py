@@ -20,7 +20,6 @@ BucketUrlStyle = Literal["vhost", "path"]
 
 PORT_DEFAULT = 8000
 LOG_LEVEL = "INFO"
-SNIPPET_CHARS = 300
 WEB_OUT = "web/out"
 
 REDIS_URL: str | None = None

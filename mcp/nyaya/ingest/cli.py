@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import os
 import shutil
 import sys
@@ -32,8 +31,6 @@ from .publish import (
     publish_release,
 )
 from .state import IngestState
-
-logger = logging.getLogger(__name__)
 
 _SAMPLE_FIXTURE_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -116,11 +113,11 @@ def _build_parser() -> argparse.ArgumentParser:
         p_gate.add_argument("--report", type=Path, default=None)
 
     # 7. publish
-    p_pub = sub.add_parser("publish", help="Atomically publish gated artifacts to Railway Bucket & HF/GH.")
+    p_pub = sub.add_parser("publish", help="Atomically publish gated artifacts to Railway Bucket & GitHub Releases.")
     p_pub.add_argument("--build-dir", type=Path, default=Path("build"))
     p_pub.add_argument(
         "--target",
-        choices=["railway-bucket", "hf-dataset", "gh-release", "all"],
+        choices=["railway-bucket", "gh-release", "all"],
         default="all",
     )
     p_pub.add_argument("--tag", default="v2026.11.22")
@@ -134,7 +131,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--tag", default="v2026.11.22")
     p_all.add_argument(
         "--target",
-        choices=["railway-bucket", "hf-dataset", "gh-release", "all"],
+        choices=["railway-bucket", "gh-release", "all"],
         default="all",
     )
     p_all.add_argument("--hc-year-from", type=int, default=None)
@@ -230,9 +227,6 @@ def _resolve_publish_clients(
 ) -> tuple[UploadClient | None, UploadClient | None]:
     if dry_run:
         return InMemoryUploadClient(), InMemoryUploadClient()
-
-    if target == "hf-dataset":
-        logger.warning("Publish target 'hf-dataset' is not implemented; nothing will be uploaded.")
 
     bucket_client: UploadClient | None = None
     public_client: UploadClient | None = None

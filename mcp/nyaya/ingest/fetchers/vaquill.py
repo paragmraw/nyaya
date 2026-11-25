@@ -65,8 +65,6 @@ def parse_vaquill_coverage_yaml(yaml_text: str) -> dict[str, VaquillCoverageEntr
     return out
 
 
-VaquillCategory = str
-
 _LEGACY_CATEGORY_MAP: dict[str, str] = {
     "in_central_legislation.parquet": "central",
     "in_state_legislation.parquet": "state",
