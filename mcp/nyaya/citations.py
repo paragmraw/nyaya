@@ -801,28 +801,29 @@ def parse_citations(
             )
         )
 
+    def _emit_each_cpc_rule(
+        order_raw: str, rule_matches: list[re.Match[str]], rules_start: int
+    ) -> None:
+        for rm in rule_matches:
+            r_span = (rules_start + rm.start(), rules_start + rm.end())
+            _emit_cpc_rule(
+                order_raw, rm.group("rule"), rm.group("sub") or None, rm.group(0), r_span
+            )
+
     for m in _CPC_PLURAL_RE.finditer(text):
         if _claim(m.span()):
-            order_raw = m.group("order")
-            rules_text = m.group("rules")
-            rules_start = m.start("rules")
-            for rm in _SINGLE_CPC_RULE_RE.finditer(rules_text):
-                r_span = (rules_start + rm.start(), rules_start + rm.end())
-                _emit_cpc_rule(
-                    order_raw,
-                    rm.group("rule"),
-                    rm.group("sub") or None,
-                    rm.group(0),
-                    r_span,
-                )
+            _emit_each_cpc_rule(
+                m.group("order"),
+                list(_SINGLE_CPC_RULE_RE.finditer(m.group("rules"))),
+                m.start("rules"),
+            )
 
     for m in _CPC_INVERTED_RE.finditer(text):
         if _claim(m.span()):
             order_raw = m.group("order")
-            rules_text = m.group("rules")
-            rules_start = m.start("rules")
-            rule_matches = list(_SINGLE_CPC_RULE_RE.finditer(rules_text))
-            if len(rule_matches) <= 1 and rule_matches:
+            rule_matches = list(_SINGLE_CPC_RULE_RE.finditer(m.group("rules")))
+            if len(rule_matches) == 1:
+                # A single rule keeps the span of the whole "Rule X of Order Y" phrase.
                 rm = rule_matches[0]
                 _emit_cpc_rule(
                     order_raw,
@@ -832,15 +833,7 @@ def parse_citations(
                     m.span(),
                 )
             else:
-                for rm in rule_matches:
-                    r_span = (rules_start + rm.start(), rules_start + rm.end())
-                    _emit_cpc_rule(
-                        order_raw,
-                        rm.group("rule"),
-                        rm.group("sub") or None,
-                        rm.group(0),
-                        r_span,
-                    )
+                _emit_each_cpc_rule(order_raw, rule_matches, m.start("rules"))
 
     for m in _CPC_ORDER_RULE_RE.finditer(text):
         if _claim(m.span()):

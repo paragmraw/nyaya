@@ -61,5 +61,12 @@ Thumbs.db
 *.log
 docs/_build/
 
-# --- Scratch design files (gitignored anyway, never in the image) ---
+# --- Local-only / session dirs (gitignored anyway, never in the image) ---
 scratch
+.remember
+.superpowers
+.playwright-mcp
+.railway
+**/.ingest-state
+**/.audit-venv
+docs

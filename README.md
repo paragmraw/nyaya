@@ -1,12 +1,12 @@
 # nyaya
 
-**Zero-DB-ops Indian legal intelligence monorepo (`nyaya-mcp` v2.0)** — pure-lexical/metadata/graph MCP server, Next.js static SPA, and optional LangGraph chat assistant covering the Constitution of India, 37 Central & State/UT legislative jurisdictions, 12 Regulators, 15 Tribunals, Supreme Court (35k+), High Courts (17.77M+ across 25 HCs), and District Court metadata (81M DDL records).
+**Zero-DB-ops Indian legal intelligence monorepo (`nyaya-mcp` v2.0)** — pure-lexical/metadata/graph MCP server, Next.js static SPA, and optional LangGraph chat assistant covering the Constitution of India, 37 Central & State/UT legislative jurisdictions, 12 Regulators, 15 Tribunals, Supreme Court (38k+), High Courts (20.7M+ across 25 HCs), and District Court metadata (81M DDL records).
 
 ## Architecture (Option R2 — Zero-DB-Ops, Scale-to-Zero)
 
 Nyaya v2.0 runs a 100% external-database-free, pure-lexical/metadata/graph retrieval architecture requiring zero vector databases or embedding APIs:
 
-- **Baked SQLite Core (`nyaya-core.sqlite`, ~250 MB):** Read-only immutable SQLite3 with FTS5 (`porter unicode61`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry (e.g. IT Act s. 66A, Electoral Bonds), SC metadata, citation graph edges, and courts directory.
+- **Baked SQLite Core (`nyaya-core.sqlite`; released as zstd-compressed `nyaya-core.sqlite.zst` on GitHub Releases):** Read-only immutable SQLite3 with FTS5 (`porter unicode61`), Constitutional Amendments 1–106, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance + substantive diffs, Judicial Invalidations registry (e.g. IT Act s. 66A, Electoral Bonds), SC metadata, citation graph edges, and courts directory.
 - **Railway Storage Bucket (Private Tigris S3):** Holds 3 **LanceDB native Rust BM25 FTS** tables (`sc_chunks`, `hc_hot_chunks`, `state_acts_regulators`) and **compacted ZSTD Parquet** partitions queried by **DuckDB `httpfs`** (pre-installed into `/app/duckdb_ext`, capped at `256 MB` RAM / 2 threads / 5s `con.interrupt()`).
 - **Direct AWS Open Data PDFs (`pypdfium2`, Apache-2.0):** On-demand anonymous HTTPS range/stream reads from `s3://indian-supreme-court-judgments` and `s3://indian-high-court-judgments` with strict bucket/key regex allowlisting, `%PDF-` magic gate, 15 MB / 500-page caps, scanned-PDF detection (`chars_per_page < 50`), and a 256 MB disk zstd LRU cache.
 - **Local `uvx nyaya-mcp` (`stdio`):** Public packs and `manifest.json` are dual-published to Hugging Face Datasets / GitHub Releases so `uvx nyaya-mcp` runs on laptops with **zero secrets** and **zero stdout pollution**.
@@ -53,12 +53,12 @@ docker run --rm -i --read-only --tmpfs /tmp:size=64m -w /tmp nyaya-mcp nyaya-mcp
 Service infrastructure is declared in [`.railway/railway.ts`](.railway/railway.ts):
 
 1. Provision a **Railway Storage Bucket** attached to the `nyaya` service and set the deployment region to **`asia-southeast1` (Singapore)** in the Railway dashboard (minimal RTT to Indian users and AWS `ap-south-1` PDFs).
-2. Configure `NYAYA_BUCKET_ENDPOINT`, `NYAYA_BUCKET_NAME`, `NYAYA_BUCKET_ACCESS_KEY_ID`, `NYAYA_BUCKET_SECRET_ACCESS_KEY` (plus optional `NVIDIA_API_KEY` for `/chat`) in Railway Variables. All are `preserve()`d in `.railway/railway.ts`.
+2. Configure `NYAYA_BUCKET_ENDPOINT`, `NYAYA_BUCKET_NAME`, `NYAYA_BUCKET_ACCESS_KEY_ID`, `NYAYA_BUCKET_SECRET_ACCESS_KEY` (plus optional `NVIDIA_API_KEY` for `/chat`) in Railway Variables. To bake the SQLite core into the image at build time, also set `NYAYA_CORE_SQLITE_URL` (the release's `nyaya-core.sqlite.zst` asset) and `NYAYA_CORE_SQLITE_SHA256`. All are `preserve()`d in `.railway/railway.ts`.
 3. Populate the bucket via `nyaya-ingest` (or `.github/workflows/ingest-refresh.yml`):
    ```bash
    cd mcp && uv sync --extra ingest
    uv run nyaya-ingest sync --tier static && uv run nyaya-ingest sync --tier daily
-   uv run nyaya-ingest build-sqlite && uv run nyaya-ingest build-lance-fts && uv run nyaya-ingest compact-parquet
+   uv run nyaya-ingest build-sqlite && uv run nyaya-ingest build-lance-fts && uv run nyaya-ingest compact-parquet   # build-sqlite skips loading HC rows (served from Parquet)
    uv run nyaya-ingest verify-gate --strict
    uv run nyaya-ingest publish --target all
    # Hermetic offline pipeline test:

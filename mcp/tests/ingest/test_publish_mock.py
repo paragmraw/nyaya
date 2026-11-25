@@ -126,3 +126,15 @@ def test_nyaya_ingest_cli_end_to_end_with_fixture(tmp_path: Path) -> None:
     assert (build_dir / "nyaya-core.sqlite").is_file()
     assert (build_dir / "manifest.json").is_file()
     assert (build_dir / "gate-pass.json").is_file()
+
+
+def test_resolve_publish_clients_hf_dataset_warns_not_implemented(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from nyaya.ingest.cli import _resolve_publish_clients
+
+    with caplog.at_level("WARNING", logger="nyaya.ingest.cli"):
+        bucket, public = _resolve_publish_clients(target="hf-dataset", tag="t", dry_run=False)
+
+    assert (bucket, public) == (None, None)
+    assert "not implemented" in caplog.text

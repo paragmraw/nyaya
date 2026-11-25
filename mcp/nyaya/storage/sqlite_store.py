@@ -8,6 +8,7 @@ import math
 import re
 import sqlite3
 import threading
+from collections.abc import Iterable
 from datetime import date as Date
 from pathlib import Path
 from typing import Any
@@ -352,6 +353,11 @@ def _token_matches_boundary(tok: str, haystack: str) -> bool:
         if re.search(rf"\b{re.escape(stem)}(?:{_INFLECTION_ALT})?\b", haystack):
             return True
     return False
+
+
+def _distinct_lower(tokens: Iterable[str]) -> list[str]:
+    """Lower-case ``tokens`` and drop duplicates while preserving first-seen order."""
+    return list(dict.fromkeys(t.lower() for t in tokens))
 
 
 def _multitoken_min_required(n: int) -> int:
@@ -1545,7 +1551,7 @@ class SqliteStore:
                 return []
             return con.execute(sql, [expr, *base_params, q_limit, q_offset]).fetchall()
 
-        distinct_content = list(dict.fromkeys(t.lower() for t in content_tokens))
+        distinct_content = _distinct_lower(content_tokens)
         q_lower = query.lower()
         q_bigrams = [
             f"{distinct_content[i]} {distinct_content[i + 1]}"
@@ -1565,9 +1571,16 @@ class SqliteStore:
                 s += 24.0 if r["kind"] == "article" else 3.0
             title_str = str(r["title"] or "").lower()
             _, raw_title_toks = _extract_fts_tokens(title_str)
-            title_toks = list(dict.fromkeys(t.lower() for t in raw_title_toks))
+            title_toks = _distinct_lower(raw_title_toks)
             if len(title_toks) >= 2:
-                matched_t = sum(1 for tt in title_toks if any(_token_matches_boundary(qt, tt) or _token_matches_boundary(tt, qt) for qt in distinct_content))
+                matched_t = sum(
+                    1
+                    for tt in title_toks
+                    if any(
+                        _token_matches_boundary(qt, tt) or _token_matches_boundary(tt, qt)
+                        for qt in distinct_content
+                    )
+                )
                 if matched_t == len(title_toks):
                     s += 15.0
                 elif matched_t >= 2:
@@ -1587,14 +1600,14 @@ class SqliteStore:
         elif len(distinct_content) == 2:
             and_expr = _fts_query(query, exact_phrase=False, operator="AND", max_tokens=8)
             raw_rows = _run_fts(and_expr, max(50, limit + offset), 0)
-            scored_2 = sorted(
+            scored = sorted(
                 ((_score_row(r, in_and=True), -len(str(r["ref"] or "")), r) for r in raw_rows),
                 key=lambda x: (x[0], x[1]),
                 reverse=True,
             )
-            for sc_val, _, r in scored_2:
-                custom_scores[str(r["doc_id"])] = round(sc_val, 4)
-            rows = [r for _, _, r in scored_2[offset : offset + limit]]
+            for score_val, _, r in scored:
+                custom_scores[str(r["doc_id"])] = round(score_val, 4)
+            rows = [r for _, _, r in scored[offset : offset + limit]]
         else:
             need = limit + offset
             and_expr = _fts_query(query, exact_phrase=False, operator="AND", max_tokens=8)
@@ -1618,9 +1631,9 @@ class SqliteStore:
                     ).lower()
                     if sum(1 for tok in distinct_content if _token_matches_boundary(tok, haystack)) < min_required:
                         continue
-                sc_val = _score_row(r, in_and=in_and)
-                custom_scores[doc_id] = round(sc_val, 4)
-                candidates.append((sc_val, -len(str(r["ref"] or "")), r))
+                score_val = _score_row(r, in_and=in_and)
+                custom_scores[doc_id] = round(score_val, 4)
+                candidates.append((score_val, -len(str(r["ref"] or "")), r))
             candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
             rows = [r for _, _, r in candidates[offset : offset + limit]]
 
@@ -1746,7 +1759,7 @@ class SqliteStore:
         j_tokens: list[str] = []
         if query and not has_structured_filter:
             _, raw_j_tokens = _extract_fts_tokens(query)
-            j_tokens = list(dict.fromkeys(t.lower() for t in raw_j_tokens))
+            j_tokens = _distinct_lower(raw_j_tokens)
         apply_trap_filter = len(j_tokens) >= 4
         fetch_limit = max(limit * 4, 100) if apply_trap_filter else limit
         fetch_offset = 0 if apply_trap_filter else offset

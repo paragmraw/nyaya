@@ -1,4 +1,4 @@
-"""Automated Legal Integrity Gate (`gate.py`) enforcing all 7 hard-fail suites & 12 invariants
+"""Automated Legal Integrity Gate (`gate.py`) enforcing all 8 hard-fail suites & 12 invariants
 before any Nyaya v2.0 corpus release can be published.
 """
 

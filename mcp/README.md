@@ -18,10 +18,10 @@ All 12 tools are read-only (`readOnlyHint=True`, `destructiveHint=False`, `idemp
 | `compare_provisions` | `False` (local SQLite core) | IPC↔BNS, CrPC↔BNSS, IEA↔BSA concordance, clause diffs, punishment/procedural deltas, BNSS s. 531 savings |
 | `cross_reference` | `False` (local SQLite core) | Bidirectional statutory and judicial citation cross-references |
 | `get_provision_history` | `False` (local SQLite core) | Constitutional Amendments 1–106, statutory amendments, and judicial invalidation timelines |
-| `search_judgments` | `True` | Multi-facet search across SC (35k+), High Courts (17.77M+), 15 Tribunals, and DDL District Courts (81M) with `include_equivalent_provisions` and `binding_for_court` |
+| `search_judgments` | `True` | Multi-facet search across SC (38k+), High Courts (20.7M+), 15 Tribunals, and DDL District Courts (81M) with `include_equivalent_provisions` and `binding_for_court` |
 | `get_judgment` | `True` | Windowed judgment reader (`overview`, `paragraphs`, `pages`, `search_within`, `docket`) with direct AWS S3 `pypdfium2` extraction |
 | `trace_precedent` | `False` (local SQLite core) | Citation graph (`cited_by` / `cites` / `both`), larger-bench filters, and quoting excerpts; always returns `precedent_status="unverified_automated"` |
-| `judgment_analytics` | `True` (DuckDB Parquet) | Closed-schema partition-guarded aggregations over SC, 17.77M HC, 81M DDL District, Tribunals, and Regulators |
+| `judgment_analytics` | `True` (DuckDB Parquet) | Closed-schema partition-guarded aggregations over SC, 20.7M HC, 81M DDL District, Tribunals, and Regulators |
 | `verify_citations` | `True` | Deterministic brief/citation audit (`VERIFIED`, `VERIFIED_REPEALED`, `VERIFIED_STRUCK_DOWN_OR_READ_DOWN`, `NOT_FOUND_IN_CORPUS`, `QUOTE_VERIFIED`, `QUOTE_MISMATCH`, etc.) |
 | `corpus_status` | `False` (local SQLite core) | Unified coverage matrix, backend health, and `commercial_safe` licensing metadata |
 
@@ -93,7 +93,7 @@ Optional `.env` loading: set `NYAYA_DOTENV=1` with the `dotenv` extra (`uv sync 
 cd mcp
 uv sync --extra ingest
 uv run nyaya-ingest sync --tier daily --work-dir ./work        # Dattam SC/HC + PRS deltas (or --tier static for Vaquill/DDL/ILDC/CAD)
-uv run nyaya-ingest build-sqlite --work-dir ./work --out ./build/nyaya-core.sqlite
+uv run nyaya-ingest build-sqlite --work-dir ./work --out ./build/nyaya-core.sqlite   # fast: skips loading HC rows (served from Parquet)
 uv run nyaya-ingest build-lance-fts --work-dir ./work --out ./build/lancedb
 uv run nyaya-ingest compact-parquet --work-dir ./work --out ./build/parquet
 uv run nyaya-ingest verify-gate --build-dir ./build --strict   # emits gate-pass.json binding exact SHA-256s

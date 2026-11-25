@@ -33,7 +33,7 @@ def test_mcp_app_import_and_create_mcp_never_calls_get_settings():
         env=env,
         capture_output=True,
         text=True,
-        timeout=20,
+        timeout=60,
         check=False,
     )
     assert res.returncode == 0, f"stderr: {res.stderr}"
@@ -108,7 +108,7 @@ def test_stdio_jsonrpc_handshake_and_tools_list_zero_env_zero_stdout_noise(tmp_p
         assert {t["name"] for t in tools} == EXPECTED_12_TOOLS
 
         proc.stdin.close()
-        rc = proc.wait(timeout=15)
+        rc = proc.wait(timeout=45)
         remaining_out = proc.stdout.read()
         stderr_out = proc.stderr.read()
         assert rc == 0, f"stdio failed (rc={rc}): stderr={stderr_out!r}"

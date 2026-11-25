@@ -80,8 +80,8 @@ build or publish.
 | Source | URI / Bucket | Coverage | License (`SPDX`) | `commercial_safe` | Verification |
 |---|---|---|---|---|---|
 | **Vaquill Open India Law (`v2026.08.1`)** | `https://oss-data-in.vaquill.ai/v2026.08.1/` | Central + 36 State/UT Acts, 12 Regulators, 15 Tribunals, SC/HC compilations | `CC-BY-4.0` (`coverage.yml` `red` rejected) | `true` | `SHA256SUMS.json` + domain allowlist |
-| **Dattam Labs — Supreme Court** | `s3://indian-supreme-court-judgments` | 35k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
-| **Dattam Labs — High Courts** | `s3://indian-high-court-judgments` | 17.77M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
+| **Dattam Labs — Supreme Court** | `s3://indian-supreme-court-judgments` | 38k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
+| **Dattam Labs — High Courts** | `s3://indian-high-court-judgments` | 20.7M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
 | **PRS Legislative Research** | `https://prsindia.org` | BNS / BNSS / BSA 2023 & legislative act deltas | `CC-BY-4.0` | `true` | Pinned SHA-256 + domain allowlist |
 | **Legislative Department / India Code** | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `IN-S52-1-q` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
 | **Sansad Digital Library (CAD)** | `https://eparlib.sansad.in` | Constituent Assembly Debates (12 volumes) | `IN-S52-1-q` (s. 52(1)(q) / s. 28) | `true` | Pinned SHA-256 |
@@ -107,21 +107,23 @@ build or publish.
 
 ## Automated Legal Integrity Gate (`nyaya-ingest verify-gate`)
 
-Every ingestion run must pass 7 hard-fail suites before producing `gate-pass.json`
+Every ingestion run must pass 8 hard-fail suites before producing `gate-pass.json`
 (which binds exact artifact SHA-256s required by `nyaya-ingest publish`):
 
 1. `check_amendments`: Contiguous Constitutional Amendments 1–106 with golden
    date/article assertions (e.g., 42nd=1976, 99th=`struck_down`, 106th=2023).
 2. `check_concordance`: Referential integrity and anti-collapse checks across
-   IPC↔BNS, CrPC↔BNSS, and IEA↔BSA, plus 24 mandatory golden pairs.
-3. `check_coverage_and_non_truncation`: Completeness floors and `>500 KB`
+   IPC↔BNS, CrPC↔BNSS, and IEA↔BSA, plus 39 mandatory golden pairs.
+3. `check_invalidations`: Landmark judicial invalidations (struck-down /
+   read-down / abeyance) are present with the expected `effect`.
+4. `check_coverage_and_non_truncation`: Completeness floors and `>500 KB`
    non-truncation checks (*Kesavananda Bharati*, *Puttaswamy*).
-4. `check_extraction_quality`: Rejects HTML 404/error placeholders masquerading
+5. `check_extraction_quality`: Rejects HTML 404/error placeholders masquerading
    as PDFs, non-UTF-8 text, and missing `text_sha256`.
-5. `check_licensing_and_provenance`: Rejects `terms_status="red"`, unknown/copyleft
+6. `check_licensing_and_provenance`: Rejects `terms_status="red"`, unknown/copyleft
    SPDX tags, missing provenance, NC mis-tagging, and reporter headnotes.
-6. `check_statutory_exclusions`: Blocks any row flagged by `check_publication_ban()`.
-7. `check_owasp_llm01`: Verifies zero raw controls, BiDi overrides, Unicode Tags,
+7. `check_statutory_exclusions`: Blocks any row flagged by `check_publication_ban()`.
+8. `check_owasp_llm01`: Verifies zero raw controls, BiDi overrides, Unicode Tags,
    or unescaped `</corpus_text>` tags in indexed chunks.
 
 ## Banned Sources & Copyleft Dependencies

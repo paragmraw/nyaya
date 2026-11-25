@@ -6,6 +6,11 @@ services:
       # the Python MCP/REST API, baked SQLite core, and optional chat sub-app from
       # a hardened python:3.12-slim-bookworm container on :8000.
       dockerfile: Dockerfile
+      # Optional: bake a published corpus release instead of the mini_corpus
+      # fixture (both must be set together; empty = fixture, as in CI).
+      args:
+        NYAYA_CORE_SQLITE_URL: ${NYAYA_CORE_SQLITE_URL:-}
+        NYAYA_CORE_SQLITE_SHA256: ${NYAYA_CORE_SQLITE_SHA256:-}
     ports:
       - "127.0.0.1:8000:8000"
     environment:

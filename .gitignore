@@ -233,6 +233,13 @@ scratch/
 .superpowers/
 docs/superpowers/
 
+# Agent session memory (local only)
+.remember/
+
+# Ingest refresh local state (CI restores it via actions/cache) and pip-audit venvs
+.ingest-state/
+.audit-venv/
+
 # IDE
 .vscode/
 .idea/

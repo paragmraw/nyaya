@@ -136,7 +136,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TARGET="${{ inputs.publish_target || 'all' }}"
-          TAG="v$(date -u +%Y.%m.%d)-${{ github.run_number }}"
+          # Same `corpus-v<date>-<n>` scheme as the live release (corpus-v2026.11.25-p1);
+          # keeps corpus GitHub Releases distinct from application version tags.
+          TAG="corpus-v$(date -u +%Y.%m.%d)-${{ github.run_number }}"
           if [ -z "${NYAYA_BUCKET_ACCESS_KEY_ID:-}" ] && [ -z "${HF_TOKEN:-}" ] && [ "$TARGET" != "gh-release" ]; then
             echo "::notice::Publish credentials (NYAYA_BUCKET_ACCESS_KEY_ID / HF_TOKEN) not configured; skipping remote upload after verify-gate pass."
             exit 0

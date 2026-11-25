@@ -41,6 +41,7 @@ def _ref_num(ref: str) -> int:
     return int(m.group(1)) if m else 0
 
 
+VAQUILL_CENTRAL_LEGISLATION_URL = "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"
 _HTML_OR_ERR_RE = re.compile(
     r"^\s*(?:<html\b|<!DOCTYPE\b|\{\s*\"error\"|404\s+Not\s+Found)",
     re.IGNORECASE,
@@ -469,7 +470,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "status": "in_force",
             "commencement_date": "1909-01-01",
             "source_id": "vaquill_central_legislation",
-            "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+            "source_url": VAQUILL_CENTRAL_LEGISLATION_URL,
         },
         {
             "doc_id": "bnss-2023:531",
@@ -1047,7 +1048,7 @@ def build_sqlite_core(
             source_id_val = str(p.get("source_id") or "vaquill_central_legislation")
             source_url_val = str(
                 p.get("source_url")
-                or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"
+                or VAQUILL_CENTRAL_LEGISLATION_URL
             )
             prov_rows.append(
                 (
@@ -1117,7 +1118,7 @@ def build_sqlite_core(
                         "commencement_date": act_commencement_by_id.get(old_act_id),
                         "repeal_date": act_repeal_by_id.get(old_act_id) or "2024-07-01",
                         "source_id": "vaquill_central_legislation",
-                        "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                        "source_url": VAQUILL_CENTRAL_LEGISLATION_URL,
                     }
                 )
 
@@ -1155,7 +1156,7 @@ def build_sqlite_core(
                                 },
                                 "source_id": parent.get("source_id") or "vaquill_central_legislation",
                                 "source_url": parent.get("source_url")
-                                or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                                or VAQUILL_CENTRAL_LEGISLATION_URL,
                             }
                         )
                     else:
@@ -1213,7 +1214,7 @@ def build_sqlite_core(
                         "text": f"{inv['act']} {t_ref}: {inv['holding_summary']}",
                         "status": str(inv["effect"]),
                         "source_id": "vaquill_central_legislation",
-                        "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                        "source_url": VAQUILL_CENTRAL_LEGISLATION_URL,
                     }
                 )
 
@@ -1472,32 +1473,25 @@ def build_sqlite_core(
             )
             source_counts[sid] = source_counts.get(sid, 0) + 1
 
-        for item in bundle.tribunal_rows:
-            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
-                continue
-            sid = str(item.get("source_id") or "vaquill_tribunals")
-            source_counts[sid] = source_counts.get(sid, 0) + 1
+        for rows, default_sid in (
+            (bundle.tribunal_rows, "vaquill_tribunals"),
+            (bundle.regulator_order_rows, "vaquill_regulators"),
+            (bundle.ddl_district_rows, "ddl_81m"),
+        ):
+            for item in rows:
+                if commercial_safe_only and not bool(item.get("commercial_safe", True)):
+                    continue
+                sid = str(item.get("source_id") or default_sid)
+                source_counts[sid] = source_counts.get(sid, 0) + 1
 
-        for item in bundle.regulator_order_rows:
-            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
-                continue
-            sid = str(item.get("source_id") or "vaquill_regulators")
-            source_counts[sid] = source_counts.get(sid, 0) + 1
-
-        if (not use_hc) or (not merged_hc and getattr(bundle, "hc_row_count", 0) > 0):
+        if (not use_hc) or (not merged_hc and bundle.hc_row_count > 0):
             hc_total = len(bundle.hc_web_rows)
-            if getattr(bundle, "hc_row_count", 0) > hc_total:
+            if bundle.hc_row_count > hc_total:
                 hc_total = int(bundle.hc_row_count)
             if hc_total > 0:
                 source_counts["dattam_hc_judgments"] = (
                     source_counts.get("dattam_hc_judgments", 0) + hc_total
                 )
-
-        for item in bundle.ddl_district_rows:
-            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
-                continue
-            sid = str(item.get("source_id") or "ddl_81m")
-            source_counts[sid] = source_counts.get(sid, 0) + 1
 
         con.executemany(
             "UPDATE sources SET record_count = ? WHERE source_id = ?",

@@ -14,7 +14,11 @@ from typing import Any
 
 import duckdb
 
-from .builders.sqlite_core import IngestInputBundle, create_mini_ingest_input
+from .builders.sqlite_core import (
+    VAQUILL_CENTRAL_LEGISLATION_URL,
+    IngestInputBundle,
+    create_mini_ingest_input,
+)
 from .extract.normalize import normalize_legal_record
 from .fetchers.official_statutes import load_courts_yaml, load_curated_provisions_yaml
 from .fetchers.vaquill import classify_vaquill_file
@@ -638,9 +642,8 @@ def _clean_title_str(raw: str) -> str:
     return s.strip(" .—-*")
 
 
-def _clean_vaquill_provision_text(raw_text: str, ref: str = "") -> tuple[str, str | None]:
+def _clean_vaquill_provision_text(raw_text: str) -> tuple[str, str | None]:
     """Strip Vaquill boilerplate headers, markdown formatting, repeated headings, and India Code footnotes."""
-    _ = ref
     text = (raw_text or "").replace("\r\n", "\n").replace("\r", "\n")
 
     chap_title: str | None = None
@@ -1018,7 +1021,7 @@ def load_staged_ingest_bundle(
                     str(section_title or "").strip(),
                     act_title,
                     body,
-                    str(source_url or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"),
+                    str(source_url or VAQUILL_CENTRAL_LEGISLATION_URL),
                 )
             )
 
@@ -1043,7 +1046,7 @@ def load_staged_ingest_bundle(
                 stem_parts: list[str] = []
                 stem_chap_title: str | None = None
                 for item in stem_items:
-                    chunk_cleaned, ct = _clean_vaquill_provision_text(item[5], ref=item[1])
+                    chunk_cleaned, ct = _clean_vaquill_provision_text(item[5])
                     if ct and not stem_chap_title:
                         stem_chap_title = ct
                     if chunk_cleaned:
@@ -1087,7 +1090,7 @@ def load_staged_ingest_bundle(
             ref = first[1]
             chap = first[2] or None
             sec_title = _extract_section_heading(first[5], first[3], first[4])
-            src_url = first[6] or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"
+            src_url = first[6] or VAQUILL_CENTRAL_LEGISLATION_URL
             full_text = "\n\n".join(best_parts)
 
             doc_id = f"{canon_aid}:{ref}" if kind == "section" else f"{canon_aid}:{kind[:4]}:{ref_norm}"
@@ -1211,7 +1214,7 @@ def load_staged_ingest_bundle(
             raw_body = str(text or "")
             ref = str(section_number or "").strip() or str(section_type or "section")
             sec_heading = _extract_section_heading(raw_body, str(section_title or ""), act_title)
-            clean_body, _ = _clean_vaquill_provision_text(raw_body, ref=ref)
+            clean_body, _ = _clean_vaquill_provision_text(raw_body)
             cleaned = _clean_text_or_none(clean_body, doc_id=doc_id)
             if not cleaned:
                 continue
@@ -1325,7 +1328,7 @@ def load_staged_ingest_bundle(
             raw_body = str(text or "")
             ref = str(section_number or "").strip() or "1"
             sec_heading = _extract_section_heading(raw_body, str(section_title or ""), act_title)
-            clean_body, _ = _clean_vaquill_provision_text(raw_body, ref=ref)
+            clean_body, _ = _clean_vaquill_provision_text(raw_body)
             cleaned = _clean_text_or_none(clean_body, doc_id=doc_id)
             if not cleaned:
                 continue

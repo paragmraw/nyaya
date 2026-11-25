@@ -17,6 +17,7 @@ from ..models import (
     CitationAuditResponse,
     JudgmentMeta,
     QuoteCheckInput,
+    SourceProvenance,
 )
 from ..storage import get_backend, get_pdf_fetcher, get_retrieval
 from ..storage.sqlite_store import SqliteStore
@@ -47,6 +48,33 @@ _CURLY_QUOTE_TRANS = str.maketrans(
 )
 _MD_STRIP_RE = re.compile(r"\*\*|__|##+")
 _INDIACODE_SUPERSCRIPT_RE = re.compile(r"(?<!\w)\d+\[")
+_PROVISION_KINDS = frozenset(
+    {
+        "statute_section",
+        "constitution_article",
+        "constitution_schedule",
+        "cpc_order_rule",
+        "regulation_clause",
+    }
+)
+
+
+def _excerpt_cap(compact: bool) -> int:
+    return 180 if compact else 400
+
+
+def _summarize_findings(findings: list[AuditFinding]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for f in findings:
+        summary[f.status] = summary.get(f.status, 0) + 1
+    return summary
+
+
+def _framed_or_raw(text: str, *, cap: int, doc_id: str, provenance: SourceProvenance | None) -> str:
+    """Return ``text[:cap]`` wrapped in the provenance frame when provenance is known."""
+    if provenance is None:
+        return text[:cap]
+    return ensure_framed(text[:cap], doc_id=doc_id, provenance=provenance)
 
 
 def _norm_quote(s: str) -> str:
@@ -66,16 +94,10 @@ def _audit_parsed_citation(
     compact: bool = False,
 ) -> AuditFinding:
     parsed_dict = None if compact else p.model_dump(mode="json")
-    excerpt_cap = 180 if compact else 400
+    excerpt_cap = _excerpt_cap(compact)
 
     # 1. Statutory / Constitutional / Regulatory provisions
-    if p.kind in {
-        "statute_section",
-        "constitution_article",
-        "constitution_schedule",
-        "cpc_order_rule",
-        "regulation_clause",
-    }:
+    if p.kind in _PROVISION_KINDS:
         act_name = p.act_or_court or "Constitution"
         try:
             rec = backend.get_provision(
@@ -316,7 +338,7 @@ def _run_verify_citations(
                 )
 
     if verify_quotes:
-        excerpt_cap = 180 if compact else 400
+        excerpt_cap = _excerpt_cap(compact)
         for item in verify_quotes:
             q_in = item if isinstance(item, QuoteCheckInput) else QuoteCheckInput(**item)
             parsed = parse_single_citation(q_in.citation, alias_map=alias_map)
@@ -329,13 +351,7 @@ def _run_verify_citations(
             excerpt: str | None = None
             resolved_jm: JudgmentMeta | None = None
 
-            if parsed is not None and parsed.kind in {
-                "statute_section",
-                "constitution_article",
-                "constitution_schedule",
-                "cpc_order_rule",
-                "regulation_clause",
-            }:
+            if parsed is not None and parsed.kind in _PROVISION_KINDS:
                 rec = backend.get_provision(
                     parsed.act_or_court or "Constitution",
                     parsed.base_ref,
@@ -378,10 +394,8 @@ def _run_verify_citations(
                     if matched_src is not None:
                         q_status = "QUOTE_VERIFIED"
                         matched_para = 1
-                        excerpt = (
-                            ensure_framed(matched_src[:excerpt_cap], doc_id=doc_id, provenance=prov)
-                            if prov is not None
-                            else matched_src[:excerpt_cap]
+                        excerpt = _framed_or_raw(
+                            matched_src, cap=excerpt_cap, doc_id=doc_id, provenance=prov
                         )
                     else:
                         # 2. Check LanceDB judgment chunks
@@ -396,14 +410,8 @@ def _run_verify_citations(
                                     if ch_text and norm_needle and norm_needle in _norm_quote(ch_text):
                                         q_status = "QUOTE_VERIFIED"
                                         matched_para = int(ch.get("para_start") or 1)
-                                        excerpt = (
-                                            ensure_framed(
-                                                ch_text[:excerpt_cap],
-                                                doc_id=doc_id,
-                                                provenance=prov,
-                                            )
-                                            if prov is not None
-                                            else ch_text[:excerpt_cap]
+                                        excerpt = _framed_or_raw(
+                                            ch_text, cap=excerpt_cap, doc_id=doc_id, provenance=prov
                                         )
                                         break
                         except StorageUnavailable:
@@ -439,38 +447,15 @@ def _run_verify_citations(
             ):
                 pdf_candidates.append((finding_idx, q_in, resolved_jm))
 
-    summary: dict[str, int] = {}
-    for f in findings:
-        summary[f.status] = summary.get(f.status, 0) + 1
-
     return (
         CitationAuditResponse(
             checked_as_of=effective_date,
             precedent_status="unverified_automated",
-            summary=summary,
+            summary=_summarize_findings(findings),
             findings=findings,
         ),
         pdf_candidates,
     )
-
-
-def _verify_citations_sync(
-    text: str | None = None,
-    citations: list[str] | None = None,
-    check_date: Date | str | None = None,
-    verify_quotes: list[QuoteCheckInput | dict[str, str]] | None = None,
-    commercial_safe_only: bool = False,
-    compact: bool = False,
-) -> CitationAuditResponse:
-    resp, _ = _run_verify_citations(
-        text=text,
-        citations=citations,
-        check_date=check_date,
-        verify_quotes=verify_quotes,
-        commercial_safe_only=commercial_safe_only,
-        compact=compact,
-    )
-    return resp
 
 
 async def verify_citations(
@@ -502,7 +487,7 @@ async def verify_citations(
             except StorageUnavailable:
                 fetcher = None
             if fetcher is not None:
-                excerpt_cap = 180 if compact else 400
+                excerpt_cap = _excerpt_cap(compact)
                 upgraded = False
                 for idx, q_in, jm in pdf_candidates:
                     norm_needle = _norm_quote(q_in.quote)
@@ -522,22 +507,16 @@ async def verify_citations(
                             finding = resp.findings[idx]
                             finding.status = "QUOTE_VERIFIED"
                             finding.matched_para_num = ex.para_num or 1
-                            finding.matched_excerpt = (
-                                ensure_framed(
-                                    ex.text[:excerpt_cap],
-                                    doc_id=jm.case_id,
-                                    provenance=jm.provenance,
-                                )
-                                if jm.provenance is not None
-                                else ex.text[:excerpt_cap]
+                            finding.matched_excerpt = _framed_or_raw(
+                                ex.text,
+                                cap=excerpt_cap,
+                                doc_id=jm.case_id,
+                                provenance=jm.provenance,
                             )
                             upgraded = True
                             break
                 if upgraded:
-                    summary: dict[str, int] = {}
-                    for f in resp.findings:
-                        summary[f.status] = summary.get(f.status, 0) + 1
-                    resp.summary = summary
+                    resp.summary = _summarize_findings(resp.findings)
     return resp
 
 

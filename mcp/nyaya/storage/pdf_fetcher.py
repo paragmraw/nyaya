@@ -253,7 +253,11 @@ _PAREN_WORD_JOIN_RE = re.compile(
 )
 _CASE_V_JOIN_RE = re.compile(r"\b(?!(?:Pro|Uni|Con|Indi|Ele)v\.)([A-Z][a-z]{2,})(v\.)(?=\s)")
 
-# Case-preserving PDF ligature space-dropout repairs (fi/fl/ff/ffi/ffl).
+# Curated stem/suffix pairs for PDF ligature space-dropouts (fi/fl/ff/ffi/ffl). Applied
+# case-insensitively and unconditionally, before the heuristic _OFF_LIGATURE_RE and
+# _GENERAL_LIGATURE_RE passes: covers splits *before* the ligature ("justi fied") and
+# ALL-CAPS text, which the general pass (lower-case right-hand side, ligature at the end of
+# the left word) cannot repair. The "off" + "en..." stems live in _OFF_LIGATURE_RE.
 _LIGATURE_REPAIRS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(rf"\b({left})\s+({right})\b", re.IGNORECASE)
     for left, right in (
@@ -282,7 +286,6 @@ _LIGATURE_REPAIRS: tuple[re.Pattern[str], ...] = tuple(
         (r"(?:un)?identi", r"fi(?:ed|es|cation|able)"),
         (r"(?:un)?identifi", r"ed|es|cation|able"),
         (r"(?:un)?fulfi", r"l(?:l|led|ling|ment|lment|s)?"),
-        (r"off", r"en(?:ce|ces|d|ded|der|ders|ding|se|ses|sive)"),
         (r"(?:non|un)?profi", r"t(?:s|ed|ing|able|ability)?"),
         (r"(?:in|re|un)?defi", r"n(?:e|ed|es|ing|ite|itely|ition|itions|itive|itively)"),
         (r"certi", r"fi(?:ed|es|cate|cates|cation|cations)"),
@@ -338,7 +341,11 @@ def _merge_ligature_match(m: re.Match[str]) -> str:
 
 
 def _repair_ligature_splits(text: str) -> str:
-    """Rejoin PDF ligature space-dropouts without merging distinct real words."""
+    """Rejoin PDF ligature space-dropouts without merging distinct real words.
+
+    Order: curated stem/suffix pairs, then the "off-" family, then the general
+    ``<word ending in fi/fl/ff..> <suffix>`` heuristic guarded by exclusion/stop word sets.
+    """
     out = text
     for pat in _LIGATURE_REPAIRS:
         out = pat.sub(r"\1\2", out)

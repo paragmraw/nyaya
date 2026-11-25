@@ -28,7 +28,7 @@ from ..models import (
     SourceProvenance,
 )
 from .manifest import CorpusManifest, PartitionEntry, resolve_partitions
-from .sqlite_store import _extract_fts_tokens
+from .sqlite_store import _distinct_lower, _extract_fts_tokens
 
 _ANALYTICS_DATASET_MAP: dict[str, str] = {
     "sc": "supreme_court",
@@ -62,6 +62,15 @@ _ALLOWED_GROUP_BY: dict[str, str] = {
     "regulator": "regulator_code",
 }
 
+
+# Query tokens that switch the High Court title search to the anticipatory-bail signal regex.
+_ANTICIPATORY_BAIL_TOKENS: tuple[str, ...] = ("anticipatory", "bail")
+# RE2 pattern over the lower-cased title/case-type/act haystack. Deliberately distinct from
+# lexical_engine._ANTICIPATORY_BAIL_SIGNAL_RE (Python `re`, `\b` anchors, different haystack):
+# the two dialects are not interchangeable, so they are not shared.
+_ANTICIPATORY_BAIL_REGEX = (
+    r"(?:(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])|(?:^|[^a-z0-9])pre[- ]?arrest(?:$|[^a-z0-9])|apprehending\s+arrest|(?:^|[^a-z0-9])(?:aba|abail)(?:$|[^a-z0-9])|(?:^|[^a-z0-9])crm\s*\(\s*a\s*\)|(?:^|[^a-z0-9])a\.?\s*b\.?\s*a\.?(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:cr\.?\s*p\.?\s*c\.?|bnss|s\.?|sec\.?|section)\s*(?:438|482)(?:$|[^a-z0-9]))"
+)
 
 _GROUP_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:^|[/\\])court=([^/\\]+)"),
@@ -448,9 +457,9 @@ class DuckDBStore:
 
         if query and query.strip():
             all_q_tokens, content_q_tokens = _extract_fts_tokens(query)
-            q_tokens = list(dict.fromkeys(t.lower() for t in (content_q_tokens or all_q_tokens)))
+            q_tokens = _distinct_lower(content_q_tokens or all_q_tokens)
             if q_tokens:
-                has_anticipatory_bail = "anticipatory" in q_tokens and "bail" in q_tokens
+                has_anticipatory_bail = all(t in q_tokens for t in _ANTICIPATORY_BAIL_TOKENS)
                 cols_set = _get_avail_cols()
                 text_cols = [
                     c
@@ -465,10 +474,8 @@ class DuckDBStore:
 
                 if has_anticipatory_bail:
                     where.append(f"regexp_matches({haystack_expr}, ?)")
-                    params.append(
-                        r"(?:(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])|(?:^|[^a-z0-9])pre[- ]?arrest(?:$|[^a-z0-9])|apprehending\s+arrest|(?:^|[^a-z0-9])(?:aba|abail)(?:$|[^a-z0-9])|(?:^|[^a-z0-9])crm\s*\(\s*a\s*\)|(?:^|[^a-z0-9])a\.?\s*b\.?\s*a\.?(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:cr\.?\s*p\.?\s*c\.?|bnss|s\.?|sec\.?|section)\s*(?:438|482)(?:$|[^a-z0-9]))"
-                    )
-                    remaining_tokens = [t for t in q_tokens if t not in ("anticipatory", "bail")]
+                    params.append(_ANTICIPATORY_BAIL_REGEX)
+                    remaining_tokens = [t for t in q_tokens if t not in _ANTICIPATORY_BAIL_TOKENS]
                 else:
                     remaining_tokens = q_tokens
 

@@ -29,6 +29,7 @@ from ..storage.memory_backend import InMemoryCorpusBackend
 from ..storage.protocols import CorpusBackend
 from ..storage.sqlite_store import (
     SqliteStore,
+    _distinct_lower,
     _extract_fts_tokens,
     _multitoken_min_required,
     _token_matches_boundary,
@@ -43,6 +44,8 @@ from .ranking import (
 
 _STATUTE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
 _DIGITS_COURT_CODE_RE = re.compile(r"^\d+[_~]\d+$")
+# Python-`re` signal over a JudgmentCard's title/case-type/acts/snippet. The DuckDB title filter
+# uses its own RE2 pattern (duckdb_store._ANTICIPATORY_BAIL_REGEX); the dialects differ.
 _ANTICIPATORY_BAIL_SIGNAL_RE = re.compile(
     r"(?i)(?:\banticipatory\b|\bpre[- ]?arrest\b|\bapprehending\s+arrest\b|"
     r"\baba\b|\babail\b|\bcrm\s*\(\s*a\s*\)|\ba\.?\s*b\.?\s*a\.?(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|"
@@ -403,7 +406,7 @@ class LexicalRetrievalEngine:
         # Stopword-aware multi-token word-boundary overlap guard to suppress LanceDB OR-noise
         if lance_hits and q.query_mode != "exact_phrase" and not exact_hits and not q.act:
             _, raw_content_tokens = _extract_fts_tokens(q.query)
-            content_tokens = list(dict.fromkeys(t.lower() for t in raw_content_tokens))
+            content_tokens = _distinct_lower(raw_content_tokens)
             if len(content_tokens) >= 2:
                 min_matches = _multitoken_min_required(len(content_tokens))
                 lance_hits = [
@@ -676,7 +679,7 @@ class LexicalRetrievalEngine:
         # Multi-token word-boundary precision guard for LanceDB direct judgment hits
         if lance_direct and q.query and not exact_cards:
             _, raw_j_tokens = _extract_fts_tokens(q.query)
-            j_tokens = list(dict.fromkeys(t.lower() for t in raw_j_tokens))
+            j_tokens = _distinct_lower(raw_j_tokens)
             if len(j_tokens) >= 4:
                 min_j_matches = _multitoken_min_required(len(j_tokens))
                 lance_direct = [
@@ -693,13 +696,13 @@ class LexicalRetrievalEngine:
         # Word-boundary precision guard for High Court OR-expanded equivalent hits
         if lance_equiv and tier == "high_court" and not exact_cards:
             _, raw_eq_q_tokens = _extract_fts_tokens(q.query or "")
-            q_eq_tokens = list(dict.fromkeys(t.lower() for t in raw_eq_q_tokens))
+            q_eq_tokens = _distinct_lower(raw_eq_q_tokens)
             min_q_eq = _multitoken_min_required(len(q_eq_tokens)) if q_eq_tokens else 0
             equiv_pairs: list[list[str]] = []
             for eq_act, eq_ref in analyzed.equivalent_statute_refs:
                 _, pair_toks = _extract_fts_tokens(f"{eq_act} {eq_ref}")
                 if pair_toks:
-                    equiv_pairs.append(list(dict.fromkeys(t.lower() for t in pair_toks)))
+                    equiv_pairs.append(_distinct_lower(pair_toks))
             filtered_equiv: list[JudgmentCard] = []
             for card in lance_equiv:
                 hay = _card_search_haystack(card)
@@ -803,8 +806,8 @@ class LexicalRetrievalEngine:
                     resolved = self.backend.resolve_judgment_id(c.case_id, commercial_safe_only=cs_only)
                     for m in resolved:
                         meta_sources.append(SqliteStore._meta_to_card(m, matched_via="metadata"))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("resolve_judgment_id enrichment skipped for %s: %s", c.case_id, exc)
         exact_cards = _dedup_cards(exact_cards)
         sqlite_cards = _dedup_cards(sqlite_cards)
         lance_direct = _dedup_cards(_enrich_cards_from_meta(lance_direct, meta_sources))

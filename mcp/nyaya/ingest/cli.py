@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import sys
@@ -31,6 +32,8 @@ from .publish import (
     publish_release,
 )
 from .state import IngestState
+
+logger = logging.getLogger(__name__)
 
 _SAMPLE_FIXTURE_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -107,7 +110,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # 6. gate / verify-gate
     for cmd_name in ("gate", "verify-gate"):
-        p_gate = sub.add_parser(cmd_name, help="Run the 7 Legal Integrity Gate suites.")
+        p_gate = sub.add_parser(cmd_name, help="Run the 8 Legal Integrity Gate suites.")
         p_gate.add_argument("--build-dir", "--data-dir", dest="build_dir", type=Path, default=Path("build"))
         p_gate.add_argument("--strict", action="store_true")
         p_gate.add_argument("--report", type=Path, default=None)
@@ -227,6 +230,9 @@ def _resolve_publish_clients(
 ) -> tuple[UploadClient | None, UploadClient | None]:
     if dry_run:
         return InMemoryUploadClient(), InMemoryUploadClient()
+
+    if target == "hf-dataset":
+        logger.warning("Publish target 'hf-dataset' is not implemented; nothing will be uploaded.")
 
     bucket_client: UploadClient | None = None
     public_client: UploadClient | None = None

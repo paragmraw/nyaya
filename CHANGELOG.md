@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+P0+P1 quality overhaul of retrieval, citation parsing, PDF extraction, and corpus hygiene, published as GitHub Release `corpus-v2026.11.25-p1` (`nyaya-core.sqlite.zst` + `manifest.json`). Live corpus counts after the release: 1,569 central acts, 8,544 state acts, 12,152 regulator instruments, 15 tribunals, 40,353 provisions, 38,292 SC judgments, 20,696,054 HC judgments, 813,168 tribunal orders, 615 citation edges.
+
+### Added
+- **Curated bare-act provisions (`mcp/nyaya/ingest/data/curated_statute_provisions.yaml`):** loaded by `load_curated_provisions_yaml()` in `mcp/nyaya/ingest/fetchers/official_statutes.py` and overlaid in `ingest/loader.py`, overriding truncated Vaquill entries and adding CrPC provisions.
+- **`court_display_name()` and `normalize_jurisdiction()` (`mcp/nyaya/citations.py`):** Dattam court codes (`_` / `~` forms) resolve to human-readable court names on judgment cards; full state/UT names resolve case-insensitively to canonical codes in jurisdiction filters (SQLite, LanceDB, manifest pruning).
+- **Widened citation parser:** CPC Order/Rule plural and inverted forms, `YYYY:INSC:N` neutral citations, and AIR court suffixes beyond `SC`.
+- **Query analysis:** practitioner shorthand expansion (`_PRACTITIONER_SHORTHANDS`) and alias-aware `act` filters in `QueryAnalyzer`.
+- **Counsel-aware `search_within` (`mcp/nyaya/retrieval/paragraph_bm25.py`):** counsel-appearance and counsel-submission paragraphs without holding cues are suppressed.
+- **Extra quote normalization in `verify_citations`:** curly quotes, Markdown markers, and India Code superscript footnote markers are normalized before quote matching.
+
+### Changed
+- **`search_judgments`:** cross-High-Court diversity (round-robin interleave by court in `lexical_engine.py`; round-robin partition selection across courts, newest year first, in `duckdb_store.py`), card de-duplication and metadata enrichment, and strict anticipatory-bail filtering (`CrPC s. 438` / `BNSS s. 482` signals).
+- **Statute and LanceDB OR-fallback precision:** word-boundary token matching with inflection stems, length-scaled minimum token matches, and title/bigram scoring; in-force provisions are preferred when `status="all"`.
+- **`verify_citations`:** unindexed CPC Order/Rule citations now return `NOT_FOUND_IN_CORPUS` with a `coverage_note` instead of a misleading match.
+- **PDF extraction (`mcp/nyaya/storage/pdf_fetcher.py`):** strips SCR running headers/footers, same-line SCR judge footers, and standalone page numbers; repairs ligature space-dropouts (`_repair_ligature_splits`) and minor year/parenthesis/`v.` word-joins.
+- **Ingest hygiene (`mcp/nyaya/ingest/`):** Vaquill provision text is cleaned of boilerplate headers, Markdown, repeated headings, and India Code footnotes; chapter titles are extracted; the best-scoring multi-part stem is chosen; BNS/BNSS sub-clause rows inherit parent provision text and chapter and are emitted only when the parent exists; Act commencement/repeal dates come from the act rows instead of hard-coded values; per-source record counts are computed and FTS5 tables rebuilt and integrity-checked.
+- **`nyaya-ingest build-sqlite`:** no longer loads the ~20.8M High Court rows (`include_hc=False`); the HC row total is carried as a count. `build-lance-fts` selects hot HC rows round-robin across courts.
+
+### Fixed
+- Year filter applied to equivalent-provision lookups across High Courts, and recall when a query spans multiple High Courts.
+- Same-line SCR judge footers leaking into extracted judgment text.
+- HC search ordering when the Parquet partition lacks a `decision_date` column.
+
 ## [2.0.0] - 2026-11-22
 
 Full monorepo re-architecture to **Option R2 (Zero-Supabase, Zero-DB-Ops, Pure-Lexical/Metadata/Graph)** and **Nyaya MCP v2.0 (`nyaya-mcp`)**.
