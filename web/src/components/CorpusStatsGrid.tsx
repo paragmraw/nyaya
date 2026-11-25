@@ -14,7 +14,6 @@ export default function CorpusStatsGrid() {
         num={counts?.sc_judgments}
         label="Supreme Court Judgments"
         source="Dattam Labs AWS Open Data + Vaquill (CC-BY-4.0)"
-        prefix="~"
       />
       <StatCard
         num={counts?.hc_judgments}
@@ -26,11 +25,19 @@ export default function CorpusStatsGrid() {
         label={`Tribunal Matters (${counts?.tribunals ?? 15} Forums)`}
         source="ITAT, NCLT, NGT, SAT, CAT, CESTAT… (CC-BY-4.0)"
       />
-      <StatCard
-        num={counts?.district_court_records}
-        label={`District Court Metadata (${formatCompactCount(counts?.district_court_records)})`}
-        source="DDL 2010–2018 · Non-Commercial (CC-BY-NC-SA-4.0)"
-      />
+      {counts?.district_court_records && counts.district_court_records > 0 ? (
+        <StatCard
+          num={counts.district_court_records}
+          label={`District Court Metadata (${formatCompactCount(counts.district_court_records)})`}
+          source="DDL 2010–2018 · Non-Commercial (CC-BY-NC-SA-4.0)"
+        />
+      ) : (
+        <StatCard
+          num={counts?.provisions}
+          label="Indexed Statutory Provisions"
+          source="Central Acts, Constitution & curated bare acts (CC-BY-4.0)"
+        />
+      )}
       <StatCard
         num={counts?.legislation_jurisdictions}
         label="Legislation Jurisdictions"
@@ -39,13 +46,21 @@ export default function CorpusStatsGrid() {
       <StatCard
         num={counts?.regulators}
         label="Financial & Sectoral Regulators"
-        source="554k+ provisions: SEBI, RBI, CBIC, MCA, TRAI, IRDAI…"
+        source="12,152 instruments: SEBI, RBI, CBIC, MCA, TRAI, IRDAI…"
       />
-      <StatCard
-        num={counts?.articles}
-        label="Constitution Articles"
-        source={`${formatNumber(counts?.schedules)} Schedules · Amendments 1–${counts?.amendments ?? 106}`}
-      />
+      {counts?.articles && counts.articles > 0 ? (
+        <StatCard
+          num={counts.articles}
+          label="Constitution Articles"
+          source={`${formatNumber(counts?.schedules)} Schedules · Amendments 1–${counts?.amendments ?? 106}`}
+        />
+      ) : (
+        <StatCard
+          num={counts?.amendments ?? 106}
+          label="Constitutional Amendments"
+          source={`${formatNumber(counts?.schedules)} Schedules · Verified Amendments 1–${counts?.amendments ?? 106}`}
+        />
+      )}
       <StatCard
         num={counts?.citation_edges}
         label="Citation Graph Edges"

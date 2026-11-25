@@ -22,6 +22,7 @@ const AUDIT_STATUSES = [
   { code: "VERIFIED_STRUCK_DOWN_OR_READ_DOWN", desc: "Resolved provision invalidated, read down, or kept in abeyance by Supreme Court order." },
   { code: "QUOTE_VERIFIED / QUOTE_MISMATCH", desc: "Verbatim quote checked against indexed chunks or on-demand AWS S3 PDF via pypdfium2." },
   { code: "NOT_FOUND_IN_CORPUS", desc: "Citation syntax valid, but no matching record exists (eliminates AIR 1973 SC 9999 false matches)." },
+  { code: "INVALID_STATUTORY_REF / AMBIGUOUS", desc: "Malformed statutory section/article reference, or multiple candidate judgments matched without a unique tuple." },
   { code: "COMMERCIAL_LICENSE_BLOCKED", desc: "Exact record belongs to CC-BY-NC DDL/ILDC while commercial_safe_only is active." },
 ];
 

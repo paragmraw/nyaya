@@ -32,8 +32,8 @@ const STAGES: Stage[] = [
     desc: "Deterministic RRF (k=60) across SQLite FTS5, LanceDB native BM25, DuckDB ZSTD Parquet, and on-demand S3 PDFs.",
     detail: (
       <>
-        <strong>Baked Core (~250 MB):</strong> read-only SQLite3 FTS5 + concordance + invalidations + citation graph.<br />
-        <strong>Bucket Warm/Cold:</strong> 3 LanceDB native Rust BM25 tables + 5 compacted DuckDB ZSTD Parquet layouts (256 MB / 5s cap).<br />
+        <strong>Baked Core:</strong> read-only SQLite3 FTS5 + concordance + invalidations + citation graph.<br />
+        <strong>Bucket Warm/Cold:</strong> 3 LanceDB native Rust BM25 tables + 5 compacted DuckDB ZSTD Parquet layouts (256 MB / 10s cap).<br />
         <strong>Direct S3 PDFs:</strong> anonymous HTTPS reads from AWS Open Data via Apache-2.0 <code>pypdfium2</code> (15 MB / 500p cap + 256 MB zstd LRU).
       </>
     ),
@@ -58,7 +58,7 @@ const STAGES: Stage[] = [
     desc: "Serves 12 MCP tools, 8 nyaya:// resources, and 4 prompts via uvx stdio or Streamable HTTP (/mcp), plus optional /chat.",
     detail: (
       <>
-        <strong>Local stdio:</strong> <code>uvx nyaya-mcp</code> auto-fetches verified packs from HF / GH Releases (zero secrets).<br />
+        <strong>Local stdio:</strong> <code>uvx nyaya-mcp</code> auto-fetches verified packs when <code>NYAYA_MANIFEST_URL</code> is configured (zero secrets).<br />
         <strong>Hosted HTTP:</strong> single <code>python:3.12-slim-bookworm</code> container on Railway (&lt;1 GB RAM, scale-to-zero).<br />
         <strong>Optional /chat:</strong> stateless FastAPI + LangGraph agent mounted only when <code>NVIDIA_API_KEY</code> is configured.
       </>
