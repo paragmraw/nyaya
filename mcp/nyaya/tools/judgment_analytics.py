@@ -125,9 +125,9 @@ def register(mcp: Any) -> None:
         name="judgment_analytics",
         description=(
             "Run closed-schema DuckDB aggregations over compacted ZSTD Parquet partitions "
-            "(Supreme Court, 17.77M High Court, 81M DDL District Court, 15 Tribunals, 12 Regulators). "
+            "(Supreme Court, 20.7M High Court, 81M DDL District Court, 15 Tribunals, 12 Regulators). "
             "Requires partition narrowing (e.g. court or <=5-year window on High Court; state or <=5-year "
-            "window on District Court) to stay within the 256 MB / 5s execution budget."
+            "window on District Court) to stay within the 256 MB memory limit / 10s query timeout."
         ),
         annotations={
             "readOnlyHint": True,

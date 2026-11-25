@@ -7,7 +7,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-#   lib/ is scoped to the repo root (/lib/) — Python build artifacts land there
+#   lib/ is scoped to the repo root (/lib/): Python build artifacts land there
 #   (or under build/, venv/, which are ignored separately). A bare `lib/` would
 #   also match web/src/lib/, the SPA's shared-code barrel, forcing an
 #   `!src/lib/` un-ignore hack in web/.gitignore.
@@ -101,12 +101,12 @@ ipython_config.py
 # UV
 #   uv.lock IS committed to ensure reproducible builds.
 #   See: https://docs.astral.sh/uv/concepts/projects/sync/#locking-dependencies
-# uv.lock  (committed — do not ignore)
+# uv.lock  (committed, do not ignore)
 
 # poetry
 #   poetry.lock IS committed to ensure reproducible builds.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-# poetry.lock  (committed — do not ignore)
+# poetry.lock  (committed, do not ignore)
 # poetry.toml
 
 # pdm
@@ -229,7 +229,7 @@ data/cache/
 # Scratch / experimental work
 scratch/
 
-# Superpowers session artifacts (plans, SDD workspaces — session-local working docs)
+# Superpowers session artifacts (plans, SDD workspaces: session-local working docs)
 .superpowers/
 docs/superpowers/
 
@@ -247,7 +247,7 @@ docs/superpowers/
 # Playwright MCP session artifacts (local only)
 .playwright-mcp/
 
-# Node (no root package.json today — prevents a stray install from re-creating it)
+# Node (no root package.json today; prevents a stray install from re-creating it)
 node_modules/
 
 # OS

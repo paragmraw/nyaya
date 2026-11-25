@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.graph — build, message assembly, nodes, routing.
+"""Tests for nyaya_chat.graph: build, message assembly, nodes, routing.
 
 Single-node streaming pipeline: one streaming, tool-bound agent node in a
 2-node graph (``START → agent → (tools → agent | END)``) handles both tool
@@ -51,14 +51,14 @@ def test_system_prompt_instructs_structuring_and_glossing():
 
 def test_system_prompt_forbids_process_narration():
     """The degraded-path prompt must tell the model to keep its planning out of
-    the answer body — the answer shows the final answer only."""
+    the answer body; the answer shows the final answer only."""
     from nyaya_chat.llm import SYSTEM_PROMPT
     assert "final answer ONLY" in SYSTEM_PROMPT
     assert "thinking process" in SYSTEM_PROMPT
 
 
 def test_agent_prompt_lists_allowlisted_tools():
-    """The agent prompt's tool list is rendered from tools_layer.spec —
+    """The agent prompt's tool list is rendered from tools_layer.spec:
     a drift between the prompt and the allowlist is impossible by construction."""
     from nyaya_chat.llm import AGENT_PROMPT
     from nyaya_chat.tools_layer.spec import TOOL_SPECS
@@ -78,7 +78,7 @@ def test_agent_prompt_has_sequential_rules():
 
 
 def test_agent_prompt_keeps_must_call_tools_rule():
-    """Merging the prompts must not weaken the MUST-call-tools rule — the
+    """Merging the prompts must not weaken the MUST-call-tools rule, the
     guard against the agent answering from memory (kills has_tool_calls)."""
     from nyaya_chat.llm import AGENT_PROMPT
     assert "MUST call at least one tool" in AGENT_PROMPT
@@ -214,8 +214,8 @@ async def test_graph_reflection_round_reruns_agent(fake_model, fake_tools, monke
 
 @pytest.mark.asyncio
 async def test_graph_emits_semantic_events_end_to_end(fake_model, fake_tools, monkeypatch):
-    """A full turn through the compiled graph emits the semantic SSE events —
-    plan/status/tool_start/tool_result/token/citations — via the custom stream
+    """A full turn through the compiled graph emits the semantic SSE events,
+    plan/status/tool_start/tool_result/token/citations, via the custom stream
     (captured by intercepting the events module's emit)."""
     captured: list[dict] = []
     import nyaya_chat.graph.events as events_mod
@@ -237,7 +237,7 @@ async def test_graph_emits_semantic_events_end_to_end(fake_model, fake_tools, mo
     types = [e["type"] for e in captured]
     assert "plan" in types          # leg-1 buffered preamble text
     assert "status" in types        # analyzing/searching/composing transitions
-    assert "tool_start" in types    # the agent called get_section
+    assert "tool_start" in types    # the agent called get_provision
     assert "tool_result" in types   # the tool finished
     assert "token" in types         # the answer leg streamed tokens
     assert "citations" in types     # parsed from the verified answer
@@ -408,8 +408,8 @@ async def test_agent_leg1_direct_answer_replays_buffered_tokens(
     fake_model, settings, monkeypatch,
 ):
     """Leg-1 with NO tool calls (the model answered directly): the buffered
-    stream is replayed as token events after a ``composing`` status — the
-    client sees a normal answer stream — and the turn can end."""
+    stream is replayed as token events after a ``composing`` status, the
+    client sees a normal answer stream, and the turn can end."""
     captured = _captured_events(monkeypatch)
     fake_model.responses = [AIMessage(content="Answer without tools.")]
     from nyaya_chat.graph.agent import make_agent_node
@@ -450,7 +450,7 @@ async def test_agent_answer_leg_streams_and_verifies(fake_model, settings, monke
 
 
 # ---------------------------------------------------------------------------
-# Tool-result handling (pruning, corpus wrapping) — moved from synthesis
+# Tool-result handling (pruning, corpus wrapping), moved from synthesis
 # ---------------------------------------------------------------------------
 
 
@@ -509,7 +509,7 @@ async def test_agent_node_no_tools_path_skips_corpus_wrap(fake_model, settings):
     await node({"messages": [HumanMessage(content="q")]})
     sent = fake_model.calls[-1]
     # The system prompt legitimately mentions <corpus_text> in its injection
-    # defense instructions — no ToolMessage exists here, so nothing is wrapped.
+    # defense instructions; no ToolMessage exists here, so nothing is wrapped.
     assert "<corpus_text>" not in "".join(
         m.content if isinstance(m.content, str) else ""
         for m in sent if not isinstance(m, SystemMessage)
@@ -581,7 +581,7 @@ async def test_agent_node_prunes_list_type_tool_results(fake_model, settings):
 @pytest.mark.asyncio
 async def test_agent_node_prunes_only_list_type_results(fake_model, settings):
     """Full text of a single-document tool (get_provision) passes to the model
-    UNPRUNED — pruning never touches single-document results."""
+    UNPRUNED; pruning never touches single-document results."""
     from nyaya_chat.graph.agent import make_agent_node
 
     full_text = "SECTION-TEXT:" + "F" * 3000
@@ -645,7 +645,7 @@ def test_route_agent_ends_with_citations(settings):
 
 
 def test_route_agent_respects_max_rounds(settings):
-    """Round 2 (> max_reflection_rounds=1) never reflects again — total answer
+    """Round 2 (> max_reflection_rounds=1) never reflects again; total answer
     legs per turn = max + 1."""
     from nyaya_chat.graph.agent import route_agent
     state = _answer_state("Answer without citations.", settings.max_reflection_rounds + 1)
@@ -662,7 +662,7 @@ def test_route_agent_ends_when_no_tools_were_called(settings):
 
 
 def test_route_agent_deadline_gate_blocks_late_reflection(settings):
-    """A reflection round may only start when REFLECTION_DEADLINE_S remains —
+    """A reflection round may only start when REFLECTION_DEADLINE_S remains:
     a reflection that could not finish inside the budget is worse than an
     uncited answer."""
     from nyaya_chat.graph.agent import route_agent
@@ -760,7 +760,7 @@ async def test_agent_all_db_error_results_short_circuits(settings):
 
 @pytest.mark.asyncio
 async def test_agent_mixed_results_do_not_short_circuit(fake_model, settings):
-    """One real result alongside an error JSON still answers — the
+    """One real result alongside an error JSON still answers; the
     short-circuit fires only when EVERY tool errored."""
     fake_model.responses = [AIMessage(content="Answer [[act: IPC, ref: s. 302]].")]
     from nyaya_chat.graph.agent import make_agent_node
@@ -786,7 +786,7 @@ async def test_agent_mixed_results_do_not_short_circuit(fake_model, settings):
 
 def test_agent_not_found_error_json_is_not_a_db_error():
     """A ``not_found`` error JSON (e.g. get_provision on a nonexistent section)
-    is a legitimate result the agent must turn into a refusal — it must NOT
+    is a legitimate result the agent must turn into a refusal; it must NOT
     count as a storage error for the short-circuit."""
     from nyaya_chat.graph.agent import _is_db_error_json, _is_storage_error_json
     not_found = json.dumps({"error": {
@@ -831,7 +831,7 @@ async def test_agent_not_found_only_results_still_answer(fake_model, settings):
         ],
         "rid": "a8",
     }
-    out = await node(state)  # no exception — the agent composes the refusal
+    out = await node(state)  # no exception; the agent composes the refusal
     assert fake_model.calls  # the model was consulted
     assert "99999" in out["messages"][0].content
 
@@ -920,7 +920,7 @@ async def test_agent_dedupes_reasoning_buffer_flush(settings, monkeypatch):
     model = _FakeStreamingModel([
         AIMessageChunk(content="", additional_kwargs={"reasoning_content": _LEAK_REASONING}),
         # flush: byte-identical re-send of the buffer, WITH content on the
-        # same chunk — the content must not be lost
+        # same chunk; the content must not be lost
         AIMessageChunk(content=answer, additional_kwargs={"reasoning_content": _LEAK_REASONING}),
         AIMessageChunk(content=" Section 300 defines murder."),
     ])
@@ -938,7 +938,7 @@ async def test_agent_dedupes_reasoning_buffer_flush(settings, monkeypatch):
 async def test_agent_leak_only_stream_still_completes(settings, monkeypatch):
     """When the flush is the ONLY content (the model never wrote an answer
     before truncation), the turn still completes: the verified note + disclaimer
-    text is emitted as a correction — no crash."""
+    text is emitted as a correction; no crash."""
     from langchain_core.messages import AIMessageChunk
 
     from nyaya_chat.graph.agent import make_agent_node
@@ -961,7 +961,7 @@ async def test_agent_keeps_cited_answer_over_uncited_resynthesis(fake_model, set
     """Keep-better across reflection rounds: when the reflection leg
     re-synthesizes on the SAME tool results and its answer has no citations
     while the previous round's answer did, the previous answer is kept and a
-    correction restores it — the observed regression was a degenerate 63-char
+    correction restores it; the observed regression was a degenerate 63-char
     reflection answer replacing a good round-1 answer."""
     from nyaya_chat.graph.agent import make_agent_node
 

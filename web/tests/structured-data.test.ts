@@ -6,7 +6,7 @@
 //   1. schemas pointing at the phantom `nyaya.example.com` domain (or any
 //      route that does not exist in src/app);
 //   2. JSON-LD anchors (`/route/#fragment`) referencing DOM ids that are
-//      never rendered — every anchor target must exist in component source.
+//      never rendered; every anchor target must exist in component source.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

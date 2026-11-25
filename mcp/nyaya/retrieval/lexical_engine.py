@@ -862,7 +862,7 @@ class LexicalRetrievalEngine:
             results=page,
             coverage_note=(
                 "Indexed BM25 covers Supreme Court and hot/reportable High Court judgments; "
-                "broader High Court (17.77M), Tribunal (15 forums), and DDL District (2010-2018) "
+                "broader High Court (20.7M), Tribunal (15 forums), and DDL District (2010-2018) "
                 "records are searched via compacted Parquet metadata."
             ),
             degraded_sources=degraded,

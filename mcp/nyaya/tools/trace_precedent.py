@@ -118,7 +118,7 @@ def register(mcp: Any) -> None:
             "Query the baked citation graph for cases citing ('cited_by') or cited by ('cites') a "
             "target judgment, including bench-strength comparison (larger_bench, co_equal_bench, "
             "smaller_bench) and quoting paragraph excerpts (<corpus_text>). Always stamps "
-            "precedent_status='unverified_automated' with an explicit verification notice — never "
+            "precedent_status='unverified_automated' with an explicit verification notice; it never "
             "emits uncalibrated heuristic overruled/good-law NLP labels."
         ),
         annotations={

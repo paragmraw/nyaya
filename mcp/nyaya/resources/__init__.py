@@ -60,7 +60,7 @@ async def read_judgment(identifier: str) -> str:
 
 
 async def read_judgment_paragraphs(identifier: str, start: str, end: str) -> str:
-    """nyaya://judgment/{identifier}/paragraphs/{start}-{end} -> Verbatim paragraph window (capped at 30 paras / 25 KB)."""
+    """nyaya://judgment/{identifier}/paragraphs/{start}-{end} -> Verbatim paragraph window (capped at 30 paras / 24,000 chars)."""
     try:
         p_start = max(1, int(str(start).strip()))
         p_end = max(p_start, int(str(end).strip()))
@@ -173,7 +173,7 @@ def register(mcp: Any) -> None:
         "nyaya://judgment/{identifier}/paragraphs/{start}-{end}",
         name="Judgment verbatim paragraph window",
         description=(
-            "Verbatim paragraph-range citation deep-link (hard-capped at 30 paragraphs / 25 KB UTF-8)."
+            "Verbatim paragraph-range citation deep-link (hard-capped at 30 paragraphs / 24,000 chars default, 30,000 max)."
         ),
         mime_type="application/json",
     )

@@ -1,4 +1,4 @@
-"""Chat quality eval harness — the single merged replacement for the old
+"""Chat quality eval harness: the single merged replacement for the old
 ``chat_eval.py`` + ``validate_chat.py`` pair (Task 11).
 
 Sends real chat queries to ``POST /chat/turn`` and analyzes the SSE stream:
@@ -20,9 +20,9 @@ Sends real chat queries to ``POST /chat/turn`` and analyzes the SSE stream:
 
 Usage (from the chat/ directory)::
 
-    python -m eval.chat_eval --host http://localhost:8001
-    python -m eval.chat_eval --host http://localhost:8001 --verbose
-    python -m eval.chat_eval --host http://localhost:8001 --scenario fact-ipc-302
+    python -m eval.chat_eval --host http://127.0.0.1:8000
+    python -m eval.chat_eval --host http://127.0.0.1:8000 --verbose
+    python -m eval.chat_eval --host http://127.0.0.1:8000 --scenario fact-ipc-302
     python -m eval.chat_eval --test fact-ipc-302          # --test aliases --scenario
     python -m eval.chat_eval --list
 
@@ -51,7 +51,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
 # ---------------------------------------------------------------------------
-# SSE parsing — incremental, so time-to-first-token is real
+# SSE parsing: incremental, so time-to-first-token is real
 # ---------------------------------------------------------------------------
 
 def parse_sse_block(block: str) -> tuple[str, Any] | None:
@@ -154,7 +154,7 @@ def extract_citations(text: str) -> list[dict[str, str]]:
 
 
 # ---------------------------------------------------------------------------
-# SSE request — streamed, with real event timestamps
+# SSE request: streamed, with real event timestamps
 # ---------------------------------------------------------------------------
 
 def stream_chat_turn(
@@ -166,7 +166,7 @@ def stream_chat_turn(
     """POST /chat/turn and read the SSE stream incrementally.
 
     ``time_to_first_token_ms`` is the real time from request start until the
-    first ``token`` event arrived off the wire — not an estimate.
+    first ``token`` event arrived off the wire, not an estimate.
     ``latency_ms`` covers the full stream.
     """
     payload = json.dumps({"message": message, "history": history or []}).encode("utf-8")
@@ -267,7 +267,7 @@ def extract_result(stream: StreamResult) -> StreamResult:
 
 
 # ---------------------------------------------------------------------------
-# Scenarios — superset of both old suites
+# Scenarios: superset of both old suites
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -354,16 +354,16 @@ SCENARIOS: list[Scenario] = [
 
 
 # ---------------------------------------------------------------------------
-# Quality checks — union of both old suites
+# Quality checks: union of both old suites
 # ---------------------------------------------------------------------------
 
 # Soft checks: recorded and reported as warnings, but excluded from the
-# gating pass/fail arithmetic. Empty by default so every check — including
-# the hard 20000ms latency and 4000ms TTFT budgets — is gating.
+# gating pass/fail arithmetic. Empty by default so every check, including
+# the hard 20000ms latency and 4000ms TTFT budgets, is gating.
 SOFT_CHECKS: frozenset[str] = frozenset()
 
 # Canned-path latency budgets are 200ms of SERVER compute; the harness measures
-# end-to-end from the runner, so a live host (DNS + TLS + RTT to Railway — where
+# end-to-end from the runner, so a live host (DNS + TLS + RTT to Railway, where
 # remote canned requests can see up to ~1.1s from network RTT alone)
 # fails healthy runs on jitter. When the target is not local, canned scenarios
 # get a network-tolerant cap instead. Local runs keep the strict 200ms.
@@ -450,7 +450,7 @@ def run_checks(result: StreamResult, scenario: Scenario) -> None:
     )
     result.checks.append(("no_tool_repr_leak", not has_repr_leak, ""))
 
-    # The model's deliberation must never surface in the answer body — the
+    # The model's deliberation must never surface in the answer body; the
     # reasoning trace is where thinking belongs. High-precision markers only,
     # so a legitimate legal phrase can't false-fail the check.
     reasoning_leak_markers = (
@@ -673,7 +673,7 @@ def print_final_report(results: list[StreamResult], verbose: bool = False) -> No
     ttfts = [r.time_to_first_token_ms for r in results
              if r.time_to_first_token_ms > 0 and r.error is None]
     if ttfts:
-        print("\n  Time to first token (ms) — measured on the live SSE stream:")
+        print("\n  Time to first token (ms), measured on the live SSE stream:")
         print(f"    Min:    {min(ttfts):.0f}ms")
         print(f"    Mean:   {sum(ttfts) / len(ttfts):.0f}ms")
         sorted_t = sorted(ttfts)
@@ -754,8 +754,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Chat quality eval harness (merged)")
     # Default 127.0.0.1, not localhost: on Windows, urllib resolves localhost
     # to ::1 first and the connection stall (server binds IPv4) inflated every
-    # measured latency by ~2s — enough to fail every canned-path latency check.
-    parser.add_argument("--host", default="http://127.0.0.1:8001", help="Base URL of the nyaya server")
+    # measured latency by ~2s, enough to fail every canned-path latency check.
+    parser.add_argument("--host", default="http://127.0.0.1:8000", help="Base URL of the nyaya server")
     parser.add_argument("--verbose", action="store_true", help="Print detailed per-scenario output")
     parser.add_argument("--scenario", "--test", dest="scenario", default=None,
                         help="Run a single scenario by ID (alias: --test)")

@@ -1,29 +1,29 @@
 """Project the graph's custom-stream events onto Server-Sent Events.
 
-The graph's nodes emit every semantic event themselves — through
-``graph/events`` on LangGraph's custom stream mode — as dicts shaped like
+The graph's nodes emit every semantic event themselves, through
+``graph/events`` on LangGraph's custom stream mode, as dicts shaped like
 the SSE contract. This module is a pure projection layer: it serializes
 each dict as ``event: <type>`` with the remaining keys as the data payload,
 interleaves keepalive pings, and wraps the whole turn in the ``error`` /
 ``done`` bookends:
 
-  event: meta        data: {"request_id": "..."}   — request id (server.py)
-  event: status      data: {"msg": "...", "rid": "..."} — phase transition (nodes)
-  event: plan        data: {"content": "..."}       — agent leg-1 preamble text
-  event: token       data: {"content": "..."}       — agent answer token deltas
-  event: reasoning   data: {"content": "..."}       — reasoning_content deltas
-  event: tool_start  data: {"name","args","id"}     — the model called a tool
-  event: tool_result data: {"name","summary","id"}  — a tool finished
-  event: citations data: {"citations": [...]}       — parsed from the VERIFIED answer
-  event: correction data: {"content": "..."}        — the verified answer, ONLY when
+  event: meta        data: {"request_id": "..."}   ; request id (server.py)
+  event: status      data: {"msg": "...", "rid": "..."} ; phase transition (nodes)
+  event: plan        data: {"content": "..."}       ; agent leg-1 preamble text
+  event: token       data: {"content": "..."}       ; agent answer token deltas
+  event: reasoning   data: {"content": "..."}       ; reasoning_content deltas
+  event: tool_start  data: {"name","args","id"}     ; the model called a tool
+  event: tool_result data: {"name","summary","id"}  ; a tool finished
+  event: citations data: {"citations": [...]}       ; parsed from the VERIFIED answer
+  event: correction data: {"content": "..."}        ; the verified answer, ONLY when
                                                       it differs from the raw tokens
-  event: ping        data: {"ts": 1234567890}       — keepalive (every ~15s)
-  event: error       data: {"message","detail","rid"} — a node threw (unified shape)
-  event: done        data: {}                       — stream complete
+  event: ping        data: {"ts": 1234567890}       ; keepalive (every ~15s)
+  event: error       data: {"message","detail","rid"} ; a node threw (unified shape)
+  event: done        data: {}                       ; stream complete
 
 Citation verification runs ONCE, inside the agent node; the ``citations``
 and ``correction`` events arrive already computed from the node. Nothing here
-re-derives semantics from node names or message chunks — the old
+re-derives semantics from node names or message chunks: the old
 ``["messages", "updates"]`` dual-mode inference (and its node-name string
 coupling) is gone by construction.
 
@@ -74,7 +74,7 @@ async def stream_turn(
     state so every node's emitters share it.
 
     ``config`` (e.g. ``{"callbacks": [...]}`` for observability) is passed to
-    ``graph.astream`` — the single observability wiring point for the turn.
+    ``graph.astream``, the single observability wiring point for the turn.
 
     ``budget_s`` > 0 seeds a wall-clock ``deadline`` into graph state; nodes
     check it between phases and fail the turn with a ``timeout`` error event
@@ -133,8 +133,8 @@ async def stream_turn(
         # spans can be lost on process exit or short-lived container tasks.
         flush_langfuse()
         # The per-turn usage log line (rid, duration, tokens), emitted
-        # whenever the stream loop ends — clean finish, mid-stream failure,
-        # or client cancellation — with tokens 0/absent when the usage
+        # whenever the stream loop ends: clean finish, mid-stream failure,
+        # or client cancellation, with tokens 0/absent when the usage
         # event was not seen.
         duration_ms = (time.monotonic() - turn_started) * 1000.0
         if usage:
@@ -168,7 +168,7 @@ async def _stream_with_keepalive(
 
     ``asyncio.timeout(keepalive_interval)`` wraps each ``__anext__`` of the
     payload source: when a wait expires, a ping signal is yielded and the
-    wait resumes — no event is ever dropped or reordered, and the timeout is
+    wait resumes; no event is ever dropped or reordered, and the timeout is
     armed/disarmed around every single event instead of racing two tasks per
     event (the old ``asyncio.wait`` pattern).
 
@@ -235,7 +235,7 @@ def _unwrap_custom(part: Any) -> Any:
     With ``stream_mode`` given as a list, LangGraph yields ``(mode, data)``
     tuples; with a single string mode it yields the data directly. Either
     way this returns the emitted event dict (or the part untouched when it
-    isn't a recognisable tuple — the projection layer filters non-dicts).
+    isn't a recognisable tuple; the projection layer filters non-dicts).
     """
     if (
         isinstance(part, tuple)

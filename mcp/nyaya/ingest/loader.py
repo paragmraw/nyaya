@@ -218,7 +218,7 @@ _CANONICAL_LANDMARKS: tuple[dict[str, Any], ...] = (
             "Unanimous 9-Judge Constitution Bench affirmed the fundamental right to privacy as an "
             "intrinsic part of the right to life and personal liberty under Article 21 and Part III "
             "of the Constitution (overruling M.P. Sharma and Kharak Singh). Any State intrusion into "
-            "privacy—including biometric Aadhaar schemes—must satisfy legality, legitimate State aim, "
+            "privacy, including biometric Aadhaar schemes, must satisfy legality, legitimate State aim, "
             "and proportionality (later applied in the 2018 Aadhaar-5J decision)."
         ),
     },

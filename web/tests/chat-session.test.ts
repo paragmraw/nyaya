@@ -39,7 +39,7 @@ function errorResponse(status: number, body: unknown): unknown {
   return { ok: false, status, statusText: String(status), json: () => Promise.resolve(body) };
 }
 
-// A stream whose bytes the test pushes and closes manually — lets us assert
+// A stream whose bytes the test pushes and closes manually; it lets us assert
 // mid-stream state (batched patches) before the run settles.
 function controlledStream() {
   let controller!: ReadableStreamDefaultController<Uint8Array>;

@@ -1,7 +1,7 @@
 """Structured error decorator for Nyaya v2.0 MCP tools.
 
 FastMCP catches all exceptions raised inside tool functions and converts them
-to ``ToolError(message)`` — a bare string with no structured data. This module
+to ``ToolError(message)``: a bare string with no structured data. This module
 provides ``@structured_errors`` which catches :class:`~nyaya.exceptions.NyayaError`
 subclasses and converts them into a :class:`fastmcp.tools.base.ToolResult`
 with ``is_error=True`` and ``structured_content={"error": exc.to_dict()}``.

@@ -39,10 +39,12 @@ dev = [
 # The Docker image installs mcp's exported pins first, then chat's exported
 # lock *constrained by* mcp's requirements (-c requirements.txt), so any
 # shared-pin disagreement between the two locks fails the image build loudly
-# instead of silently re-pinning. These constraints pin the six packages both
-# runtime trees depend on to exactly the versions in mcp/uv.lock. When mcp
-# bumps one of them, update here in the same change or the docker build will
-# refuse to build.
+# instead of silently re-pinning. These constraints pin the 19 packages
+# chat's runtime resolves: the 11 packages mcp/uv.lock also resolves are
+# pinned to exactly its locked versions, and the 8 chat-only transitives
+# carry exact pins or >= floors so the combined image stays consistent. When
+# mcp bumps one of the shared pins, update here in the same change or the
+# docker build will refuse to build.
 [tool.uv]
 constraint-dependencies = [
     "aiohttp>=3.14.4",

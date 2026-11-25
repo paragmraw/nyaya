@@ -3,7 +3,7 @@
 //   npx tsx scripts/generate-og.ts
 //
 // Why not SVG <text>? sharp's SVG rasteriser resolves fonts through
-// fontconfig, which is often blank/absent on CI and Windows — the output
+// fontconfig, which is often blank/absent on CI and Windows: the output
 // would silently lose its type. Instead every glyph is drawn from an
 // embedded 5x7 bitmap font as SVG <rect> pixels, so the PNG depends on
 // nothing outside this file (plus sharp, which ships with Next). Palette is
@@ -19,7 +19,7 @@ const PAPER = "#f6f4ef";
 const INK = "#161d33";
 const ACCENT = "#2d5aff";
 
-// 5x7 bitmap font — one row value per row, 5 bits, MSB = leftmost column.
+// 5x7 bitmap font: one row value per row, 5 bits, MSB = leftmost column.
 const FONT: Record<string, number[]> = {
   A: [0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11],
   B: [0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e],
@@ -109,7 +109,7 @@ const bg = `
     </radialGradient>
   </defs>`;
 
-// Dot grid, top-right — echoes the site's dotted-paper background.
+// Dot grid, top-right; echoes the site's dotted-paper background.
 const dots: string[] = [];
 for (let ix = 0; ix < 16; ix++) {
   for (let iy = 0; iy < 6; iy++) {
@@ -150,7 +150,7 @@ ${pillShapes.join("\n")}
 ${urlLine.rects.join("\n")}
 </svg>`;
 
-// Sanity checks — fail loudly rather than ship a wrong image.
+// Sanity checks: fail loudly rather than ship a wrong image.
 for (const [name, art] of [["eyebrow", eyebrow], ["wordmark", wordmark], ["tagline", tagline], ["url", urlLine]] as const) {
   if (art.width > W - 168) throw new Error(`${name} overflowing: ${art.width}px`);
 }

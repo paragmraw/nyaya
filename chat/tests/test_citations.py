@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.citations — citation parsing and verification (v2)."""
+"""Tests for nyaya_chat.citations: citation parsing and verification (v2)."""
 
 from __future__ import annotations
 

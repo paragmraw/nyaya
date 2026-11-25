@@ -1,6 +1,6 @@
 """MCP-over-HTTP fallback loader for the chat tools.
 
-Used when the native path (direct import of ``nyaya.db``) is unavailable —
+Used when the native path (direct import of ``nyaya.tools``) is unavailable,
 e.g. a standalone chat deployment without the mcp package installed. The
 tools are filtered to ``tools_layer.spec.TOOL_SPECS`` names so the model sees
 the SAME interface as the native path; result cleaning happens in the graph's

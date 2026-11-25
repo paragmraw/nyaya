@@ -1,19 +1,19 @@
 """Typed SSE event emitters for graph nodes (LangGraph custom stream mode).
 
-Nodes emit the semantic events of the SSE contract — ``status``, ``plan``,
+Nodes emit the semantic events of the SSE contract: ``status``, ``plan``,
 ``token``, ``reasoning``, ``tool_start``, ``tool_result``, ``citations``,
-``correction``, ``usage`` — through LangGraph's ``get_stream_writer()``
+``correction``, ``usage``, through LangGraph's ``get_stream_writer()``
 custom stream. ``streaming.py`` consumes ``stream_mode="custom"`` and
 projects each emitted dict onto the wire as ``event: <type>`` with the
 remaining keys as the data payload.
 
 This replaces the old inference layer, which reconstructed phase
 transitions from node-name-keyed ``updates`` state and routed raw token
-chunks by node-name string comparison — the coupling that broke whenever a
+chunks by node-name string comparison: the coupling that broke whenever a
 node was renamed.
 
 ``writer()`` falls back to a no-op outside a runnable context
-(``get_stream_writer`` raises there — direct node invocations in tests emit
+(``get_stream_writer`` raises there; direct node invocations in tests emit
 nothing, which is exactly right).
 """
 
@@ -51,7 +51,7 @@ def status(msg: str, rid: str) -> None:
 
 
 def plan(content: str) -> None:
-    """Supervisor plan text (the reasoning of a structured ToolPlan)."""
+    """The agent's buffered first-leg (pre-tools) preamble text: retrieval-planning narration emitted ahead of tool calls, never answer tokens."""
     emit({"type": "plan", "content": content})
 
 

@@ -1,7 +1,7 @@
 """Graph assembly: agent → parallel tools → agent, with gated reflection.
 
 Single-node streaming pipeline: one streaming, tool-bound agent node handles
-both retrieval planning and answer composition — ``START → agent → (tools → agent | END)``.
+both retrieval planning and answer composition: ``START → agent → (tools → agent | END)``.
 This avoids separate planner and synthesis LLM round trips on the answer path.
 
 This module builds the compiled ``StateGraph`` and holds its module-level
@@ -18,7 +18,7 @@ resume-from-checkpoint or server-side memory becomes a requirement.
 **Event flow:** nodes emit every semantic SSE event (tokens included) via
 ``graph/events`` on LangGraph's custom stream mode; ``streaming.py``
 consumes ``stream_mode=["custom"]`` and projects the dicts onto the wire.
-Nothing here inspects node names at runtime — the node-name string coupling
+Nothing here inspects node names at runtime; the node-name string coupling
 the old streamer relied on is gone by construction.
 """
 
@@ -56,8 +56,8 @@ def _make_model(settings: Settings, *, model_name: str, max_tokens: int, tempera
     """Create a chat model instance for a specific graph phase.
 
     The cached base model (``get_model``) is reused only when its
-    configuration already matches the phase exactly — same model id,
-    temperature, and token cap — which is what keeps a phase that shares
+    configuration already matches the phase exactly: same model id,
+    temperature, and token cap, which is what keeps a phase that shares
     the base configuration from constructing a second API client.
 
     Test fakes advertise themselves with the ``nyaya_fake_model`` marker
@@ -109,7 +109,7 @@ async def build_graph(settings: Settings) -> tuple[Any, list[Any]]:
     log.info("loaded %d tools", len(tools))
 
     # The agent model: thinking off (reasoning tokens share the completion
-    # budget and delayed the first answer word by 3k+ tokens — see
+    # budget and delayed the first answer word by 3k+ tokens; see
     # SYNTHESIS_THINKING in config), tool-bound so it can call the retrieval
     # tools directly.
     agent_base = _make_model(
@@ -191,7 +191,7 @@ async def get_graph() -> tuple[Any, list[Any]]:
 
 
 def get_graph_if_ready() -> tuple[Any, list[Any]] | tuple[None, None]:
-    """Return the ALREADY-BUILT graph, or ``(None, None)`` — never builds.
+    """Return the ALREADY-BUILT graph, or ``(None, None)``; never builds.
 
     The fast path for ``/chat/health``: it reports the prewarmed graph when
     the host lifespan (or an earlier request) built one, and reports the

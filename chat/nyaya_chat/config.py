@@ -9,10 +9,22 @@ Environment variables read:
 ``MCP_URL`` (optional)
     Override the MCP server URL. Defaults to a PORT-derived localhost URL.
 
+``PORT`` (optional)
+    Port used to derive the default MCP server URL (``http://localhost:<port>/mcp``);
+    defaults to 8000. Set by Railway in deployed environments. An explicit
+    ``MCP_URL`` overrides the PORT-derived default.
+
 ``LANGFUSE_PUBLIC_KEY``, ``LANGFUSE_SECRET_KEY``, ``LANGFUSE_HOST`` (all optional)
     When all three are set, LLM calls are traced to Langfuse for observability.
 
-Everything else is a Python constant in this module. Edit this file to tune
+``NYAYA_COMMERCIAL_SAFE_ONLY`` (optional)
+    Set to ``1``/``true``/``yes``/``on`` (case-insensitive) to force
+    ``commercial_safe_only=True`` on every native retrieval tool call;
+    per-call arguments can raise commercial_safe_only to True but cannot
+    opt back to False (see ``tools_layer/native.py``).
+
+Apart from the env vars listed above, everything else is a Python constant
+in this module. Edit this file to tune
 the LLM models, temperatures, token caps, message limits, tool allowlist,
 or the chat log level.
 """
@@ -67,7 +79,7 @@ SYNTHESIS_THINKING = False
 MAX_REFLECTION_ROUNDS = 1
 
 # A reflection round is only started when at least this many seconds remain
-# before the turn deadline — a reflection that could not finish inside the
+# before the turn deadline: a reflection that could not finish inside the
 # budget is worse than an uncited answer.
 REFLECTION_DEADLINE_S = 12.0
 
@@ -106,7 +118,7 @@ MAX_HISTORY = 8                   # max prior (role, content) turns the client m
 # Tool-result truncation: cleaned tool content that is fed back to the
 # model (dedup cache, synthesis prompt) or rendered in the UI summary is
 # capped at this many characters. Single source of truth for the cap
-# (tool_content.py); the per-message input cap lives in schemas.py
+# (tools_layer/cleaning.py); the per-message input cap lives in schemas.py
 # (``ChatRequest.message``'s ``Field(max_length=4000)``).
 MAX_TOOL_CHARS = 8000
 
@@ -121,12 +133,12 @@ LOG_LEVEL = "INFO"
 def __getattr__(name: str):  # noqa: ANN202 - PEP 562 signature
     """Resolve ``DEFAULT_TOOLS`` from the tool spec at access time.
 
-    The curated default tool set (the 6 most useful of the MCP server's 16
-    for grounded Q&A — resolve_citation was folded into
-    get_section/get_article, corpus_stats dropped, hybrid_search removed in
-    the v0.2 consolidation) is defined ONCE in ``tools_layer/spec.py``; it
-    cannot be imported at module level here because the ``tools_layer``
-    package imports this module. Imported lazily, both directions resolve.
+    The curated default tool set (the 8 allowlisted tools of the MCP
+    server's 12 v2 tools for grounded Q&A; the remaining 4 MCP tools are
+    not on the chat allowlist) is defined ONCE in ``tools_layer/spec.py``
+    (``DEFAULT_TOOLS``, derived from ``TOOL_SPECS``); it cannot be imported
+    at module level here because the ``tools_layer`` package imports this
+    module. Imported lazily, both directions resolve.
     """
     if name == "DEFAULT_TOOLS":
         from .tools_layer.spec import DEFAULT_TOOLS as _tools

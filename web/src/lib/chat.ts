@@ -17,8 +17,9 @@
 //                             correction rebase, errors, timeout, cancel)
 //   chat/use-chat.ts        : useChat, the thin React adapter
 //
-// All existing imports (ChatPanel, MessageList, the 12 test suites) keep
-// importing from here unchanged.
+// All existing imports (MarkdownContent via "@/lib/chat", ChatPanel through
+// the "@/lib" barrel that re-exports this facade, and the node test suites
+// under tests/) keep working unchanged.
 
 export * from "./chat/errors";
 export * from "./chat/citations";

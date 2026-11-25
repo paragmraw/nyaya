@@ -220,7 +220,7 @@ export const MCP_RESOURCES: ResourceItem[] = [
   { uri: "nyaya://provision/{act}/{ref}", desc: "Verbatim provision text (<corpus_text>), StatutoryValidity envelope, and cross-links." },
   { uri: "nyaya://amendment/{act}/{number}", desc: "Constitutional Amendment (1–106) or Central Act amendment details and affected articles." },
   { uri: "nyaya://judgment/{identifier}", desc: "Judgment overview card and opening/operative excerpts by CNR, INSC, HC Neutral, or case_id." },
-  { uri: "nyaya://judgment/{identifier}/paragraphs/{start}-{end}", desc: "Windowed paragraph-range citation deep-link (capped at 30 paragraphs / 25 KB)." },
+  { uri: "nyaya://judgment/{identifier}/paragraphs/{start}-{end}", desc: "Windowed paragraph-range citation deep-link (capped at 30 paragraphs / 24,000 chars)." },
   { uri: "nyaya://courts", desc: "Canonical directory of Supreme Court, 25 High Courts (45 Benches), 15 Tribunals, 12 Regulators, and state codes." },
 ];
 

@@ -317,7 +317,7 @@ class DuckDBStore:
         if dataset == "high_court":
             if not any([cnr, court, judge, act, party, narrow_year]):
                 raise QueryTooBroad(
-                    "High Court 17.77M-record scan requires at least one narrowing filter "
+                    "High Court 20.7M-record scan requires at least one narrowing filter "
                     "(court, cnr, judge, act, party, or year window <= 5 years).",
                     hint="Pass court='DHC' or year_from/year_to within 5 years.",
                 )

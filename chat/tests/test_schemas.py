@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.schemas — request validation."""
+"""Tests for nyaya_chat.schemas: request validation."""
 
 from __future__ import annotations
 

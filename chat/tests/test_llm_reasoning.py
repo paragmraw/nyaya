@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.llm — model caching, retry backoff."""
+"""Tests for nyaya_chat.llm: model caching, retry backoff."""
 
 from __future__ import annotations
 

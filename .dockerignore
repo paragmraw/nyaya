@@ -1,6 +1,7 @@
-# The Docker build context is the repo root. The root Dockerfile builds two
-# stages: web/ (Node SPA) and mcp/ (Python server). We exclude everything
-# else, plus the build artifacts that should not enter the image.
+# The Docker build context is the repo root. The root Dockerfile builds the
+# web/ (Node SPA) and mcp/ (Python server) halves across four stages (two
+# builders, a data-bake stage, and the runtime). We exclude everything else,
+# plus the build artifacts that should not enter the image.
 
 # --- Version control / CI ---
 .git
@@ -61,7 +62,7 @@ Thumbs.db
 *.log
 docs/_build/
 
-# --- Local-only / session dirs (gitignored anyway, never in the image) ---
+# --- Local-only / session dirs (never in the image; .railway is tracked) ---
 scratch
 .remember
 .superpowers

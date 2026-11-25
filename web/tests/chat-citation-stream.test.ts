@@ -87,7 +87,7 @@ test("chunked feeding equals the one-shot strip", () => {
 });
 
 // Review finding: when a feed boundary falls BETWEEN the two "]"s of a
-// marker's close, the held candidate ends with exactly one "]" — that may be
+// marker's close, the held candidate ends with exactly one "]", which may be
 // the marker's own first closing bracket, not a bracket inside the ref. The
 // streamed display must still end up as a chip, equal to the one-shot strip.
 test("a marker straddling the ']]' across deltas still converts", () => {

@@ -1,4 +1,4 @@
-"""Tests for nyaya_chat.observability — Langfuse + structlog configuration."""
+"""Tests for nyaya_chat.observability: Langfuse + structlog configuration."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def test_get_langfuse_handler_returns_handler_with_env(monkeypatch):
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
     monkeypatch.setenv("LANGFUSE_HOST", "http://localhost:3000")
-    # This will try to import langfuse — if not installed, returns None
+    # This will try to import langfuse; if not installed, returns None
     handler = get_langfuse_handler()
     # Either returns a handler (if langfuse installed) or None (if not)
     # Both are acceptable; the key is it doesn't crash

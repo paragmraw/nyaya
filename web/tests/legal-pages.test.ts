@@ -8,7 +8,7 @@
 //   2. every new route exists, and every footer site-link points at a real
 //      route;
 //   3. legal copy never overclaims data handling ("we do not log", "nothing
-//      is stored", ...) — platform/log retention is hedged, not claimed away;
+//      is stored", ...): platform/log retention is hedged, not claimed away;
 //   4. each page carries its load-bearing disclosure (processor on privacy,
 //      channels on contact, licensing posture on terms, the not-legal-advice
 //      anchor on disclaimer, single-sourced FAQ rendering, accessibility

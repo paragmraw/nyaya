@@ -25,7 +25,7 @@ The chat sub-app is mounted into `nyaya.http_app` at `/chat` whenever `NVIDIA_AP
 
 ## Quickstart (standalone dev)
 
-Install `nyaya-chat` into the `mcp/` environment using the locked export + `--no-deps` flow (matching `.github/workflows/ci.yml` and `Dockerfile` so shared pins such as `fastapi`/`starlette`/`mcp` align with `mcp/uv.lock`):
+Install `nyaya-chat` into the `mcp/` environment using the locked export + `--no-deps` flow (matching `.github/workflows/ci.yml` and `Dockerfile` so shared pins such as `starlette` and `mcp` align with `mcp/uv.lock`; `fastapi` is a chat-only dependency and is not constrained by `mcp/uv.lock`):
 
 ```bash
 cd mcp
@@ -47,7 +47,7 @@ NVIDIA_API_KEY=nvapi-... uv run nyaya-mcp --transport http --host 127.0.0.1 --po
 ## Environment
 
 - `NVIDIA_API_KEY` (required to mount `/chat`; not required for `nyaya-mcp` core tools)
-- `MCP_URL` (optional; defaults to `http://localhost:${PORT}/mcp` — used only in fallback mode when `nyaya` is not importable)
+- `MCP_URL` (optional; defaults to `http://localhost:${PORT}/mcp`, used only in fallback mode when `nyaya` is not importable)
 - `NYAYA_COMMERCIAL_SAFE_ONLY` (optional; inherited by `native.py` tool execution)
 - `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (optional tracing; all three required when enabling Langfuse)
 

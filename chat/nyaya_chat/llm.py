@@ -41,11 +41,11 @@ def _is_retryable(exc: BaseException) -> bool:
     2. A ``response.status_code`` pair (httpx / requests-style
        ``HTTPStatusError``): same rule.
     3. Exception type: timeouts and transport failures are transient by
-       definition (``TimeoutError`` — which ``asyncio.TimeoutError`` aliases
-       on Python >= 3.11 — and httpx ``TransportError`` subclasses such as
+       definition (``TimeoutError``, which ``asyncio.TimeoutError`` aliases
+       on Python >= 3.11, and httpx ``TransportError`` subclasses such as
        ``ConnectError``).
     4. Last resort, for exception types that carry no structured status:
-       substring match on the message — some hosted endpoints stringify
+       substring match on the message; some hosted endpoints stringify
        429s into the error text.
     """
     status = getattr(exc, "status_code", None)

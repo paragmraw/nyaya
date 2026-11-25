@@ -2,10 +2,10 @@
 //
 // The reader-loop exit decision: with a proper bookend (`done`, or a
 // `correction` which rebases the accumulator onto authoritative text) the
-// accumulated tokens become the verified answer — full parseCitations pass,
+// accumulated tokens become the verified answer: full parseCitations pass,
 // contentFinal flips the bubble to the markdown render. Without `done` the
 // connection dropped before the bookend: the partial text stays in
-// streaming-plain form (never markdown-parsed — a truncated answer can carry
+// streaming-plain form (never markdown-parsed: a truncated answer can carry
 // half-finished constructs), and when no `error` event arrived either the run
 // is marked interrupted so the retry affordance appears. Run with:  npm test
 
