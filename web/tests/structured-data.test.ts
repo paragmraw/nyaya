@@ -79,6 +79,7 @@ test("known routes exist exactly once each", () => {
     [...KNOWN_ROUTES].sort(),
     [
       "/",
+      "/accessibility/",
       "/architecture/",
       "/citations/",
       "/contact/",
