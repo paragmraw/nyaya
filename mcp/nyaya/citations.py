@@ -323,6 +323,98 @@ def court_code_variants(raw: str | None) -> tuple[str, ...]:
     return tuple(variants)
 
 
+_DATTAM_CODE_TO_NAME: dict[str, str] = {
+    "SC": "Supreme Court of India",
+    "SCI": "Supreme Court of India",
+    "AHC": "High Court of Judicature at Allahabad",
+    "9_13": "High Court of Judicature at Allahabad",
+    "9~13": "High Court of Judicature at Allahabad",
+    "APHC": "High Court of Andhra Pradesh",
+    "28_2": "High Court of Andhra Pradesh",
+    "28~2": "High Court of Andhra Pradesh",
+    "BHC": "High Court of Bombay",
+    "27_1": "High Court of Bombay",
+    "27~1": "High Court of Bombay",
+    "CAL": "High Court at Calcutta",
+    "19_16": "High Court at Calcutta",
+    "19~16": "High Court at Calcutta",
+    "CGHC": "High Court of Chhattisgarh",
+    "22_18": "High Court of Chhattisgarh",
+    "22~18": "High Court of Chhattisgarh",
+    "DHC": "High Court of Delhi",
+    "7_26": "High Court of Delhi",
+    "7~26": "High Court of Delhi",
+    "GAU": "Gauhati High Court",
+    "18_6": "Gauhati High Court",
+    "18~6": "Gauhati High Court",
+    "GUJ": "High Court of Gujarat",
+    "24_17": "High Court of Gujarat",
+    "24~17": "High Court of Gujarat",
+    "HPHC": "High Court of Himachal Pradesh",
+    "2_5": "High Court of Himachal Pradesh",
+    "2~5": "High Court of Himachal Pradesh",
+    "JKHC": "High Court of Jammu & Kashmir and Ladakh",
+    "1_12": "High Court of Jammu & Kashmir and Ladakh",
+    "1~12": "High Court of Jammu & Kashmir and Ladakh",
+    "JHC": "High Court of Jharkhand",
+    "20_7": "High Court of Jharkhand",
+    "20~7": "High Court of Jharkhand",
+    "KAR": "High Court of Karnataka",
+    "29_3": "High Court of Karnataka",
+    "29~3": "High Court of Karnataka",
+    "KER": "High Court of Kerala",
+    "32_4": "High Court of Kerala",
+    "32~4": "High Court of Kerala",
+    "MPHC": "High Court of Madhya Pradesh",
+    "23_23": "High Court of Madhya Pradesh",
+    "23~23": "High Court of Madhya Pradesh",
+    "MAD": "High Court of Judicature at Madras",
+    "33_10": "High Court of Judicature at Madras",
+    "33~10": "High Court of Judicature at Madras",
+    "MAN": "High Court of Manipur",
+    "14_25": "High Court of Manipur",
+    "14~25": "High Court of Manipur",
+    "MEG": "High Court of Meghalaya",
+    "17_21": "High Court of Meghalaya",
+    "17~21": "High Court of Meghalaya",
+    "ORI": "High Court of Orissa",
+    "21_11": "High Court of Orissa",
+    "21~11": "High Court of Orissa",
+    "PAT": "High Court of Judicature at Patna",
+    "10_8": "High Court of Judicature at Patna",
+    "10~8": "High Court of Judicature at Patna",
+    "PHC": "High Court of Punjab and Haryana",
+    "3_22": "High Court of Punjab and Haryana",
+    "3~22": "High Court of Punjab and Haryana",
+    "RAJ": "High Court of Judicature for Rajasthan",
+    "8_9": "High Court of Judicature for Rajasthan",
+    "8~9": "High Court of Judicature for Rajasthan",
+    "SIK": "High Court of Sikkim",
+    "11_24": "High Court of Sikkim",
+    "11~24": "High Court of Sikkim",
+    "TSHC": "High Court for the State of Telangana",
+    "36_29": "High Court for the State of Telangana",
+    "36~29": "High Court for the State of Telangana",
+    "TRI": "High Court of Tripura",
+    "16_20": "High Court of Tripura",
+    "16~20": "High Court of Tripura",
+    "UKHC": "High Court of Uttarakhand",
+    "5_15": "High Court of Uttarakhand",
+    "5~15": "High Court of Uttarakhand",
+}
+
+
+def court_display_name(code: str | None) -> str | None:
+    """Resolve a Dattam code (``_`` or ``~``) or canonical court code to its display name."""
+    if not code:
+        return None
+    cleaned = BIDI_RE.sub("", strip_control_chars(code)).strip()
+    if not cleaned:
+        return None
+    norm = cleaned.replace("~", "_").upper()
+    return _DATTAM_CODE_TO_NAME.get(norm)
+
+
 _JURISDICTION_NAME_MAP: dict[str, str] = {
     "central": "Central",
     "union of india": "Central",

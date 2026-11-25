@@ -8,7 +8,7 @@ import re
 from datetime import date as Date
 from typing import Any
 
-from ..citations import court_code_variants
+from ..citations import court_code_variants, court_display_name
 from ..config import Settings
 from ..exceptions import CommercialLicenseBlocked, QueryTooBroad, StorageUnavailable
 from ..models import (
@@ -41,6 +41,68 @@ from .ranking import (
 )
 
 _STATUTE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
+_DIGITS_COURT_CODE_RE = re.compile(r"^\d+[_~]\d+$")
+_ANTICIPATORY_BAIL_SIGNAL_RE = re.compile(
+    r"(?i)(?:\banticipatory\b|\bpre[- ]?arrest\b|\bapprehending\s+arrest\b|"
+    r"\baba\b|\babail\b|\bcr\.?\s*p\.?\s*c\.?\s*(?:s\.?\s*)?438\b|"
+    r"\bbnss\s*(?:s\.?\s*)?482\b|\bs(?:ec(?:tion)?)?\.?\s*(?:438|482)\b|"
+    r"(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d))"
+)
+
+
+def _resolve_court_display_name(
+    raw_court_name: Any,
+    court_code: str | None,
+    *,
+    fallback: str,
+) -> str:
+    name = str(raw_court_name or "").strip()
+    code = str(court_code or "").strip()
+    if not name or (code and name.lower() == code.lower()) or _DIGITS_COURT_CODE_RE.match(name):
+        resolved = court_display_name(code or name)
+        if resolved:
+            return resolved
+    return name or code or fallback
+
+
+def _card_search_haystack(card: JudgmentCard) -> str:
+    return (
+        f"{card.title} {card.court} {card.court_code or ''} "
+        f"{card.bench or ''} {card.author_judge or ''} "
+        f"{card.neutral_citation or ''} {' '.join(card.reporter_citations)} "
+        f"{card.case_type or ''} {' '.join(card.acts_cited)} {card.decision_date or ''} "
+        f"{card.disposal_nature or ''} {card.snippet or ''}"
+    ).lower()
+
+
+def _has_anticipatory_bail_signal(card: JudgmentCard) -> bool:
+    haystack = f"{card.title} {card.case_type or ''} {' '.join(card.acts_cited)} {card.snippet or ''}"
+    return bool(_ANTICIPATORY_BAIL_SIGNAL_RE.search(haystack))
+
+
+def _interleave_by_court(cards: list[JudgmentCard]) -> list[JudgmentCard]:
+    """Round-robin interleave cards across distinct courts, preserving within-court rank."""
+    if len(cards) <= 1:
+        return list(cards)
+    buckets: dict[str, list[JudgmentCard]] = {}
+    for card in cards:
+        key = (card.court_code or card.court or "").strip().lower()
+        buckets.setdefault(key, []).append(card)
+    if len(buckets) <= 1:
+        return list(cards)
+    queues = list(buckets.values())
+    out: list[JudgmentCard] = []
+    idx = 0
+    while len(out) < len(cards):
+        progressed = False
+        for q in queues:
+            if idx < len(q):
+                out.append(q[idx])
+                progressed = True
+        if not progressed:
+            break
+        idx += 1
+    return out
 
 
 def encode_cursor(offset: int) -> str:
@@ -177,7 +239,11 @@ def _lance_row_to_judgment_card(
     court_name = (
         "Supreme Court of India"
         if tier == "supreme_court"
-        else str(row.get("court_name") or court_code or "High Court")
+        else _resolve_court_display_name(
+            row.get("court_name"),
+            court_code,
+            fallback="High Court",
+        )
     )
     title_str = str(row.get("title") or "Untitled")
     text_str = str(row.get("text") or "")
@@ -560,6 +626,7 @@ class LexicalRetrievalEngine:
                         # Pick Dattam numeric code if known
                         variants = court_code_variants(q.court)
                         c_code = next((v for v in variants if "_" in v), None)
+                    hc_limit = 60 if (tier == "high_court" and q.court is None) else 30
                     for r in self.lance.search_hc(
                         base_q,
                         court_code=c_code,
@@ -569,7 +636,7 @@ class LexicalRetrievalEngine:
                         min_bench_strength=q.min_bench_strength,
                         disposal_nature=q.disposal_nature,
                         commercial_safe_only=cs_only,
-                        limit=30,
+                        limit=hc_limit,
                     ):
                         lance_direct.append(_lance_row_to_judgment_card(r, tier="high_court", matched_via="direct"))
 
@@ -600,19 +667,45 @@ class LexicalRetrievalEngine:
                     if sum(
                         1
                         for tok in j_tokens
-                        if _token_matches_boundary(
-                            tok,
-                            (
-                                f"{card.title} {card.court} {card.court_code or ''} "
-                                f"{card.bench or ''} {card.author_judge or ''} "
-                                f"{card.neutral_citation or ''} {' '.join(card.reporter_citations)} "
-                                f"{' '.join(card.acts_cited)} {card.decision_date or ''} "
-                                f"{card.disposal_nature or ''} {card.snippet or ''}"
-                            ).lower(),
-                        )
+                        if _token_matches_boundary(tok, _card_search_haystack(card))
                     )
                     >= min_j_matches
                 ]
+
+        # Word-boundary precision guard for High Court OR-expanded equivalent hits
+        if lance_equiv and tier == "high_court" and not exact_cards:
+            _, raw_eq_q_tokens = _extract_fts_tokens(q.query or "")
+            q_eq_tokens = list(dict.fromkeys(t.lower() for t in raw_eq_q_tokens))
+            min_q_eq = _multitoken_min_required(len(q_eq_tokens)) if q_eq_tokens else 0
+            equiv_pairs: list[list[str]] = []
+            for eq_act, eq_ref in analyzed.equivalent_statute_refs:
+                _, pair_toks = _extract_fts_tokens(f"{eq_act} {eq_ref}")
+                if pair_toks:
+                    equiv_pairs.append(list(dict.fromkeys(t.lower() for t in pair_toks)))
+            filtered_equiv: list[JudgmentCard] = []
+            for card in lance_equiv:
+                hay = _card_search_haystack(card)
+                q_ok = bool(q_eq_tokens) and (
+                    sum(1 for tok in q_eq_tokens if _token_matches_boundary(tok, hay))
+                    >= min_q_eq
+                )
+                pair_ok = any(
+                    all(_token_matches_boundary(tok, hay) for tok in pair)
+                    for pair in equiv_pairs
+                )
+                if q_ok or pair_ok:
+                    filtered_equiv.append(card)
+            lance_equiv = filtered_equiv
+
+        # Strict anticipatory bail precision filter so plain BAIL APPLN. never slips through
+        if (
+            q.query
+            and re.search(r"\banticipatory\b", q.query, re.IGNORECASE)
+            and re.search(r"\bbail\b", q.query, re.IGNORECASE)
+        ):
+            lance_direct = [c for c in lance_direct if _has_anticipatory_bail_signal(c)]
+            lance_equiv = [c for c in lance_equiv if _has_anticipatory_bail_signal(c)]
+            sqlite_cards = [c for c in sqlite_cards if _has_anticipatory_bail_signal(c)]
 
         # 4. DuckDB Parquet metadata search when targeting specific tiers or metadata filters
         duck_cards: list[JudgmentCard] = []
@@ -641,14 +734,20 @@ class LexicalRetrievalEngine:
                     except ValueError:
                         d_date = None
                     is_nc = tier == "district_court"
+                    d_court_code = dr.get("court_code")
+                    d_court_name = _resolve_court_display_name(
+                        dr.get("court_name"),
+                        str(d_court_code) if d_court_code is not None else None,
+                        fallback=str(tier),
+                    )
                     duck_cards.append(
                         JudgmentCard(
                             case_id=str(dr.get("case_id") or dr.get("cnr") or ""),
                             cnr=dr.get("cnr"),
                             neutral_citation=dr.get("neutral_citation"),
                             title=str(dr.get("title") or "Untitled"),
-                            court=str(dr.get("court_name") or dr.get("court_code") or tier),
-                            court_code=dr.get("court_code"),
+                            court=d_court_name,
+                            court_code=d_court_code,
                             court_tier=tier,
                             bench=dr.get("bench"),
                             decision_date=d_date,
@@ -716,6 +815,14 @@ class LexicalRetrievalEngine:
         ordered = apply_exact_citation_floor(
             ranked, exact_cards, key_fn=_canonical_judgment_key, floor=3
         )
+        if tier == "high_court" and q.court is None and q.sort_by == "relevance":
+            if exact_cards:
+                exact_keys = {_canonical_judgment_key(c) for c in exact_cards}
+                pinned = [c for c in ordered if _canonical_judgment_key(c) in exact_keys]
+                rest = [c for c in ordered if _canonical_judgment_key(c) not in exact_keys]
+                ordered = pinned + _interleave_by_court(rest)
+            else:
+                ordered = _interleave_by_court(ordered)
 
         total = len(ordered)
         page = ordered[offset : offset + limit]

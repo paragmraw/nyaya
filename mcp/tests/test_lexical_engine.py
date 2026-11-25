@@ -388,3 +388,210 @@ def test_p0_shorthand_precision_dedup_and_landmark_ranking(
     finally:
         sqlite.close()
         duck.close()
+
+
+def test_hc_display_name_strict_anticipatory_bail_and_court_interleaving(
+    corpus_paths: dict[str, Path],
+    tmp_path: Path,
+) -> None:
+    from datetime import date as Date
+
+    from nyaya.models import JudgmentCard, SourceProvenance
+    from nyaya.retrieval.lexical_engine import (
+        _interleave_by_court,
+        _lance_row_to_judgment_card,
+    )
+
+    # 1. _lance_row_to_judgment_card resolves raw Dattam court codes to display names
+    manipur_card = _lance_row_to_judgment_card(
+        {
+            "case_id": "hc:man:10",
+            "court_code": "14_25",
+            "court_name": "14_25",
+            "title": "X v. State",
+            "text": "Anticipatory bail under AB/11/2023",
+        },
+        tier="high_court",
+    )
+    assert manipur_card.court == "High Court of Manipur"
+
+    tripura_card = _lance_row_to_judgment_card(
+        {
+            "case_id": "hc:tri:10",
+            "court_code": "16_20",
+            "court_name": "",
+            "title": "Y v. State",
+            "text": "Anticipatory bail under s.438",
+        },
+        tier="high_court",
+    )
+    assert tripura_card.court == "High Court of Tripura"
+
+    # 2. _interleave_by_court produces 5 distinct High Courts in top 5
+    prov = SourceProvenance(
+        source_id="dattam-hc",
+        source_name="Dattam",
+        source_url="https://example.invalid",
+        license_spdx="CC-BY-4.0",
+        commercial_safe=True,
+        terms_status="cleared",
+        as_of=Date(2026, 11, 22),
+    )
+    sample_cards = [
+        JudgmentCard(case_id="m1", title="M1", court="High Court of Manipur", court_code="14_25", court_tier="high_court", provenance=prov),
+        JudgmentCard(case_id="m2", title="M2", court="High Court of Manipur", court_code="14_25", court_tier="high_court", provenance=prov),
+        JudgmentCard(case_id="m3", title="M3", court="High Court of Manipur", court_code="14_25", court_tier="high_court", provenance=prov),
+        JudgmentCard(case_id="t1", title="T1", court="High Court of Tripura", court_code="16_20", court_tier="high_court", provenance=prov),
+        JudgmentCard(case_id="d1", title="D1", court="High Court of Delhi", court_code="7_26", court_tier="high_court", provenance=prov),
+        JudgmentCard(case_id="b1", title="B1", court="High Court of Bombay", court_code="27_1", court_tier="high_court", provenance=prov),
+        JudgmentCard(case_id="c1", title="C1", court="High Court at Calcutta", court_code="19_16", court_tier="high_court", provenance=prov),
+    ]
+    interleaved = _interleave_by_court(sample_cards)
+    assert len({c.court_code for c in interleaved[:5]}) == 5
+    assert [c.case_id for c in interleaved] == ["m1", "t1", "d1", "b1", "c1", "m2", "m3"]
+
+    # 3. End-to-end LexicalRetrievalEngine test: limit=60, strict AB filter on direct/equiv/sqlite, interleaving
+    class _StubLance:
+        def __init__(self) -> None:
+            self.hc_calls: list[tuple[str, int]] = []
+
+        def search_hc(self, query: str, **kwargs):
+            limit = int(kwargs.get("limit", 10))
+            self.hc_calls.append((query, limit))
+            if "BNSS" in query or "CrPC" in query:
+                # Equiv OR-expansion returns an unrelated regular BAIL APPLN. + a genuine s.438 CrPC hit
+                return [
+                    {
+                        "case_id": "hc:equiv:plain_bail",
+                        "court_code": "7_26",
+                        "court_name": "7_26",
+                        "title": "Regular Bail v. State",
+                        "case_type": "BAIL APPLN. 99/2024",
+                        "acts_cited": ["CrPC"],
+                        "text": "Regular bail granted under Section 439 CrPC in BAIL APPLN. 99/2024.",
+                    },
+                    {
+                        "case_id": "hc:equiv:valid_438",
+                        "court_code": "19_16",
+                        "court_name": "19_16",
+                        "title": "Anticipatory Bail v. State",
+                        "acts_cited": ["CrPC"],
+                        "text": "Anticipatory bail application under Section 438 CrPC allowed.",
+                    },
+                ]
+            return [
+                {
+                    "case_id": "hc:man:ab",
+                    "court_code": "14_25",
+                    "court_name": "14_25",
+                    "title": "AB/11/2023 v. State",
+                    "text": "Petitioner seeks relief in AB/11/2023 before High Court.",
+                },
+                {
+                    "case_id": "hc:man:aba",
+                    "court_code": "14_25",
+                    "court_name": "14_25",
+                    "title": "ABA 20/2024 v. State",
+                    "text": "ABA 20/2024 granted by bench.",
+                },
+                {
+                    "case_id": "hc:man:plain",
+                    "court_code": "14_25",
+                    "court_name": "14_25",
+                    "title": "Plain Bail Order",
+                    "case_type": "BAIL APPLN. 55/2024",
+                    "text": "BAIL APPLN. 55/2024 regular custody bail disposed.",
+                },
+                {
+                    "case_id": "hc:tri:s438",
+                    "court_code": "16_20",
+                    "court_name": "",
+                    "title": "S438 v. State",
+                    "text": "Application under s.438 allowed.",
+                },
+                {
+                    "case_id": "hc:dhc:abail",
+                    "court_code": "7_26",
+                    "court_name": "7_26",
+                    "title": "ABAIL v. State",
+                    "text": "Anticipatory bail under Section 482 BNSS.",
+                },
+                {
+                    "case_id": "hc:bhc:prearrest",
+                    "court_code": "27_1",
+                    "court_name": "27_1",
+                    "title": "Pre-arrest v. State",
+                    "text": "Pre-arrest bail protection granted.",
+                },
+            ]
+
+        def health(self):
+            return {"status": "ok"}
+
+    import shutil
+    import sqlite3
+
+    settings = _make_settings(corpus_paths["root"], tmp_path / "cache")
+    local_sqlite = tmp_path / "nyaya_test.sqlite"
+    shutil.copy2(corpus_paths["sqlite"], local_sqlite)
+    # Insert a plain regular bail row in SQLite FTS that OR-matches "bail" in "anticipatory bail"
+    with sqlite3.connect(local_sqlite) as con:
+        con.execute(
+            """
+            INSERT OR REPLACE INTO judgments_meta (
+                case_id, tier, court_code, court_name, title, petitioner, respondent,
+                decision_date, year, disposal_nature, case_type, acts_cited_json,
+                is_reportable, source_url, text_sha256, has_lance_text, cited_by_count,
+                source_id, commercial_safe
+            ) VALUES (
+                'hc:sqlite:plain_bail', 'hc', '7_26', 'High Court of Delhi',
+                'Regular Bail Application State', 'Accused', 'State',
+                '2024-06-01', 2024, 'Dismissed', 'BAIL APPLN. 88/2024', '["CrPC"]',
+                0, 'https://example.invalid', 'sha', 0, 0, 'dattam-hc', 1
+            )
+            """
+        )
+        con.execute(
+            "INSERT INTO judgments_meta_fts(judgments_meta_fts) VALUES('rebuild')"
+        )
+        con.commit()
+    sqlite = SqliteStore(local_sqlite)
+
+    stub_lance = _StubLance()
+    engine = build_retrieval_engine(settings, sqlite, lance=stub_lance)  # type: ignore[arg-type]
+    try:
+        resp = engine.search_judgments(
+            JudgmentSearchQuery(
+                query="anticipatory bail",
+                court_tier="high_court",
+                sort_by="relevance",
+                limit=5,
+            )
+        )
+        # First search_hc call uses limit=60 when tier=="high_court" and court is None
+        assert stub_lance.hc_calls[0][1] == 60
+        ids = [r.case_id for r in resp.results]
+        assert "hc:man:plain" not in ids
+        assert "hc:equiv:plain_bail" not in ids
+        assert "hc:sqlite:plain_bail" not in ids
+        assert len({r.court_code for r in resp.results[:5]}) == 5
+        assert {r.court for r in resp.results[:5]} == {
+            "High Court of Manipur",
+            "High Court of Tripura",
+            "High Court of Delhi",
+            "High Court of Bombay",
+            "High Court at Calcutta",
+        }
+
+        # When exact citation is present, exact card stays pinned first while rest are interleaved
+        exact_resp = engine.search_judgments(
+            JudgmentSearchQuery(
+                query="2024:DHC:1234 anticipatory bail",
+                court_tier="high_court",
+                sort_by="relevance",
+                limit=5,
+            )
+        )
+        assert exact_resp.results[0].case_id == "hc:2024:dhc:1234"
+    finally:
+        sqlite.close()

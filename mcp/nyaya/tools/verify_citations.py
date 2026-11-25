@@ -95,6 +95,17 @@ def _audit_parsed_citation(
             )
 
         if rec is None:
+            if p.kind == "cpc_order_rule":
+                return AuditFinding(
+                    raw_citation=p.raw_text,
+                    span=p.span,
+                    parsed=parsed_dict,
+                    status="NOT_FOUND_IN_CORPUS",
+                    coverage_note=(
+                        f"CPC Order/Rule {p.base_ref!r} is not indexed in the local SQLite core "
+                        "(partial CPC Order/Rule coverage)."
+                    ),
+                )
             # Check if the Act itself exists in catalog
             try:
                 backend.browse_statute(act=act_name, commercial_safe_only=cs_only)

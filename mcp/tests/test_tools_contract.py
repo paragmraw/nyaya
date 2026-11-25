@@ -24,6 +24,7 @@ from nyaya import storage
 from nyaya import tools as tools_pkg
 from nyaya.exceptions import PdfFetchError
 from nyaya.models import (
+    ActInfo,
     AmendmentRecord,
     CitationEdgeRecord,
     ConcordanceEntry,
@@ -669,3 +670,27 @@ async def test_verify_citations_norm_quote_lance_and_pdf_fallback(monkeypatch: A
     finally:
         storage.set_retrieval(None)
         storage.set_pdf_fetcher(None)
+
+
+async def test_verify_citations_cpc_order_rule_missing_returns_not_found_not_invalid() -> None:
+    backend = _build_rich_memory_backend()
+    prov_safe = next(iter(backend.acts.values())).provenance
+    backend.acts["CPC"] = ActInfo(
+        act_id="cpc-1908",
+        short_name="CPC",
+        full_name="The Code of Civil Procedure, 1908",
+        year=1908,
+        status="in_force",
+        provision_count=1,
+        provenance=prov_safe,
+    )
+    storage.set_backend(backend)
+    tools = await _tool_map(_fresh_mcp())
+
+    res = await tools["verify_citations"].fn(
+        citations=["CPC Order XXXIX Rule 1", "IPC s. 99999"],
+    )
+    by_raw = {f.raw_citation: f for f in res.findings}
+    assert by_raw["CPC Order XXXIX Rule 1"].status == "NOT_FOUND_IN_CORPUS"
+    assert "partial CPC Order/Rule coverage" in (by_raw["CPC Order XXXIX Rule 1"].coverage_note or "")
+    assert by_raw["IPC s. 99999"].status == "INVALID_STATUTORY_REF"

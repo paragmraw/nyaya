@@ -7,6 +7,36 @@ import re
 from collections import Counter
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+(?:[./-][a-z0-9]+)*")
+_COUNSEL_NAME_RE = re.compile(r"\b(?:Mr|Ms|Mrs|Dr|Shri|Smt)\.?\s+[A-Z]|\bSr\.?\s*Adv\.?|\bAOR\b")
+_FOR_PARTY_RE = re.compile(
+    r"(?i)\bFor\s+the\s+(?:Petitioner|Respondent|Appellant|Intervenor|Applicant)s?\s*:"
+)
+_COUNSEL_SUBMISSION_RE = re.compile(
+    r"(?i)(?:"
+    r"\bmade\s+the\s+following\s+submissions\b"
+    r"|\bsubmissions\s+(?:of|on\s+behalf\s+of)\b"
+    r"|\blearned\s+(?:senior\s+)?counsel\b[^.\n]{0,120}\b(?:submitted|argued|contended|urged|opposed|canvassed)\b"
+    r"|\blearned\s+(?:attorney\s+general|solicitor\s+general|additional\s+solicitor\s+general|advocate\s+general|amicus\s+curiae)\b[^.\n]{0,120}\b(?:submitted|argued|contended|urged)\b"
+    r")"
+)
+_HOLDING_CUE_RE = re.compile(
+    r"(?i)\b(?:we\s+hold|we\s+conclude|we\s+formulate\s+our\s+conclusions|our\s+conclusions|"
+    r"in\s+view\s+of\s+the\s+above\s+discussion|it\s+is\s+held\s+that|held\s*\(\s*per\b)"
+)
+
+
+def _is_counsel_list(para: str) -> bool:
+    """Return True if a paragraph looks like a counsel appearance block."""
+    if _FOR_PARTY_RE.search(para):
+        return True
+    return len(_COUNSEL_NAME_RE.findall(para)) >= 4
+
+
+def _is_counsel_noise(para: str) -> bool:
+    """Return True if a paragraph is counsel appearance/submission text without holding cues."""
+    if _HOLDING_CUE_RE.search(para):
+        return False
+    return _is_counsel_list(para) or bool(_COUNSEL_SUBMISSION_RE.search(para))
 
 
 def _tokenize(text: str) -> list[str]:
@@ -49,8 +79,14 @@ class ParagraphBM25:
                 idf = self._idf.get(term, 0.0)
                 denom = freq + self.k1 * (1.0 - self.b + self.b * (dl / self._avgdl))
                 score += idf * (freq * (self.k1 + 1.0)) / denom
-            if q_lower and q_lower in self.paragraphs[idx].lower():
+            para = self.paragraphs[idx]
+            if q_lower and q_lower in para.lower():
                 score += 2.0
+            if score > 0.0:
+                if _HOLDING_CUE_RE.search(para):
+                    score *= 1.25
+                elif _is_counsel_list(para) or _COUNSEL_SUBMISSION_RE.search(para):
+                    score *= 0.15
             scores.append(score)
         return scores
 
@@ -75,6 +111,10 @@ class ParagraphBM25:
             start = max(0, idx - context_window)
             end = min(self._n - 1, idx + context_window)
             for pos in range(start, end + 1):
-                if pos not in selected:
-                    selected[pos] = sc if pos == idx else 0.0
+                if pos != idx and _is_counsel_noise(self.paragraphs[pos]):
+                    continue
+                if pos == idx:
+                    selected[pos] = sc
+                elif pos not in selected:
+                    selected[pos] = 0.0
         return sorted(selected.items(), key=lambda item: item[0])

@@ -10,10 +10,12 @@ import pytest
 
 from nyaya.exceptions import PdfFetchError
 from nyaya.models import JudgmentMeta, SourceProvenance
+from nyaya.retrieval.paragraph_bm25 import ParagraphBM25
 from nyaya.storage.pdf_fetcher import (
     MAX_PDF_BYTES,
     DirectS3PdfFetcher,
     _clean_pdf_text,
+    _repair_ligature_splits,
     _split_paragraphs,
     validate_s3_pdf_target,
 )
@@ -268,3 +270,122 @@ async def test_overview_skips_leading_header_noise_when_numbered_paras_follow(tm
         assert res.excerpts[0].para_num == 2
     finally:
         await fetcher.aclose()
+
+
+def test_clean_pdf_text_strips_scr_running_footers_interplay_and_page_nums() -> None:
+    raw = (
+        "1081\n"
+        "IN RE: INTERPLAY BETWEEN ARBITRATION AGREEMENTS\n"
+        "UNDER ARBITRATION AND CONCILIATION ACT, 1996\n"
+        "[DR. DHANANJAYA Y CHANDRACHUD, CJI ]\n\n"
+        "19. As noted in [Para 85 in judgment of Dr. D.Y. Chandrachud, CJI], "
+        "an unstamped instrument does not render the arbitration agreement void.\n"
+        "1083\n"
+        "SOME RUNNING CASE TITLE IN ALL CAPS\n"
+        "1085\n"
+        "[ SANJIV KHANNA, J.]\n"
+        "1143\n"
+        "[19] Bracketed paragraph remains intact.\n"
+        "1147\n"
+        "IN RE: INTERPLAY BETWEEN ARBITRATION AGREEMENTS AND STAMP ACT\n"
+        "1211\n"
+        "STATE OF MAHARASHTRA v. ABC CORPORATION LTD.\n"
+        "[B.R. GAVAI AND SURYA KANT, JJ.]\n"
+        "20. Final substantive holding paragraph."
+    )
+    cleaned = _clean_pdf_text(raw)
+    for gone in (
+        "DR. DHANANJAYA Y CHANDRACHUD",
+        "SANJIV KHANNA",
+        "B.R. GAVAI",
+        "IN RE: INTERPLAY",
+        "SOME RUNNING CASE TITLE",
+        "1081",
+        "1083",
+        "1085",
+        "1143",
+        "1147",
+        "1211",
+    ):
+        assert gone not in cleaned
+    assert "[Para 85 in judgment of Dr. D.Y. Chandrachud, CJI]" in cleaned
+    assert "19. As noted in" in cleaned
+    assert "[19] Bracketed paragraph remains intact." in cleaned
+    assert "20. Final substantive holding paragraph." in cleaned
+
+
+def test_repair_ligature_splits_general_and_exclusions() -> None:
+    text = (
+        "fi scal fl exible suffi ciency insuffi ciency off er eff ectual aff airs "
+        "insuffi ciently diff erence eff ect refl ects affi rmed off ice off icial off set | "
+        "plaintiff is off the staff member relief in chief justice tariff on"
+    )
+    repaired = _repair_ligature_splits(text)
+    merged_side, unmerged_side = repaired.split(" | ")
+    for expected in (
+        "fiscal",
+        "flexible",
+        "sufficiency",
+        "insufficiency",
+        "offer",
+        "effectual",
+        "affairs",
+        "insufficiently",
+        "difference",
+        "effect",
+        "reflects",
+        "affirmed",
+        "office",
+        "official",
+        "offset",
+    ):
+        assert expected in merged_side
+    for preserved in (
+        "plaintiff is",
+        "off the",
+        "staff member",
+        "relief in",
+        "chief justice",
+        "tariff on",
+    ):
+        assert preserved in unmerged_side
+
+
+def test_clean_pdf_text_repairs_minor_word_joins() -> None:
+    raw = (
+        "Under the Act of 1996which governed the 1990s, "
+        "the decision in (supra)was followed and Section 11(6)and "
+        "Sollev. Butcher were cited alongside Univ. of Delhi and Adv. Rao."
+    )
+    cleaned = _clean_pdf_text(raw)
+    assert "1996 which" in cleaned
+    assert "1990s" in cleaned
+    assert "(supra) was" in cleaned
+    assert "Section 11(6) and" in cleaned
+    assert "Solle v. Butcher" in cleaned
+    assert "Univ. of Delhi" in cleaned
+    assert "Adv. Rao." in cleaned
+
+
+def test_paragraph_bm25_downweights_counsel_and_skips_counsel_neighbors() -> None:
+    paras = [
+        "For the Petitioners: Mr. A, Sr. Adv., Mr. B, AOR, Ms. C, Adv., Dr. D, Adv. arbitration stamp",
+        "19. Mr. Nikhil Nayyar, learned senior counsel, made the following submissions: arbitration stamp.",
+        "20. We hold that an unstamped arbitration agreement is not void under the Stamp Act.",
+        "21. Mr Nakul Dewan, learned senior counsel, submitted that arbitration stamp duty applies.",
+        "22. Held (per Dr. D.Y. Chandrachud, CJI): The arbitration agreement remains enforceable.",
+    ]
+    bm25 = ParagraphBM25(paras)
+    scores = bm25.score_all("arbitration stamp")
+    # Substantive holding paragraph beats counsel list & counsel submissions despite identical terms
+    assert scores[2] > scores[0]
+    assert scores[2] > scores[1]
+    assert scores[2] > scores[3]
+
+    # context_window=1 around hit at idx=2 must NOT drag in counsel submission neighbors idx=1 or idx=3
+    hits = bm25.rank("arbitration stamp", top_k=1, context_window=1)
+    hit_indices = [idx for idx, _ in hits]
+    assert 2 in hit_indices
+    assert 0 not in hit_indices
+    assert 1 not in hit_indices
+    assert 3 not in hit_indices

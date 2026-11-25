@@ -53,8 +53,205 @@ _SCR_HEADER_LINE_2_RE = re.compile(
 _SCR_HEADER_INLINE_RE = re.compile(
     r"(?i)\d+\s+SUPREME\s+COURT\s+REPORTS\s+\[\d{4}\]\s+\d+\s+S\.?C\.?R\.?\s*"
 )
+_SCR_HEADING_GUARD = (
+    r"(?![ \t]*(?:JUDGMENT|ORDER|HELD|FACTS|ISSUES?|CONCLUSION|BACKGROUND|SUBMISSIONS?|HEADNOTE|INDEX|APPEARANCES?)[ \t]*$)"
+)
+_SCR_ALLCAPS_LINE = (
+    rf"{_SCR_HEADING_GUARD}[ \t]*[A-Z](?:[A-Z0-9 ,&():./'-]|(?<=\s)v\.(?=\s)){{11,}}"
+)
+_SCR_PAGE_ANCHOR = (
+    r"(?:(?:\d+[ \t]+)?SUPREME[ \t]+COURT[ \t]+REPORTS[ \t]*\[\d{4}\][^\n]*"
+    r"|\[\d{4}\][ \t]+\d+[ \t]+S\.?C\.?R\.?[^\n]*"
+    r"|\d{1,4})"
+)
+_SCR_BOUNDARY_AFTER_RE = re.compile(
+    rf"(?m)^[ \t]*{_SCR_PAGE_ANCHOR}[ \t]*(?:\n{_SCR_ALLCAPS_LINE}){{1,4}}[ \t]*$"
+)
+_SCR_BOUNDARY_BEFORE_RE = re.compile(
+    rf"(?m)^(?:{_SCR_ALLCAPS_LINE}\n){{1,4}}[ \t]*{_SCR_PAGE_ANCHOR}[ \t]*$"
+)
+_SCR_JUDGE_FOOTER_RE = re.compile(
+    r"(?m)^(?:(?![ \t]*(?:JUDGMENT|ORDER|HELD|FACTS|ISSUES?|CONCLUSION|BACKGROUND|SUBMISSIONS?|HEADNOTE|INDEX|APPEARANCES?)[ \t]*$)"
+    r"[A-Z0-9 ,&():./'-]{8,}\n){0,4}"
+    r"[ \t]*(?:IN[ \t]+RE:[^\n]*\n(?:[A-Z0-9 ,&():./'-]{5,}\n){0,3})?"
+    r"[ \t]*\[[ \t]*[A-Z][A-Z., \t&'-]+(?:,[ \t]*)?(?:CJI|J\.|JJ\.)[ \t]*\][ \t]*$"
+)
+_SCR_ORPHAN_INTERPLAY_RE = re.compile(r"(?m)^[ \t]*IN[ \t]+RE:[ \t]*INTERPLAY[^\n]*$")
+_STANDALONE_PAGE_NUM_RE = re.compile(r"(?m)^[ \t]*\d{1,4}[ \t]*$")
 _ISOLATED_PAGE_NUM_RE = re.compile(r"(?m)^\s*\[\d+\]\s*$")
 _MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
+
+_OFF_LIGATURE_RE = re.compile(
+    r"\b(off)\s+(er(?:ed|ing|s)?|ice(?:s|r|rs)?|icial(?:s|ly)?|"
+    r"en(?:ce|ces|d|ded|der|ders|ding|se|ses|sive)|set(?:s)?|shoot(?:s)?|spring)\b",
+    re.IGNORECASE,
+)
+_GENERAL_LIGATURE_RE = re.compile(r"\b([A-Za-z]*)((?i:ffi|ffl|fi|fl|ff))\s+([a-z]{2,})\b")
+_LIGATURE_LEFT_EXCLUSIONS: frozenset[str] = frozenset(
+    {
+        "if",
+        "of",
+        "off",
+        "staff",
+        "tariff",
+        "plaintiff",
+        "sheriff",
+        "bailiff",
+        "mastiff",
+        "pontiff",
+        "chief",
+        "brief",
+        "grief",
+        "relief",
+        "belief",
+        "proof",
+        "roof",
+        "self",
+        "half",
+        "wolf",
+        "gulf",
+        "shelf",
+        "calf",
+        "stiff",
+        "cliff",
+        "stuff",
+        "bluff",
+        "scoff",
+        "puff",
+        "cuff",
+        "muff",
+        "buff",
+        "ruff",
+        "sniff",
+        "whiff",
+        "skiff",
+        "quaff",
+        "chaff",
+        "graff",
+        "spiff",
+        "cutoff",
+        "layoff",
+        "payoff",
+        "runoff",
+        "setoff",
+        "standoff",
+        "tradeoff",
+        "takeoff",
+        "kickoff",
+        "liftoff",
+    }
+)
+_LIGATURE_RIGHT_STOPSET: frozenset[str] = frozenset(
+    {
+        "in",
+        "on",
+        "of",
+        "to",
+        "is",
+        "it",
+        "as",
+        "at",
+        "by",
+        "or",
+        "an",
+        "be",
+        "we",
+        "he",
+        "no",
+        "so",
+        "up",
+        "do",
+        "if",
+        "the",
+        "and",
+        "for",
+        "are",
+        "but",
+        "not",
+        "you",
+        "all",
+        "can",
+        "had",
+        "her",
+        "was",
+        "one",
+        "our",
+        "out",
+        "has",
+        "his",
+        "how",
+        "its",
+        "may",
+        "new",
+        "now",
+        "old",
+        "see",
+        "two",
+        "way",
+        "who",
+        "did",
+        "let",
+        "put",
+        "say",
+        "she",
+        "too",
+        "use",
+        "that",
+        "with",
+        "have",
+        "this",
+        "will",
+        "your",
+        "from",
+        "they",
+        "been",
+        "were",
+        "said",
+        "each",
+        "which",
+        "their",
+        "would",
+        "there",
+        "could",
+        "other",
+        "into",
+        "more",
+        "some",
+        "such",
+        "than",
+        "then",
+        "them",
+        "these",
+        "when",
+        "where",
+        "also",
+        "only",
+        "under",
+        "upon",
+        "shall",
+        "must",
+        "does",
+        "done",
+        "made",
+        "make",
+        "any",
+        "per",
+        "via",
+        "non",
+        "sub",
+        "act",
+        "law",
+        "case",
+        "rule",
+        "court",
+        "order",
+    }
+)
+_YEAR_WORD_JOIN_RE = re.compile(r"(?<![\w/.-])((?:19|20)\d{2})(?!s\b)([a-z]{2,})\b")
+_PAREN_WORD_JOIN_RE = re.compile(
+    r"(\))((?:was|is|are|were|has|have|had|held|observed|stated|noted|in|of|to|the|and|that|which|for|on|at|by|as|be|it|this)\b)"
+)
+_CASE_V_JOIN_RE = re.compile(r"\b(?!(?:Pro|Uni|Con|Indi|Ele)v\.)([A-Z][a-z]{2,})(v\.)(?=\s)")
 
 # Case-preserving PDF ligature space-dropout repairs (fi/fl/ff/ffi/ffl).
 _LIGATURE_REPAIRS: tuple[re.Pattern[str], ...] = tuple(
@@ -133,17 +330,47 @@ _HEADER_NOISE_CUE_RE = re.compile(
 )
 
 
+def _merge_ligature_match(m: re.Match[str]) -> str:
+    g1, g2, g3 = m.group(1), m.group(2), m.group(3)
+    if (g1 + g2).lower() in _LIGATURE_LEFT_EXCLUSIONS or g3.lower() in _LIGATURE_RIGHT_STOPSET:
+        return m.group(0)
+    return f"{g1}{g2}{g3}"
+
+
+def _repair_ligature_splits(text: str) -> str:
+    """Rejoin PDF ligature space-dropouts without merging distinct real words."""
+    out = text
+    for pat in _LIGATURE_REPAIRS:
+        out = pat.sub(r"\1\2", out)
+    out = _OFF_LIGATURE_RE.sub(r"\1\2", out)
+    out = _GENERAL_LIGATURE_RE.sub(_merge_ligature_match, out)
+    return out
+
+
+def _repair_pdf_word_joins(text: str) -> str:
+    """Insert missing spaces on minor PDF word-joins (years, closing parens, case 'v.')."""
+    out = _YEAR_WORD_JOIN_RE.sub(r"\1 \2", text)
+    out = _PAREN_WORD_JOIN_RE.sub(r"\1 \2", out)
+    out = _CASE_V_JOIN_RE.sub(r"\1 \2", out)
+    return out
+
+
 def _clean_pdf_text(text: str) -> str:
-    """Normalize line endings, strip SCR running headers/footers, and repair ligature splits."""
+    """Normalize line endings, strip SCR running headers/footers, and repair ligature/word splits."""
     if not text:
         return ""
     cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = _SCR_JUDGE_FOOTER_RE.sub("", cleaned)
+    cleaned = _SCR_BOUNDARY_AFTER_RE.sub("", cleaned)
+    cleaned = _SCR_BOUNDARY_BEFORE_RE.sub("", cleaned)
+    cleaned = _SCR_ORPHAN_INTERPLAY_RE.sub("", cleaned)
     cleaned = _SCR_HEADER_LINE_1_RE.sub("", cleaned)
     cleaned = _SCR_HEADER_LINE_2_RE.sub("", cleaned)
     cleaned = _SCR_HEADER_INLINE_RE.sub("", cleaned)
+    cleaned = _STANDALONE_PAGE_NUM_RE.sub("", cleaned)
     cleaned = _ISOLATED_PAGE_NUM_RE.sub("", cleaned)
-    for pat in _LIGATURE_REPAIRS:
-        cleaned = pat.sub(r"\1\2", cleaned)
+    cleaned = _repair_ligature_splits(cleaned)
+    cleaned = _repair_pdf_word_joins(cleaned)
     cleaned = _MULTI_NEWLINE_RE.sub("\n\n", cleaned)
     return cleaned.strip()
 

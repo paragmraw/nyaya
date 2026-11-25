@@ -420,3 +420,157 @@ def test_duckdb_word_boundary_query_and_state_normalization(
         assert [r["case_id"] for r in bail_rows] == ["hc:bail:4"]
     finally:
         store.close()
+
+
+def test_court_display_name_all_hc_and_dattam_codes() -> None:
+    from nyaya.citations import court_display_name
+
+    assert court_display_name("SC") == "Supreme Court of India"
+    assert court_display_name("sci") == "Supreme Court of India"
+    assert court_display_name("14_25") == "High Court of Manipur"
+    assert court_display_name("14~25") == "High Court of Manipur"
+    assert court_display_name("man") == "High Court of Manipur"
+    assert court_display_name("16_20") == "High Court of Tripura"
+    assert court_display_name("16~20") == "High Court of Tripura"
+    assert court_display_name("tri") == "High Court of Tripura"
+    assert court_display_name(" 7~26 ") == "High Court of Delhi"
+    assert court_display_name("dhc") == "High Court of Delhi"
+    assert court_display_name(None) is None
+    assert court_display_name("   ") is None
+    assert court_display_name("99_99") is None
+
+    all_hc_pairs = [
+        ("AHC", "9_13", "9~13", "High Court of Judicature at Allahabad"),
+        ("APHC", "28_2", "28~2", "High Court of Andhra Pradesh"),
+        ("BHC", "27_1", "27~1", "High Court of Bombay"),
+        ("CAL", "19_16", "19~16", "High Court at Calcutta"),
+        ("CGHC", "22_18", "22~18", "High Court of Chhattisgarh"),
+        ("DHC", "7_26", "7~26", "High Court of Delhi"),
+        ("GAU", "18_6", "18~6", "Gauhati High Court"),
+        ("GUJ", "24_17", "24~17", "High Court of Gujarat"),
+        ("HPHC", "2_5", "2~5", "High Court of Himachal Pradesh"),
+        ("JKHC", "1_12", "1~12", "High Court of Jammu & Kashmir and Ladakh"),
+        ("JHC", "20_7", "20~7", "High Court of Jharkhand"),
+        ("KAR", "29_3", "29~3", "High Court of Karnataka"),
+        ("KER", "32_4", "32~4", "High Court of Kerala"),
+        ("MPHC", "23_23", "23~23", "High Court of Madhya Pradesh"),
+        ("MAD", "33_10", "33~10", "High Court of Judicature at Madras"),
+        ("MAN", "14_25", "14~25", "High Court of Manipur"),
+        ("MEG", "17_21", "17~21", "High Court of Meghalaya"),
+        ("ORI", "21_11", "21~11", "High Court of Orissa"),
+        ("PAT", "10_8", "10~8", "High Court of Judicature at Patna"),
+        ("PHC", "3_22", "3~22", "High Court of Punjab and Haryana"),
+        ("RAJ", "8_9", "8~9", "High Court of Judicature for Rajasthan"),
+        ("SIK", "11_24", "11~24", "High Court of Sikkim"),
+        ("TSHC", "36_29", "36~29", "High Court for the State of Telangana"),
+        ("TRI", "16_20", "16~20", "High Court of Tripura"),
+        ("UKHC", "5_15", "5~15", "High Court of Uttarakhand"),
+    ]
+    for canon, us_code, tilde_code, expected in all_hc_pairs:
+        assert court_display_name(canon) == expected
+        assert court_display_name(us_code) == expected
+        assert court_display_name(tilde_code) == expected
+
+
+def test_duckdb_cross_hc_diversity_and_strict_anticipatory_bail(tmp_path: Path) -> None:
+    import json
+
+    import pyarrow as pa
+
+    from tests.fixtures.mini_corpus.builder import _write_zstd_parquet
+
+    pq_dir = tmp_path / "hc_diversity"
+    rows = [
+        # 4 newer Manipur (14_25) rows that would sweep top 4 under raw year/date sort
+        ("hc:man:1", "MN01", "14_25", "14_25", "A v. State", "AB/11/2023", "CrPC", "2025-04-01", 2025),
+        ("hc:man:2", "MN02", "14_25", "", "B v. State", "AB No. 12", "CrPC", "2025-03-01", 2025),
+        ("hc:man:3", "MN03", "14_25", "14_25", "C v. State", "ABA 99/2025", "BNSS", "2025-02-01", 2025),
+        # Plain BAIL APPLN. without anticipatory/438/482/AB signal must be rejected
+        ("hc:man:plain", "MN04", "14_25", "14_25", "Plain v. State", "BAIL APPLN. 77/2025", "CrPC", "2025-05-01", 2025),
+        # Other High Courts (older dates)
+        ("hc:tri:1", "TR01", "16_20", "16_20", "D v. State", "AB 15 of 2024", "CrPC", "2024-11-01", 2024),
+        ("hc:dhc:1", "DL01", "7_26", "", "E v. State", "BAIL APPLN. 1/2024", "s.438 CrPC", "2024-10-01", 2024),
+        ("hc:bhc:1", "MH01", "27_1", "High Court of Bombay", "Pre-arrest bail plea", "ABA 10/2024", "BNSS 482", "2024-09-01", 2024),
+        ("hc:cal:1", "WB01", "19_16", "19_16", "Apprehending arrest CRM(A)", "CRM(A) 5/2024", "Section 438", "2024-08-01", 2024),
+    ]
+    tbl = pa.table(
+        {
+            "case_id": [r[0] for r in rows],
+            "cnr": [r[1] for r in rows],
+            "court_code": [r[2] for r in rows],
+            "court_name": [r[3] for r in rows],
+            "bench": ["Principal"] * len(rows),
+            "neutral_citation": [f"NC:{i}" for i in range(len(rows))],
+            "title": [r[4] for r in rows],
+            "petitioner": ["P"] * len(rows),
+            "respondent": ["State"] * len(rows),
+            "judge": ["J"] * len(rows),
+            "author_judge": ["J"] * len(rows),
+            "bench_strength": pa.array([1] * len(rows), type=pa.int32()),
+            "decision_date": [r[7] for r in rows],
+            "year": pa.array([r[8] for r in rows], type=pa.int32()),
+            "disposal_nature": ["Allowed"] * len(rows),
+            "case_type": [r[5] for r in rows],
+            "act": [r[6] for r in rows],
+            "commercial_safe": [True] * len(rows),
+        }
+    )
+    rel = "parquet/high_court/multi.parquet"
+    _write_zstd_parquet(tbl, pq_dir / rel)
+    m_path = pq_dir / "manifest.json"
+    m_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "2.0",
+                "generated_at": "2026-11-22T00:00:00Z",
+                "datasets": {
+                    "high_court": {
+                        "license_spdx": "CC-BY-4.0",
+                        "commercial_safe": True,
+                        "terms_status": "cleared",
+                        "row_count": len(rows),
+                        "partitions": [
+                            {
+                                "court_code": "14_25",
+                                "court_name": "High Court of Manipur",
+                                "year_min": 2024,
+                                "year_max": 2025,
+                                "rows": len(rows),
+                                "s3_key": rel,
+                            }
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = DuckDBStore(
+        manifest=load_manifest(m_path),
+        base_dir=pq_dir,
+        temp_dir=tmp_path / "duck_tmp_div",
+        offline_only=True,
+    )
+    try:
+        res_rows, total = store.search_judgments(
+            tier="high_court",
+            query="anticipatory bail",
+            year_from=2024,
+            year_to=2025,
+            limit=5,
+        )
+        assert total == 7
+        assert len(res_rows) == 5
+        # Plain BAIL APPLN. rejected
+        assert all(r["case_id"] != "hc:man:plain" for r in res_rows)
+        # Window-function diversity puts 5 distinct High Courts in top 5
+        assert len({r["court_code"] for r in res_rows}) == 5
+        # Court display names enriched
+        by_code = {r["court_code"]: r["court_name"] for r in res_rows}
+        assert by_code["14_25"] == "High Court of Manipur"
+        assert by_code["16_20"] == "High Court of Tripura"
+        assert by_code["7_26"] == "High Court of Delhi"
+        assert by_code["19_16"] == "High Court at Calcutta"
+    finally:
+        store.close()

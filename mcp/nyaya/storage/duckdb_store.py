@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import duckdb
 
-from ..citations import court_code_variants
+from ..citations import court_code_variants, court_display_name
 from ..config import Settings
 from ..exceptions import (
     InvalidFilter,
@@ -431,19 +431,31 @@ class DuckDBStore:
         if year_to is not None:
             where.append("year <= ?")
             params.append(int(year_to))
-        if query and query.strip():
-            all_q_tokens, content_q_tokens = _extract_fts_tokens(query)
-            q_tokens = list(dict.fromkeys(t.lower() for t in (content_q_tokens or all_q_tokens)))
-            if q_tokens:
+        avail_cols: set[str] | None = None
+
+        def _get_avail_cols() -> set[str]:
+            nonlocal avail_cols
+            if avail_cols is None:
                 _, desc_rows = self._execute_with_timeout(
                     f"DESCRIBE SELECT * FROM read_parquet([{pq_list}], union_by_name=true)",
                     require_httpfs=require_httpfs,
                 )
                 avail_cols = {str(r[0]) for r in desc_rows}
+            return avail_cols
+
+        if dataset == "high_court":
+            _get_avail_cols()
+
+        if query and query.strip():
+            all_q_tokens, content_q_tokens = _extract_fts_tokens(query)
+            q_tokens = list(dict.fromkeys(t.lower() for t in (content_q_tokens or all_q_tokens)))
+            if q_tokens:
+                has_anticipatory_bail = "anticipatory" in q_tokens and "bail" in q_tokens
+                cols_set = _get_avail_cols()
                 text_cols = [
                     c
                     for c in ("title", "petitioner", "respondent", "case_type", "act", "disposal_nature")
-                    if c in avail_cols
+                    if c in cols_set
                 ]
                 if text_cols:
                     concat_args = ", ".join(f"coalesce({c}, '')" for c in text_cols)
@@ -451,18 +463,10 @@ class DuckDBStore:
                 else:
                     haystack_expr = "lower(coalesce(title, ''))"
 
-                has_anticipatory_bail = "anticipatory" in q_tokens and "bail" in q_tokens
                 if has_anticipatory_bail:
-                    where.append(
-                        f"((regexp_matches({haystack_expr}, ?) AND regexp_matches({haystack_expr}, ?)) "
-                        f"OR regexp_matches({haystack_expr}, ?))"
-                    )
-                    params.extend(
-                        [
-                            r"(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])",
-                            r"(?:^|[^a-z0-9])bail(?:$|[^a-z0-9])",
-                            r"(?:^|[^a-z0-9])(?:aba|abail|anticipatory\s+bail)(?:$|[^a-z0-9])",
-                        ]
+                    where.append(f"regexp_matches({haystack_expr}, ?)")
+                    params.append(
+                        r"(?:(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])|(?:^|[^a-z0-9])pre[- ]?arrest(?:$|[^a-z0-9])|apprehending\s+arrest|(?:^|[^a-z0-9])(?:aba|abail)(?:$|[^a-z0-9])|(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:cr\.?\s*p\.?\s*c\.?|bnss|s\.?|sec\.?|section)\s*(?:438|482)(?:$|[^a-z0-9]))"
                     )
                     remaining_tokens = [t for t in q_tokens if t not in ("anticipatory", "bail")]
                 else:
@@ -483,13 +487,42 @@ class DuckDBStore:
             require_httpfs=require_httpfs,
         )
         total = int(cnt_rows[0][0]) if cnt_rows else 0
+
+        use_hc_diversity = (
+            dataset == "high_court"
+            and court is None
+            and "court_code" in _get_avail_cols()
+        )
+        if use_hc_diversity:
+            select_sql = (
+                f"SELECT * EXCLUDE (_rn) FROM ("
+                f"SELECT *, ROW_NUMBER() OVER (PARTITION BY court_code ORDER BY year DESC, decision_date DESC) AS _rn "
+                f"FROM read_parquet([{pq_list}], union_by_name=true) "
+                f"WHERE {where_sql}"
+                f") ORDER BY _rn ASC, year DESC, decision_date DESC LIMIT ? OFFSET ?"
+            )
+        else:
+            select_sql = (
+                f"SELECT * FROM read_parquet([{pq_list}], union_by_name=true) "
+                f"WHERE {where_sql} ORDER BY year DESC, decision_date DESC LIMIT ? OFFSET ?"
+            )
+
         cols, rows = self._execute_with_timeout(
-            f"SELECT * FROM read_parquet([{pq_list}], union_by_name=true) "
-            f"WHERE {where_sql} ORDER BY year DESC, decision_date DESC LIMIT ? OFFSET ?",
+            select_sql,
             [*params, limit, offset],
             require_httpfs=require_httpfs,
         )
-        return [dict(zip(cols, r)) for r in rows], total
+        results: list[dict[str, Any]] = []
+        for r in rows:
+            row_dict = dict(zip(cols, r))
+            c_code = row_dict.get("court_code")
+            c_name = str(row_dict.get("court_name") or "").strip()
+            if not c_name or (c_code is not None and c_name.lower() == str(c_code).strip().lower()):
+                resolved_name = court_display_name(str(c_code) if c_code is not None else None)
+                if resolved_name:
+                    row_dict["court_name"] = resolved_name
+            results.append(row_dict)
+        return results, total
 
     def aggregate(
         self,
