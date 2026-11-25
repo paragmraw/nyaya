@@ -12,7 +12,7 @@ const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
 export const metadata: Metadata = {
   title: "Home",
   description:
-    "Zero-DB-ops Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 15 tribunals, Supreme Court, 17.77M+ High Court orders, and 81M+ District metadata.",
+    "Zero-DB-ops Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 15 tribunals, 38k+ Supreme Court judgments, and 20.7M+ High Court orders.",
   openGraph: pageOpenGraph({
     title: "Nyaya v2.0 - Indian Law MCP & Legal Research Assistant",
     description:
@@ -49,7 +49,6 @@ function HomePageContent() {
             <span className="tag">12 Regulators</span>
             <span className="tag">15 Tribunals</span>
             <span className="tag">SC &amp; 25 High Courts</span>
-            <span className="tag">DDL 81M (NC)</span>
           </div>
         </div>
 

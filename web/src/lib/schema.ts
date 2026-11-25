@@ -40,7 +40,7 @@ export const homeSchema = {
   "@type": ["SoftwareApplication", "WebApplication"],
   name: "Nyaya",
   description:
-    "Pure-lexical Indian legal MCP server and assistant covering 37 legislatures, 12 regulators, 15 tribunals, 35k+ SC, 17.77M+ HC, and 81M+ District metadata.",
+    "Pure-lexical Indian legal MCP server and assistant covering 37 legislatures, 12 regulators, 15 tribunals, 38k+ SC judgments, and 20.7M+ High Court records.",
   url: `${SITE}/`,
   applicationCategory: "LegalApplication",
   operatingSystem: "Linux, macOS, Windows, Web",
@@ -56,10 +56,10 @@ export const homeSchema = {
     "@id": ORG_ID,
   },
   featureList: [
-    "Constitution of India (506 articles, 12 schedules, Amendments 1–106)",
+    "Constitution of India (articles, 12 schedules, Amendments 1–106)",
     "IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance and BNSS s. 531 savings",
     "37 Central & State/UT Legislation jurisdictions + 12 Regulators",
-    "3-tier Judiciary & Tribunals (35k+ SC, 17.77M+ HC, 15 Tribunals, 81M+ District metadata)",
+    "Judiciary & Tribunals (38k+ SC, 20.7M+ HC, 15 Tribunals / 813,168 orders)",
     "Deterministic citation parsing & verification (verify_citations)",
     "12 MCP tools, 8 nyaya:// resources, and 4 practitioner prompts via uvx stdio or HTTP",
   ],
@@ -78,16 +78,16 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "Constitution of India & Amendments 1–106",
-      description: "506 articles, 12 schedules, Constituent Assembly Debates, and verified Amendments 1–106",
+      description: "Constitutional provisions, 12 schedules, and verified Amendments 1–106",
       url: `${SITE}/corpus/`,
-      keywords: ["Constitution", "Fundamental Rights", "Amendments 1-106", "CAD"],
+      keywords: ["Constitution", "Fundamental Rights", "Amendments 1-106"],
       license: "IN-S52-1-q",
       creator: { "@id": ORG_ID },
     },
     {
       "@type": "Dataset",
       name: "Central & State/UT Legislation (37 Jurisdictions)",
-      description: "850+ Central Acts, BNS/BNSS/BSA 2023, IPC/CrPC/IEA concordance, and 36 State/UT packs",
+      description: "1,569 Central Acts, BNS/BNSS/BSA 2023, IPC/CrPC/IEA concordance, and 8,544 State/UT Acts",
       url: `${SITE}/corpus/`,
       keywords: ["BNS", "BNSS", "BSA", "IPC", "CrPC", "Central Acts", "State Acts"],
       license: "CC-BY-4.0",
@@ -96,7 +96,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "12 Financial & Sectoral Regulators",
-      description: "554,000+ circulars, regulations, and rules across SEBI, RBI, MCA, CBIC, TRAI, IRDAI, and more",
+      description: "12,152 regulatory instruments across SEBI, RBI, MCA, CBIC, TRAI, IRDAI, and more",
       url: `${SITE}/corpus/`,
       keywords: ["SEBI", "RBI", "CBIC", "Regulators", "Circulars"],
       license: "CC-BY-4.0",
@@ -105,7 +105,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "Supreme Court of India Judgments",
-      description: "35,000+ full-text Supreme Court judgments, citation graph edges, and AWS Open Data PDFs",
+      description: "38,292 Supreme Court judgments, citation graph edges, and AWS Open Data PDFs",
       url: `${SITE}/corpus/`,
       keywords: ["Supreme Court", "INSC", "AIR", "SCC", "Case Law"],
       license: "CC-BY-4.0",
@@ -114,7 +114,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "25 High Courts Judgments & Orders",
-      description: "17.77M+ High Court orders/metadata in DuckDB ZSTD Parquet plus 150k+ reportable full text",
+      description: "20.7M+ High Court orders/metadata in DuckDB ZSTD Parquet plus hot reportable full text and on-demand PDFs",
       url: `${SITE}/corpus/`,
       keywords: ["High Court", "Neutral Citation", "CNR", "eCourts"],
       license: "CC-BY-4.0",
@@ -123,7 +123,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "15 Indian Tribunals & Quasi-Judicial Forums",
-      description: "813,168+ matters across ITAT, NCLT, NGT, SAT, CAT, CESTAT, DRT, CCI, and IBBI",
+      description: "813,168 matters across ITAT, NCLT, NGT, SAT, CAT, CESTAT, DRT, CCI, and IBBI",
       url: `${SITE}/corpus/`,
       keywords: ["Tribunals", "NCLT", "ITAT", "NGT", "SAT"],
       license: "CC-BY-4.0",
@@ -132,7 +132,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "DDL Indian Judicial District Court Dataset (2010–2018)",
-      description: "81,000,000+ District Court metadata records (Non-Commercial; excluded under NYAYA_COMMERCIAL_SAFE_ONLY)",
+      description: "District Court metadata schema (Non-Commercial; defined in sources.lock.yaml and excluded under NYAYA_COMMERCIAL_SAFE_ONLY)",
       url: `${SITE}/corpus/`,
       keywords: ["District Courts", "DDL", "eCourts", "Non-Commercial"],
       license: "CC-BY-NC-SA-4.0",
@@ -141,7 +141,7 @@ export const corpusSchema = {
     {
       "@type": "Dataset",
       name: "ILDC Supreme Court Research Annotations",
-      description: "35,000+ SC outcome and explanation annotations (Non-Commercial; excluded under NYAYA_COMMERCIAL_SAFE_ONLY)",
+      description: "SC outcome and explanation research annotations (Non-Commercial; defined in sources.lock.yaml and excluded under NYAYA_COMMERCIAL_SAFE_ONLY)",
       url: `${SITE}/corpus/`,
       keywords: ["ILDC", "Supreme Court", "Non-Commercial"],
       license: "CC-BY-NC-4.0",
@@ -219,7 +219,7 @@ export const architectureSchema = {
   operatingSystem: "Linux, macOS, Windows",
   featureList: [
     "QueryAnalyzer with Indian statute aliases and IPC/CrPC/IEA ↔ BNS/BNSS/BSA expansion",
-    "Baked read-only SQLite FTS5 + Citation Graph + Concordance core (~250 MB)",
+    "Baked read-only SQLite FTS5 + Citation Graph + Concordance core",
     "LanceDB native Rust BM25 FTS tables and DuckDB ZSTD Parquet on Railway Storage Bucket",
     "Direct AWS Open Data S3 PDF extraction via Apache-2.0 pypdfium2 + 256 MB disk zstd LRU cache",
     "OWASP LLM01 <corpus_text> framing and s. 228A / BNS s. 72 exclusions",

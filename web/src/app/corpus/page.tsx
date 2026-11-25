@@ -9,11 +9,11 @@ import { API_VERSION, pageOpenGraph } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Corpus",
   description:
-    "Explore Nyaya's v2.0 Open-India-Law corpus: Constitution & Amendments 1–106, 37 Central & State/UT legislatures, 12 regulators, 15 tribunals, SC, 17.77M+ HC orders, and 81M+ DDL District records.",
+    "Explore Nyaya's v2.0 Open-India-Law corpus: Constitution & Amendments 1–106, 37 Central & State/UT legislatures, 12 regulators, 15 tribunals, 38k+ SC judgments, and 20.7M+ HC orders.",
   openGraph: pageOpenGraph({
     title: "Nyaya Corpus - Open-India-Law Pack & Licensing",
     description:
-      "37 legislatures, 12 regulators, 15 tribunals, 35k+ SC, 17.77M+ HC, and 81M+ DDL District metadata with explicit SPDX provenance and commercial-safe filtering.",
+      "37 legislatures, 12 regulators, 15 tribunals, 38k+ SC, and 20.7M+ HC records with explicit SPDX provenance and commercial-safe filtering.",
   }),
 };
 
@@ -54,9 +54,9 @@ export default function CorpusPage() {
                 Nyaya&apos;s server code (<code>nyaya-mcp</code>) is licensed under <strong>Apache-2.0</strong> (using Apache-2.0 <code>pypdfium2</code>; zero GPL/AGPL dependencies). Core statutory, regulatory, tribunal, Supreme Court, and High Court packs are cleared under <strong>CC-BY-4.0</strong>, <strong>Apache-2.0</strong>, and <strong>Indian Copyright Act 1957 s. 52(1)(q)</strong>.
               </p>
               <p className="nc-body">
-                Default packs also bundle two academic research datasets tagged <code>commercial_safe=false</code>:{" "}
-                <strong>Development Data Lab (DDL) 81M District Court Metadata (2010–2018)</strong> (Ash, Asher, Bhowmick, Chen, Novosad, Tan · <strong><code>CC-BY-NC-SA-4.0</code></strong>, ML religion/caste prediction columns dropped) and{" "}
-                <strong>ILDC 35k Supreme Court Annotations</strong> (<strong><code>CC-BY-NC-4.0</code></strong>). For commercial deployments, set <code>NYAYA_COMMERCIAL_SAFE_ONLY=1</code> or pass <code>commercial_safe_only=true</code> to exclude all non-commercial sources.
+                Optional academic research packs (declared in <code>sources.lock.yaml</code>) carry <code>commercial_safe=false</code>:{" "}
+                <strong>Development Data Lab (DDL) District Court Metadata (2010–2018)</strong> (Ash, Asher, Bhowmick, Chen, Novosad, Tan · <strong><code>CC-BY-NC-SA-4.0</code></strong>, ML religion/caste prediction columns dropped) and{" "}
+                <strong>ILDC Supreme Court Research Annotations</strong> (<strong><code>CC-BY-NC-4.0</code></strong>). For commercial deployments, set <code>NYAYA_COMMERCIAL_SAFE_ONLY=1</code> or pass <code>commercial_safe_only=true</code> to exclude all non-commercial sources.
               </p>
             </div>
           </section>
@@ -77,14 +77,14 @@ export default function CorpusPage() {
             <div className="section-head">
               <h2>Ingestion &amp; refresh cadence</h2>
               <p className="sec-desc">
-                Reproducible via the <code>nyaya-ingest</code> CLI and gated by 7 automated legal integrity checks before atomic blue/green publishing.
+                Reproducible via the <code>nyaya-ingest</code> CLI and gated by 8 automated legal integrity checks before atomic blue/green publishing.
               </p>
             </div>
             <div className="cadence">
               <div className="cadence-row">
                 <span className="cad-when">Daily (--tier daily)</span>
                 <span className="cad-what">
-                  Scheduled GitHub Actions workflow polls AWS Open Data SC &amp; HC S3 ETags (<code>s3://indian-supreme-court-judgments</code>, <code>s3://indian-high-court-judgments</code>), inspects <code>data.index.json</code> <code>superseded_files</code>, pulls PRS CC-BY-4.0 statutory deltas, runs <code>nyaya-ingest verify-gate</code>, and atomically swaps <code>current/manifest.json</code> on the Railway Storage Bucket and public Hugging Face / GitHub mirrors.
+                  Scheduled GitHub Actions workflow polls AWS Open Data SC &amp; HC S3 ETags (<code>s3://indian-supreme-court-judgments</code>, <code>s3://indian-high-court-judgments</code>), inspects <code>data.index.json</code> <code>superseded_files</code>, pulls PRS CC-BY-4.0 statutory deltas, runs <code>nyaya-ingest verify-gate</code>, and atomically swaps <code>current/manifest.json</code> on the Railway Storage Bucket and GitHub Releases.
                 </span>
               </div>
               <div className="cadence-row">
