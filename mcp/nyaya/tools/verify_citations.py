@@ -4,18 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import re
+import unicodedata
 from datetime import date as Date
 from typing import Any
 
 from ..citations import ParsedCitation, parse_citations, parse_single_citation
-from ..exceptions import CommercialLicenseBlocked, InvalidFilter
+from ..config import get_settings
+from ..exceptions import CommercialLicenseBlocked, InvalidFilter, PdfFetchError, StorageUnavailable
 from ..models import (
     AuditFinding,
     AuditStatus,
     CitationAuditResponse,
+    JudgmentMeta,
     QuoteCheckInput,
 )
-from ..storage import get_backend
+from ..storage import get_backend, get_pdf_fetcher, get_retrieval
 from ..storage.sqlite_store import SqliteStore
 from ._error import structured_errors
 from ._util import (
@@ -27,10 +30,31 @@ from ._util import (
 )
 
 _WS_RE = re.compile(r"\s+")
+_CURLY_QUOTE_TRANS = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201b": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u201e": '"',
+        "\u201f": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+    }
+)
+_MD_STRIP_RE = re.compile(r"\*\*|__|##+")
+_INDIACODE_SUPERSCRIPT_RE = re.compile(r"(?<!\w)\d+\[")
 
 
 def _norm_quote(s: str) -> str:
-    return _WS_RE.sub(" ", s.strip().lower())
+    norm = unicodedata.normalize("NFKC", s)
+    norm = norm.translate(_CURLY_QUOTE_TRANS)
+    norm = _MD_STRIP_RE.sub("", norm)
+    norm = _INDIACODE_SUPERSCRIPT_RE.sub("[", norm)
+    return _WS_RE.sub(" ", norm.strip().lower())
 
 
 def _audit_parsed_citation(
@@ -208,14 +232,14 @@ def _audit_parsed_citation(
     )
 
 
-def _verify_citations_sync(
+def _run_verify_citations(
     text: str | None = None,
     citations: list[str] | None = None,
     check_date: Date | str | None = None,
     verify_quotes: list[QuoteCheckInput | dict[str, str]] | None = None,
     commercial_safe_only: bool = False,
     compact: bool = False,
-) -> CitationAuditResponse:
+) -> tuple[CitationAuditResponse, list[tuple[int, QuoteCheckInput, JudgmentMeta]]]:
     if not text and not citations and not verify_quotes:
         raise InvalidFilter(
             "Provide at least one of text, citations, or verify_quotes.",
@@ -241,6 +265,7 @@ def _verify_citations_sync(
     alias_map = backend.get_alias_map()
 
     findings: list[AuditFinding] = []
+    pdf_candidates: list[tuple[int, QuoteCheckInput, JudgmentMeta]] = []
 
     if text and text.strip():
         for p in parse_citations(text, alias_map=alias_map):
@@ -280,13 +305,18 @@ def _verify_citations_sync(
                 )
 
     if verify_quotes:
+        excerpt_cap = 180 if compact else 400
         for item in verify_quotes:
             q_in = item if isinstance(item, QuoteCheckInput) else QuoteCheckInput(**item)
             parsed = parse_single_citation(q_in.citation, alias_map=alias_map)
-            target_text = ""
             doc_id = q_in.citation
             prov = None
             canon_rec: dict[str, Any] | None = None
+            norm_needle = _norm_quote(q_in.quote)
+            q_status: AuditStatus = "NOT_FOUND_IN_CORPUS"
+            matched_para: int | None = None
+            excerpt: str | None = None
+            resolved_jm: JudgmentMeta | None = None
 
             if parsed is not None and parsed.kind in {
                 "statute_section",
@@ -303,61 +333,133 @@ def _verify_citations_sync(
                     commercial_safe_only=cs_only,
                 )
                 if rec is not None:
-                    target_text = rec.text
                     doc_id = rec.doc_id
                     prov = rec.provenance
                     canon_rec = {"act": rec.act, "ref": rec.ref, "title": rec.title}
+                    if rec.text and norm_needle and norm_needle in _norm_quote(rec.text):
+                        q_status = "QUOTE_VERIFIED"
+                        matched_para = 1
+                    else:
+                        q_status = "QUOTE_MISMATCH" if rec.text else "NOT_FOUND_IN_CORPUS"
+                    if rec.text and prov is not None:
+                        excerpt = ensure_framed(
+                            rec.text[:excerpt_cap], doc_id=doc_id, provenance=prov
+                        )
+                    elif rec.text and q_status == "QUOTE_VERIFIED":
+                        excerpt = rec.text[:excerpt_cap]
             else:
                 ident = parsed.base_ref if parsed is not None else q_in.citation
                 metas = backend.resolve_judgment_id(ident, commercial_safe_only=cs_only)
                 if len(metas) == 1:
                     jm = metas[0]
-                    target_text = jm.snippet or jm.title
+                    resolved_jm = jm
                     doc_id = jm.case_id
                     prov = jm.provenance
                     canon_rec = SqliteStore._meta_to_card(jm).model_dump(mode="json")
 
-            norm_needle = _norm_quote(q_in.quote)
-            norm_hay = _norm_quote(target_text)
-            excerpt_cap = 180 if compact else 400
-            excerpt: str | None
-            if target_text and norm_needle and norm_needle in norm_hay:
-                q_status: AuditStatus = "QUOTE_VERIFIED"
-                excerpt = (
-                    ensure_framed(target_text[:excerpt_cap], doc_id=doc_id, provenance=prov)
-                    if prov is not None
-                    else target_text[:excerpt_cap]
-                )
-            else:
-                q_status = "QUOTE_MISMATCH" if target_text else "NOT_FOUND_IN_CORPUS"
-                excerpt = (
-                    ensure_framed(target_text[:excerpt_cap], doc_id=doc_id, provenance=prov)
-                    if (target_text and prov is not None)
-                    else None
-                )
+                    # 1. Check jm.snippet and jm.title
+                    matched_src: str | None = None
+                    for candidate in (jm.snippet, jm.title):
+                        if candidate and norm_needle and norm_needle in _norm_quote(candidate):
+                            matched_src = candidate
+                            break
 
+                    if matched_src is not None:
+                        q_status = "QUOTE_VERIFIED"
+                        matched_para = 1
+                        excerpt = (
+                            ensure_framed(matched_src[:excerpt_cap], doc_id=doc_id, provenance=prov)
+                            if prov is not None
+                            else matched_src[:excerpt_cap]
+                        )
+                    else:
+                        # 2. Check LanceDB judgment chunks
+                        try:
+                            lance = getattr(get_retrieval(), "lance", None)
+                            if lance is not None and hasattr(lance, "get_judgment_chunks"):
+                                chunks = lance.get_judgment_chunks(
+                                    jm.case_id, commercial_safe_only=cs_only
+                                )
+                                for ch in chunks:
+                                    ch_text = str(ch.get("text") or "")
+                                    if ch_text and norm_needle and norm_needle in _norm_quote(ch_text):
+                                        q_status = "QUOTE_VERIFIED"
+                                        matched_para = int(ch.get("para_start") or 1)
+                                        excerpt = (
+                                            ensure_framed(
+                                                ch_text[:excerpt_cap],
+                                                doc_id=doc_id,
+                                                provenance=prov,
+                                            )
+                                            if prov is not None
+                                            else ch_text[:excerpt_cap]
+                                        )
+                                        break
+                        except StorageUnavailable:
+                            pass
+
+                        if q_status != "QUOTE_VERIFIED":
+                            fallback_text = jm.snippet or jm.title
+                            q_status = "QUOTE_MISMATCH" if fallback_text else "NOT_FOUND_IN_CORPUS"
+                            if fallback_text and prov is not None:
+                                excerpt = ensure_framed(
+                                    fallback_text[:excerpt_cap],
+                                    doc_id=doc_id,
+                                    provenance=prov,
+                                )
+
+            finding_idx = len(findings)
             findings.append(
                 AuditFinding(
                     raw_citation=q_in.citation,
                     parsed=None if compact else (parsed.model_dump(mode="json") if parsed else None),
                     status=q_status,
                     canonical_record=canon_rec,
-                    matched_para_num=1 if q_status == "QUOTE_VERIFIED" else None,
+                    matched_para_num=matched_para,
                     matched_excerpt=excerpt,
                     provenance=prov,
                 )
             )
+            if (
+                q_status == "QUOTE_MISMATCH"
+                and resolved_jm is not None
+                and resolved_jm.pdf_s3_bucket
+                and resolved_jm.pdf_s3_key
+            ):
+                pdf_candidates.append((finding_idx, q_in, resolved_jm))
 
     summary: dict[str, int] = {}
     for f in findings:
         summary[f.status] = summary.get(f.status, 0) + 1
 
-    return CitationAuditResponse(
-        checked_as_of=effective_date,
-        precedent_status="unverified_automated",
-        summary=summary,
-        findings=findings,
+    return (
+        CitationAuditResponse(
+            checked_as_of=effective_date,
+            precedent_status="unverified_automated",
+            summary=summary,
+            findings=findings,
+        ),
+        pdf_candidates,
     )
+
+
+def _verify_citations_sync(
+    text: str | None = None,
+    citations: list[str] | None = None,
+    check_date: Date | str | None = None,
+    verify_quotes: list[QuoteCheckInput | dict[str, str]] | None = None,
+    commercial_safe_only: bool = False,
+    compact: bool = False,
+) -> CitationAuditResponse:
+    resp, _ = _run_verify_citations(
+        text=text,
+        citations=citations,
+        check_date=check_date,
+        verify_quotes=verify_quotes,
+        commercial_safe_only=commercial_safe_only,
+        compact=compact,
+    )
+    return resp
 
 
 async def verify_citations(
@@ -369,8 +471,8 @@ async def verify_citations(
     compact: bool = False,
 ) -> CitationAuditResponse:
     """Audit citations and verbatim quotes in a legal brief or explicit citation list."""
-    return await asyncio.to_thread(
-        _verify_citations_sync,
+    resp, pdf_candidates = await asyncio.to_thread(
+        _run_verify_citations,
         text=text,
         citations=citations,
         check_date=check_date,
@@ -378,6 +480,54 @@ async def verify_citations(
         commercial_safe_only=commercial_safe_only,
         compact=compact,
     )
+    if pdf_candidates:
+        try:
+            offline = get_settings().offline_only
+        except Exception:
+            offline = True
+        if not offline:
+            try:
+                fetcher = get_pdf_fetcher()
+            except StorageUnavailable:
+                fetcher = None
+            if fetcher is not None:
+                excerpt_cap = 180 if compact else 400
+                upgraded = False
+                for idx, q_in, jm in pdf_candidates:
+                    norm_needle = _norm_quote(q_in.quote)
+                    if not norm_needle:
+                        continue
+                    try:
+                        content = await fetcher.fetch_and_read(
+                            jm,
+                            mode="search_within",
+                            query=q_in.quote,
+                            max_chars=24_000,
+                        )
+                    except (PdfFetchError, StorageUnavailable):
+                        continue
+                    for ex in content.excerpts:
+                        if ex.text and norm_needle in _norm_quote(ex.text):
+                            finding = resp.findings[idx]
+                            finding.status = "QUOTE_VERIFIED"
+                            finding.matched_para_num = ex.para_num or 1
+                            finding.matched_excerpt = (
+                                ensure_framed(
+                                    ex.text[:excerpt_cap],
+                                    doc_id=jm.case_id,
+                                    provenance=jm.provenance,
+                                )
+                                if jm.provenance is not None
+                                else ex.text[:excerpt_cap]
+                            )
+                            upgraded = True
+                            break
+                if upgraded:
+                    summary: dict[str, int] = {}
+                    for f in resp.findings:
+                        summary[f.status] = summary.get(f.status, 0) + 1
+                    resp.summary = summary
+    return resp
 
 
 def register(mcp: Any) -> None:

@@ -18,6 +18,7 @@ from nyaya.exceptions import (
 )
 from nyaya.storage.duckdb_store import (
     DuckDBStore,
+    _select_diverse_partitions,
     build_s3_secret_sql,
     normalize_duckdb_endpoint,
 )
@@ -303,5 +304,119 @@ def test_duckdb_store_health_and_manifest_counts(
         counts_cs = store.manifest_counts(commercial_safe_only=True)
         assert "district_court_records" not in counts_cs
         assert counts_cs["hc_judgments"] == counts_all["hc_judgments"]
+    finally:
+        store.close()
+
+
+def test_select_diverse_partitions_round_robin_and_manifest_jurisdiction() -> None:
+    # 30 courts x 3 years in alphabetical court order (like S3 HC listing)
+    uris = [
+        f"s3://nyaya/parquet/hc/court={court_idx:02d}_1/year={yr}/part.parquet"
+        for court_idx in range(1, 31)
+        for yr in (2022, 2023, 2024)
+    ]
+    selected = _select_diverse_partitions(uris, max_partitions=24)
+    assert len(selected) == 24
+    # First 24 picks must be 24 distinct courts, each at newest year 2024
+    assert all("year=2024" in u for u in selected)
+    courts_seen = {u.split("court=")[1].split("/")[0] for u in selected}
+    assert len(courts_seen) == 24
+
+
+def test_duckdb_word_boundary_query_and_state_normalization(
+    corpus_paths: dict[str, Path],
+    tmp_path: Path,
+) -> None:
+    import json
+
+    import pyarrow as pa
+
+    from tests.fixtures.mini_corpus.builder import _write_zstd_parquet
+
+    manifest = load_manifest(corpus_paths["manifest"])
+    mh_parts = resolve_partitions(
+        manifest,
+        "district_court",
+        state="Maharashtra",
+        year_from=2015,
+        year_to=2016,
+        commercial_safe_only=False,
+        base_dir=corpus_paths["root"],
+    )
+    assert len(mh_parts) == 1
+    assert "state=MH" in mh_parts[0]
+
+    # Build a small HC parquet partition testing ABA/ABAIL vs BAILI
+    pq_dir = tmp_path / "hc_p0"
+    hc_tbl = pa.table(
+        {
+            "case_id": ["hc:aba:1", "hc:abail:2", "hc:baili:3", "hc:bail:4"],
+            "cnr": ["DLHC01", "DLHC02", "DLHC03", "DLHC04"],
+            "court_code": ["7_26", "7_26", "7_26", "7_26"],
+            "court_name": ["High Court of Delhi"] * 4,
+            "bench": ["Principal"] * 4,
+            "neutral_citation": ["2024:DHC:1", "2024:DHC:2", "2024:DHC:3", "2024:DHC:4"],
+            "title": ["X v. State", "Y v. State", "Baili Ram v. State", "Z v. State"],
+            "petitioner": ["X", "Y", "Baili Ram", "Z"],
+            "respondent": ["State"] * 4,
+            "judge": ["Judge A"] * 4,
+            "author_judge": ["Judge A"] * 4,
+            "bench_strength": pa.array([1, 1, 1, 1], type=pa.int32()),
+            "decision_date": ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"],
+            "year": pa.array([2024, 2024, 2024, 2024], type=pa.int32()),
+            "disposal_nature": ["Allowed"] * 4,
+            "case_type": ["ABA 123/2024", "ABAIL 456/2024", "RSA 99/2024", "Bail Application 7/2024"],
+            "act": ["CrPC", "BNSS", "CPC", "CrPC"],
+            "commercial_safe": [True, True, True, True],
+        }
+    )
+    rel = "parquet/high_court/court=7_26/year=2024.parquet"
+    _write_zstd_parquet(hc_tbl, pq_dir / rel)
+    m_path = pq_dir / "manifest.json"
+    m_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "2.0",
+                "generated_at": "2026-11-22T00:00:00Z",
+                "datasets": {
+                    "high_court": {
+                        "license_spdx": "CC-BY-4.0",
+                        "commercial_safe": True,
+                        "terms_status": "cleared",
+                        "row_count": 4,
+                        "partitions": [
+                            {
+                                "court_code": "7_26",
+                                "court_name": "High Court of Delhi",
+                                "year_min": 2024,
+                                "year_max": 2024,
+                                "rows": 4,
+                                "s3_key": rel,
+                            }
+                        ],
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = DuckDBStore(
+        manifest=load_manifest(m_path),
+        base_dir=pq_dir,
+        temp_dir=tmp_path / "duck_tmp2",
+        offline_only=True,
+    )
+    try:
+        aba_rows, aba_total = store.search_judgments(
+            tier="high_court", court="7_26", query="anticipatory bail"
+        )
+        assert aba_total == 2
+        assert {r["case_id"] for r in aba_rows} == {"hc:aba:1", "hc:abail:2"}
+
+        bail_rows, bail_total = store.search_judgments(
+            tier="high_court", court="7_26", query="bail"
+        )
+        assert bail_total == 1
+        assert [r["case_id"] for r in bail_rows] == ["hc:bail:4"]
     finally:
         store.close()

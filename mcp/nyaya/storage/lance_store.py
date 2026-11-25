@@ -7,6 +7,7 @@ from typing import Any
 
 import lancedb
 
+from ..citations import normalize_jurisdiction
 from ..exceptions import StorageUnavailable
 
 SC_CHUNKS_TABLE = "sc_chunks"
@@ -196,8 +197,9 @@ class LanceStore:
             clauses.append("commercial_safe = true")
         if act:
             clauses.append(f"short_name = {_sql_str(act.strip())}")
-        if jurisdiction:
-            clauses.append(f"jurisdiction = {_sql_str(jurisdiction.strip())}")
+        norm_juris = normalize_jurisdiction(jurisdiction)
+        if norm_juris:
+            clauses.append(f"jurisdiction = {_sql_str(norm_juris)}")
         if category:
             clauses.append(f"category = {_sql_str(category.strip())}")
         if status and status != "all":

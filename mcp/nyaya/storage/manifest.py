@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 
-from ..citations import canonicalize_court
+from ..citations import canonicalize_court, normalize_jurisdiction
 from ..exceptions import CommercialLicenseBlocked, StorageUnavailable
 from ..models import TermsStatus
 
@@ -131,11 +131,12 @@ def resolve_partitions(
             hint="Disable commercial_safe_only for academic/non-commercial research.",
         )
 
+    norm_state = normalize_jurisdiction(state)
     uris: list[str] = []
     for part in ds.partitions:
         if court is not None and not _match_court(part.court_code or part.court_name, court):
             continue
-        if state is not None and (part.state_code or "").lower() != state.strip().lower():
+        if norm_state is not None and (part.state_code or "").lower() != norm_state.lower():
             continue
         if forum is not None and (part.forum_code or "").lower() != forum.strip().lower():
             continue

@@ -82,6 +82,7 @@ class IngestInputBundle:
     regulator_order_rows: list[dict[str, Any]] = field(default_factory=list)
     ildc_rows: list[dict[str, Any]] = field(default_factory=list)
     citation_edges: list[dict[str, Any]] = field(default_factory=list)
+    hc_row_count: int = 0
 
 
 def create_mini_ingest_input() -> IngestInputBundle:
@@ -1001,6 +1002,8 @@ def build_sqlite_core(
                 )
             )
         _flush_batches(con, "INSERT OR REPLACE INTO acts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", act_rows)
+        act_commencement_by_id: dict[str, Any] = {a[0]: a[8] for a in act_rows}
+        act_repeal_by_id: dict[str, Any] = {a[0]: a[9] for a in act_rows}
 
         alias_rows = [
             (alias_lower.strip().lower(), target_act_id)
@@ -1016,6 +1019,7 @@ def build_sqlite_core(
             str(inv["target_doc_id"]): str(inv["effect"]) for inv in invalidations_list
         }
         prov_rows: list[tuple[Any, ...]] = []
+        prov_by_doc_id: dict[str, dict[str, Any]] = {}
 
         def _queue_provision(p: dict[str, Any]) -> None:
             doc_id = str(p["doc_id"])
@@ -1040,6 +1044,11 @@ def build_sqlite_core(
             status = inval_status_by_doc.get(doc_id) or str(p.get("status") or default_status)
             raw_ref_num = p.get("ref_num")
             ref_num_val = int(raw_ref_num) if raw_ref_num is not None else _ref_num(ref)
+            source_id_val = str(p.get("source_id") or "vaquill_central_legislation")
+            source_url_val = str(
+                p.get("source_url")
+                or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"
+            )
             prov_rows.append(
                 (
                     doc_id,
@@ -1058,15 +1067,28 @@ def build_sqlite_core(
                     p.get("commencement_date"),
                     p.get("repeal_date"),
                     json.dumps(p.get("metadata") or {}),
-                    str(p.get("source_id") or "vaquill_central_legislation"),
-                    str(
-                        p.get("source_url")
-                        or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet"
-                    ),
+                    source_id_val,
+                    source_url_val,
                     norm.text_sha256,
                     1 if p.get("commercial_safe", True) else 0,
                 )
             )
+            prov_by_doc_id[doc_id] = {
+                "doc_id": doc_id,
+                "act_id": act_id,
+                "act_short": act_short,
+                "kind": kind,
+                "ref": ref,
+                "ref_norm": ref_norm,
+                "chapter_num": p.get("chapter_num"),
+                "chapter_title": p.get("chapter_title"),
+                "part": p.get("part"),
+                "title": p.get("title"),
+                "text": norm.cleaned_text,
+                "commencement_date": p.get("commencement_date"),
+                "source_id": source_id_val,
+                "source_url": source_url_val,
+            }
             inserted_provisions.add(doc_id)
             inserted_act_kind_ref.add(akr)
 
@@ -1092,8 +1114,8 @@ def build_sqlite_core(
                         "title": f"{m['old_act']} Section {old_ref}",
                         "text": f"Section {old_ref} of {m['old_act']}: {m['substantive_delta']}",
                         "status": inval_status_by_doc.get(old_doc_id, "repealed"),
-                        "commencement_date": "1862-01-01",
-                        "repeal_date": "2024-07-01",
+                        "commencement_date": act_commencement_by_id.get(old_act_id),
+                        "repeal_date": act_repeal_by_id.get(old_act_id) or "2024-07-01",
                         "source_id": "vaquill_central_legislation",
                         "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
                     }
@@ -1103,26 +1125,57 @@ def build_sqlite_core(
             if new_ref != "NONE" and m.get("mapping_type") != "omitted":
                 new_act_id = str(m["new_act_id"])
                 new_doc_id = f"{new_act_id}:{new_ref}"
-                if new_doc_id not in inserted_provisions:
-                    _queue_provision(
-                        {
-                            "doc_id": new_doc_id,
-                            "act_id": new_act_id,
-                            "act_short": act_short_by_id.get(new_act_id, str(m["new_act"])),
-                            "kind": "section",
-                            "ref": new_ref,
-                            "ref_norm": new_ref.upper(),
-                            "title": f"{m['new_act']} Section {new_ref}",
-                            "text": f"Section {new_ref} of {m['new_act']}: {m['substantive_delta']}",
-                            "status": "in_force",
-                            "commencement_date": "2024-07-01",
-                            "source_id": "prs_2026_delta",
-                            "source_url": "https://prsindia.org/files/bills_acts/acts_parliament/2026/prs_2026_delta.json",
-                        }
-                    )
-                # Also materialize base section if new_ref has sub-clause like 103(1)
-                base_ref = str(m.get("new_base_ref") or new_ref)
+                base_ref = str(m.get("new_base_ref") or new_ref.split("(", 1)[0])
                 base_doc_id = f"{new_act_id}:{base_ref}"
+                if new_doc_id not in inserted_provisions:
+                    parent = prov_by_doc_id.get(base_doc_id)
+                    if parent is not None:
+                        _queue_provision(
+                            {
+                                "doc_id": new_doc_id,
+                                "act_id": new_act_id,
+                                "act_short": act_short_by_id.get(new_act_id, str(m["new_act"])),
+                                "kind": "section",
+                                "ref": new_ref,
+                                "ref_norm": new_ref.upper(),
+                                "chapter_num": parent.get("chapter_num"),
+                                "chapter_title": parent.get("chapter_title"),
+                                "part": parent.get("part"),
+                                "title": parent.get("title"),
+                                "text": parent["text"],
+                                "status": "in_force",
+                                "commencement_date": (
+                                    parent.get("commencement_date")
+                                    or act_commencement_by_id.get(new_act_id)
+                                    or "2024-07-01"
+                                ),
+                                "metadata": {
+                                    "parent_doc_id": base_doc_id,
+                                    "sub_clause_focus": new_ref,
+                                },
+                                "source_id": parent.get("source_id") or "vaquill_central_legislation",
+                                "source_url": parent.get("source_url")
+                                or "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                            }
+                        )
+                    else:
+                        _queue_provision(
+                            {
+                                "doc_id": new_doc_id,
+                                "act_id": new_act_id,
+                                "act_short": act_short_by_id.get(new_act_id, str(m["new_act"])),
+                                "kind": "section",
+                                "ref": new_ref,
+                                "ref_norm": new_ref.upper(),
+                                "title": f"{m['new_act']} Section {new_ref}",
+                                "text": f"Section {new_ref} of {m['new_act']}: {m['substantive_delta']}",
+                                "status": "in_force",
+                                "commencement_date": act_commencement_by_id.get(new_act_id) or "2024-07-01",
+                                "source_id": "prs_2026_delta",
+                                "source_url": "https://prsindia.org/files/bills_acts/acts_parliament/2026/prs_2026_delta.json",
+                            }
+                        )
+                # Also materialize base section if new_ref has sub-clause like 103(1)
                 if base_ref != new_ref and base_doc_id not in inserted_provisions:
                     _queue_provision(
                         {
@@ -1135,7 +1188,7 @@ def build_sqlite_core(
                             "title": f"{m['new_act']} Section {base_ref}",
                             "text": f"Section {base_ref} of {m['new_act']}: {m['substantive_delta']}",
                             "status": "in_force",
-                            "commencement_date": "2024-07-01",
+                            "commencement_date": act_commencement_by_id.get(new_act_id) or "2024-07-01",
                             "source_id": "prs_2026_delta",
                             "source_url": "https://prsindia.org/files/bills_acts/acts_parliament/2026/prs_2026_delta.json",
                         }
@@ -1306,7 +1359,7 @@ def build_sqlite_core(
                     j.get("pdf_s3_key"),
                     str(j.get("source_url") or "https://indian-supreme-court-judgments.s3.ap-south-1.amazonaws.com"),
                     content_sha,
-                    1 if raw_text else 0,
+                    1 if len(raw_text) >= 120 else 0,
                     int(j.get("cited_by_count") or 0),
                     str(j.get("source_id") or ("dattam_sc_judgments" if tier_code == "sc" else "dattam_hc_judgments")),
                     1 if comm_safe else 0,
@@ -1392,7 +1445,65 @@ def build_sqlite_core(
                 )
         _flush_batches(con, "INSERT OR REPLACE INTO courts VALUES (?,?,?,?,?,?,?,?)", court_tuples)
 
-        # 10. Rebuild FTS5 virtual tables and verify integrity
+        # 10. Compute real record counts per source_id, rebuild FTS5 virtual tables, and verify integrity
+        source_counts: dict[str, int] = {}
+        for tbl in (
+            "provisions",
+            "provision_amendments",
+            "concordance",
+            "judicial_invalidations",
+            "judgments_meta",
+        ):
+            for sid, cnt in con.execute(
+                f"SELECT source_id, count(*) FROM {tbl} GROUP BY source_id"
+            ).fetchall():
+                source_counts[str(sid)] = source_counts.get(str(sid), 0) + int(cnt)
+
+        for item in bundle.state_regulator_provisions:
+            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
+                continue
+            sid = str(
+                item.get("source_id")
+                or (
+                    "vaquill_regulators"
+                    if item.get("category") == "regulator"
+                    else "vaquill_state_legislation"
+                )
+            )
+            source_counts[sid] = source_counts.get(sid, 0) + 1
+
+        for item in bundle.tribunal_rows:
+            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
+                continue
+            sid = str(item.get("source_id") or "vaquill_tribunals")
+            source_counts[sid] = source_counts.get(sid, 0) + 1
+
+        for item in bundle.regulator_order_rows:
+            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
+                continue
+            sid = str(item.get("source_id") or "vaquill_regulators")
+            source_counts[sid] = source_counts.get(sid, 0) + 1
+
+        if (not use_hc) or (not merged_hc and getattr(bundle, "hc_row_count", 0) > 0):
+            hc_total = len(bundle.hc_web_rows)
+            if getattr(bundle, "hc_row_count", 0) > hc_total:
+                hc_total = int(bundle.hc_row_count)
+            if hc_total > 0:
+                source_counts["dattam_hc_judgments"] = (
+                    source_counts.get("dattam_hc_judgments", 0) + hc_total
+                )
+
+        for item in bundle.ddl_district_rows:
+            if commercial_safe_only and not bool(item.get("commercial_safe", True)):
+                continue
+            sid = str(item.get("source_id") or "ddl_81m")
+            source_counts[sid] = source_counts.get(sid, 0) + 1
+
+        con.executemany(
+            "UPDATE sources SET record_count = ? WHERE source_id = ?",
+            [(cnt, sid) for sid, cnt in source_counts.items()],
+        )
+
         con.execute("INSERT INTO provisions_fts(provisions_fts) VALUES('rebuild')")
         con.execute("INSERT INTO judgments_meta_fts(judgments_meta_fts) VALUES('rebuild')")
         con.commit()

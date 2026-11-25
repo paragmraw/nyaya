@@ -8,6 +8,12 @@ from dataclasses import dataclass, field
 from ..citations import ParsedCitation, parse_citations
 from ..storage.protocols import CorpusBackend
 
+_PRACTITIONER_SHORTHANDS: tuple[tuple[tuple[str, ...], list[tuple[str, str]]], ...] = (
+    (("anticipatory bail",), [("BNSS", "482"), ("CrPC", "438")]),
+    (("cheque bounce", "cheque dishonour"), [("NIAct", "138")]),
+    (("rejection of plaint",), [("CPC", "Order 7 Rule 11")]),
+)
+
 # Built-in golden bidirectional criminal-code equivalents so query expansion
 # works even on minimal/in-memory backends.
 _STATIC_EQUIVALENTS: dict[tuple[str, str], list[tuple[str, str]]] = {
@@ -153,6 +159,21 @@ def analyze_query(
             for eq in expand_equivalent_provisions(s_act, s_ref, backend=backend):
                 if eq not in seen_statutes and eq not in equiv_statutes:
                     equiv_statutes.append(eq)
+
+        if raw:
+            raw_lower = raw.lower()
+            canon_filter_act: str | None = None
+            if act and act.strip():
+                act_clean = act.strip()
+                canon_filter_act = (alias_map or {}).get(act_clean.lower(), act_clean)
+            for phrases, pairs in _PRACTITIONER_SHORTHANDS:
+                if any(phrase in raw_lower for phrase in phrases):
+                    allowed_acts = {a.lower() for a, _ in pairs}
+                    if canon_filter_act and canon_filter_act.lower() not in allowed_acts:
+                        continue
+                    for pair in pairs:
+                        if pair not in seen_statutes and pair not in equiv_statutes:
+                            equiv_statutes.append(pair)
 
     return AnalyzedQuery(
         raw_query=raw,

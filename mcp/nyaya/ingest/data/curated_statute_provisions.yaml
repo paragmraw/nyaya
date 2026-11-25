@@ -1,0 +1,758 @@
+schema_version: 2
+updated_at: '2026-11-25'
+provisions:
+- doc_id: contract-act-1872:73
+  act_id: contract-act-1872
+  act_short: ContractAct
+  kind: section
+  ref: '73'
+  ref_norm: '73'
+  chapter_num: VI
+  chapter_title: OF THE CONSEQUENCES OF BREACH OF CONTRACT
+  part: null
+  title: Compensation for loss or damage caused by breach of contract
+  text: 'When a contract has been broken, the party who suffers by such breach is entitled to receive, from the party who
+    has broken the contract, compensation for any loss or damage caused to him thereby, which naturally arose in the usual
+    course of things from such breach, or which the parties knew, when they made the contract, to be likely to result from
+    the breach of it.
+
+
+    Such compensation is not to be given for any remote and indirect loss or damage sustained by reason of the breach.
+
+
+    Compensation for failure to discharge obligation resembling those created by contract.—When an obligation resembling those
+    created by contract has been incurred and has not been discharged, any person injured by the failure to discharge it is
+    entitled to receive the same compensation from the party in default, as if such person had contracted to discharge it
+    and had broken his contract.
+
+
+    Explanation.—In estimating the loss or damage arising from a breach of contract, the means which existed of remedying
+    the inconvenience caused by the non-performance of the contract must be taken into account.
+
+
+    Illustrations:
+
+    (a) A contracts to sell and deliver 50 maunds of saltpetre to B, at a certain price to be paid on delivery. A breaks his
+    promise. B is entitled to receive from A, by way of compensation, the sum, if any, by which the contract price falls short
+    of the price for which B might have obtained 50 maunds of saltpetre of like quality at the time when the saltpetre ought
+    to have been delivered.
+
+    (b) A hires B''s ship to go to Bombay, and there take on board, on the first of January, a cargo, which A is to provide,
+    and to bring it to Calcutta, the freight to be paid when earned. B''s ship does not go to Bombay, but A has opportunities
+    of procuring suitable conveyance for the cargo upon terms as advantageous as those on which he had chartered the ship.
+    A avails himself of those opportunities, but is put to trouble and expense in doing so. A is entitled to receive compensation
+    from B in respect of such trouble and expense.
+
+    (f) A contracts to repair B''s house in a certain manner, and receives payment in advance. A repairs the house, but not
+    according to contract. B is entitled to recover from A the cost of making the repairs conform to the contract.
+
+    (i) A delivers to B, a common carrier, a machine, to be conveyed, without delay, to A''s mill informing B that his mill
+    is stopped for want of the machine. B unreasonably delays the delivery of the machine, and A, in consequence, loses a
+    profitable contract with the Government. A is entitled to receive from B, by way of compensation, the average amount of
+    profit which would have been made by the working of the mill during the time that delivery of it was delayed, but not
+    the loss sustained through the loss of the Government contract.'
+  status: in_force
+  commencement_date: '1872-09-01'
+  repeal_date: null
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: it-act-2000:66A
+  act_id: it-act-2000
+  act_short: ITAct
+  kind: section
+  ref: 66A
+  ref_norm: 66A
+  chapter_num: XI
+  chapter_title: OFFENCES
+  part: null
+  title: Punishment for sending offensive messages through communication service, etc.
+  text: 'Any person who sends, by means of a computer resource or a communication device,—
+
+    (a) any information that is grossly offensive or has menacing character; or
+
+    (b) any information which he knows to be false, but for the purpose of causing annoyance, inconvenience, danger, obstruction,
+    insult, injury, criminal intimidation, enmity, hatred or ill will, persistently by making use of such computer resource
+    or a communication device;
+
+    (c) any electronic mail or electronic mail message for the purpose of causing annoyance or inconvenience or to deceive
+    or to mislead the addressee or recipient about the origin of such messages,
+
+    shall be punishable with imprisonment for a term which may extend to three years and with fine.
+
+
+    Explanation.—For the purposes of this section, terms "electronic mail" and "electronic mail message" means a message or
+    information created or transmitted or received on a computer, computer system, computer resource or communication device
+    including attachments in text, image, audio, video and any other electronic record, which may be transmitted with the
+    message.'
+  status: struck_down
+  commencement_date: '2009-10-27'
+  repeal_date: null
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: cpc-1908:O7-R11
+  act_id: cpc-1908
+  act_short: CPC
+  kind: order_rule
+  ref: Order 7 Rule 11
+  ref_norm: O7-R11
+  chapter_num: First Schedule
+  chapter_title: Orders and Rules
+  part: null
+  title: Rejection of plaint
+  text: 'The plaint shall be rejected in the following cases:—
+
+    (a) where it does not disclose a cause of action;
+
+    (b) where the relief claimed is undervalued, and the plaintiff, on being required by the Court to correct the valuation
+    within a time to be fixed by the Court, fails to do so;
+
+    (c) where the relief claimed is properly valued, but the plaint is returned upon paper insufficiently stamped, and the
+    plaintiff, on being required by the Court to supply the requisite stamp-paper within a time to be fixed by the Court,
+    fails to do so;
+
+    (d) where the suit appears from the statement in the plaint to be barred by any law;
+
+    (e) where it is not filed in duplicate;
+
+    (f) where the plaintiff fails to comply with the provisions of rule 9:
+
+
+    Provided that the time fixed by the Court for the correction of the valuation or supplying of the requisite stamp-paper
+    shall not be extended unless the Court, for reasons to be recorded, is satisfied that the plaintiff was prevented by any
+    cause of an exceptional nature from correcting the valuation or supplying the requisite stamp-paper, as the case may be,
+    within the time fixed by the Court and that refusal to extend such time would cause grave injustice to the plaintiff.'
+  status: in_force
+  commencement_date: '1909-01-01'
+  repeal_date: null
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: crpc-1973:154
+  act_id: crpc-1973
+  act_short: CrPC
+  kind: section
+  ref: '154'
+  ref_norm: '154'
+  chapter_num: XII
+  chapter_title: INFORMATION TO THE POLICE AND THEIR POWERS TO INVESTIGATE
+  part: null
+  title: Information in cognizable cases
+  text: '(1) Every information relating to the commission of a cognizable offence, if given orally to an officer in charge
+    of a police station, shall be reduced to writing by him or under his direction, and be read over to the informant; and
+    every such information, whether given in writing or reduced to writing as aforesaid, shall be signed by the person giving
+    it, and the substance thereof shall be entered in a book to be kept by such officer in such form as the State Government
+    may prescribe in this behalf:
+
+
+    Provided that if the information is given by the woman against whom an offence under section 326A, section 326B, section
+    354, section 354A, section 354B, section 354C, section 354D, section 376, section 376A, section 376AB, section 376B, section
+    376C, section 376D, section 376DA, section 376DB, section 376E or section 509 of the Indian Penal Code is alleged to have
+    been committed or attempted, then such information shall be recorded, by a woman police officer or any woman officer:
+
+
+    Provided further that—
+
+    (a) in the event that the person against whom an offence under section 354, section 354A, section 354B, section 354C,
+    section 354D, section 376, section 376A, section 376AB, section 376B, section 376C, section 376D, section 376DA, section
+    376DB, section 376E or section 509 of the Indian Penal Code is alleged to have been committed or attempted, is temporarily
+    or permanently mentally or physically disabled, then such information shall be recorded by a police officer, at the residence
+    of the person seeking to report such offence or at a convenient place of such person''s choice, in the presence of an
+    interpreter or a special educator, as the case may be;
+
+    (b) the recording of such information shall be videographed;
+
+    (c) the police officer shall get the statement of the person recorded by a Judicial Magistrate under clause (a) of sub-section
+    (5A) of section 164 as soon as possible.
+
+
+    (2) A copy of the information as recorded under sub-section (1) shall be given forthwith, free of cost, to the informant.
+
+
+    (3) Any person aggrieved by a refusal on the part of an officer in charge of a police station to record the information
+    referred to in sub-section (1) may send the substance of such information, in writing and by post, to the Superintendent
+    of Police concerned who, if satisfied that such information discloses the commission of a cognizable offence, shall either
+    investigate the case himself or direct an investigation to be made by any police officer subordinate to him, in the manner
+    provided by this Code, and such officer shall have all the powers of an officer in charge of the police station in relation
+    to that offence.'
+  status: repealed
+  commencement_date: '1974-04-01'
+  repeal_date: '2024-07-01'
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: crpc-1973:438
+  act_id: crpc-1973
+  act_short: CrPC
+  kind: section
+  ref: '438'
+  ref_norm: '438'
+  chapter_num: XXXIII
+  chapter_title: PROVISIONS AS TO BAIL AND BONDS
+  part: null
+  title: Direction for grant of bail to person apprehending arrest
+  text: '(1) Where any person has reason to believe that he may be arrested on accusation of having committed a non-bailable
+    offence, he may apply to the High Court or the Court of Session for a direction under this section that in the event of
+    such arrest he shall be released on bail; and that Court may, after taking into consideration, inter alia, the following
+    factors, namely:—
+
+    (i) the nature and gravity of the accusation;
+
+    (ii) the antecedents of the applicant including the fact as to whether he has previously undergone imprisonment on conviction
+    by a Court in respect of any cognizable offence;
+
+    (iii) the possibility of the applicant to flee from justice; and
+
+    (iv) where the accusation has been made with the object of injuring or humiliating the applicant by having him so arrested,
+
+    either reject the application forthwith or issue an interim order for the grant of anticipatory bail:
+
+
+    Provided that, where the High Court or, as the case may be, the Court of Session, has not passed any interim order under
+    this sub-section or has rejected the application for grant of anticipatory bail, it shall be open to an officer in charge
+    of a police station to arrest, without warrant the applicant on the basis of the accusation apprehended in such application.
+
+
+    (1A) Where the Court grants an interim order under sub-section (1), it shall forthwith cause a notice being not less than
+    seven days notice, together with a copy of such order to be served on the Public Prosecutor and the Superintendent of
+    Police, with a view to give the Public Prosecutor a reasonable opportunity of being heard when the application shall be
+    finally heard by the Court.
+
+
+    (1B) The presence of the applicant seeking anticipatory bail shall be obligatory at the time of final hearing of the application
+    and passing of final order by the Court, if on an application made to it by the Public Prosecutor, the Court considers
+    such presence necessary in the interest of justice.
+
+
+    (2) When the High Court or the Court of Session makes a direction under sub-section (1), it may include such conditions
+    in such directions in the light of the facts of the particular case, as it may think fit, including—
+
+    (i) a condition that the person shall make himself available for interrogation by a police officer as and when required;
+
+    (ii) a condition that the person shall not, directly or indirectly, make any inducement, threat or promise to any person
+    acquainted with the facts of the case so as to dissuade him from disclosing such facts to the Court or to any police officer;
+
+    (iii) a condition that the person shall not leave India without the previous permission of the Court;
+
+    (iv) such other condition as may be imposed under sub-section (3) of section 437, as if the bail were granted under that
+    section.
+
+
+    (3) If such person is thereafter arrested without warrant by an officer in charge of a police station on such accusation,
+    and is prepared either at the time of arrest or at any time while in the custody of such officer to give bail, he shall
+    be released on bail; and if a Magistrate taking cognizance of such offence decides that a warrant should be issued in
+    the first instance against that person, he shall issue a bailable warrant in conformity with the direction of the Court
+    under sub-section (1).
+
+
+    (4) Nothing in this section shall apply to any case involving the arrest of any person on accusation of having committed
+    an offence under sub-section (3) of section 376 or section 376AB or section 376DA or section 376DB of the Indian Penal
+    Code.'
+  status: repealed
+  commencement_date: '1974-04-01'
+  repeal_date: '2024-07-01'
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: crpc-1973:439
+  act_id: crpc-1973
+  act_short: CrPC
+  kind: section
+  ref: '439'
+  ref_norm: '439'
+  chapter_num: XXXIII
+  chapter_title: PROVISIONS AS TO BAIL AND BONDS
+  part: null
+  title: Special powers of High Court or Court of Session regarding bail
+  text: '(1) A High Court or Court of Session may direct,—
+
+    (a) that any person accused of an offence and in custody be released on bail, and if the offence is of the nature specified
+    in sub-section (3) of section 437, may impose any condition which it considers necessary for the purposes mentioned in
+    that sub-section;
+
+    (b) that any condition imposed by a Magistrate when releasing any person on bail be set aside or modified:
+
+
+    Provided that the High Court or the Court of Session shall, before granting bail to a person who is accused of an offence
+    which is triable exclusively by the Court of Session or which, though not so triable, is punishable with imprisonment
+    for life, give notice of the application for bail to the Public Prosecutor unless it is, for reasons to be recorded in
+    writing, of opinion that it is not practicable to give such notice:
+
+
+    Provided further that the High Court or the Court of Session shall, before granting bail to a person who is accused of
+    an offence triable under sub-section (3) of section 376 or section 376AB or section 376DA or section 376DB of the Indian
+    Penal Code, give notice of the application for bail to the Public Prosecutor within a period of fifteen days from the
+    date of receipt of the notice of such application.
+
+
+    (1A) The presence of the informant or any person authorised by him shall be obligatory at the time of hearing of the application
+    for bail to the person under sub-section (3) of section 376 or section 376AB or section 376DA or section 376DB of the
+    Indian Penal Code.
+
+
+    (2) A High Court or Court of Session may direct that any person who has been released on bail under this Chapter be arrested
+    and commit him to custody.'
+  status: repealed
+  commencement_date: '1974-04-01'
+  repeal_date: '2024-07-01'
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: crpc-1973:482
+  act_id: crpc-1973
+  act_short: CrPC
+  kind: section
+  ref: '482'
+  ref_norm: '482'
+  chapter_num: XXXVII
+  chapter_title: MISCELLANEOUS
+  part: null
+  title: Saving of inherent powers of High Court
+  text: Nothing in this Code shall be deemed to limit or affect the inherent powers of the High Court to make such orders
+    as may be necessary to give effect to any order under this Code, or to prevent abuse of the process of any Court or otherwise
+    to secure the ends of justice.
+  status: repealed
+  commencement_date: '1974-04-01'
+  repeal_date: '2024-07-01'
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: iea-1872:65B
+  act_id: iea-1872
+  act_short: EvidenceAct
+  kind: section
+  ref: 65B
+  ref_norm: 65B
+  chapter_num: V
+  chapter_title: OF DOCUMENTARY EVIDENCE
+  part: null
+  title: Admissibility of electronic records
+  text: '(1) Notwithstanding anything contained in this Act, any information contained in an electronic record which is printed
+    on a paper, stored, recorded or copied in optical or magnetic media produced by a computer (hereinafter referred to as
+    the computer output) shall be deemed to be also a document, if the conditions mentioned in this section are satisfied
+    in relation to the information and computer in question and shall be admissible in any proceedings, without further proof
+    or production of the original, as evidence or any contents of the original or of any fact stated therein of which direct
+    evidence would be admissible.
+
+
+    (2) The conditions referred to in sub-section (1) in respect of a computer output shall be the following, namely:—
+
+    (a) the computer output containing the information was produced by the computer during the period over which the computer
+    was used regularly to store or process information for the purposes of any activities regularly carried on over that period
+    by the person having lawful control over the use of the computer;
+
+    (b) during the said period, information of the kind contained in the electronic record or of the kind from which the information
+    so contained is derived was regularly fed into the computer in the ordinary course of the said activities;
+
+    (c) throughout the material part of the said period, the computer was operating properly or, if not, then in respect of
+    any period in which it was not operating properly or was out of operation during that part of the period, was not such
+    as to affect the electronic record or the accuracy of its contents; and
+
+    (d) the information contained in the electronic record reproduces or is derived from such information fed into the computer
+    in the ordinary course of the said activities.
+
+
+    (3) Where over any period, the function of storing or processing information for the purposes of any activities regularly
+    carried on over that period as mentioned in clause (a) of sub-section (2) was regularly performed by computers, whether––
+
+    (a) by a combination of computers operating over that period; or
+
+    (b) by different computers operating in succession over that period; or
+
+    (c) by different combinations of computers operating in succession over that period; or
+
+    (d) in any other manner involving the successive operation over that period, in whatever order, of one or more computers
+    and one or more combinations of computers, all the computers used for that purpose during that period shall be treated
+    for the purposes of this section as constituting a single computer; and references in this section to a computer shall
+    be construed accordingly.
+
+
+    (4) In any proceedings where it is desired to give a statement in evidence by virtue of this section, a certificate doing
+    any of the following things, that is to say, –
+
+    (a) identifying the electronic record containing the statement and describing the manner in which it was produced;
+
+    (b) giving such particulars of any device involved in the production of that electronic record as may be appropriate for
+    the purpose of showing that the electronic record was produced by a computer;
+
+    (c) dealing with any of the matters to which the conditions mentioned in sub-section (2) relate, and purporting to be
+    signed by a person occupying a responsible official position in relation to the operation of the relevant device or the
+    management of the relevant activities (whichever is appropriate) shall be evidence of any matter stated in the certificate;
+    and for the purposes of this subsection it shall be sufficient for a matter to be stated to the best of the knowledge
+    and belief of the person stating it.
+
+
+    (5) For the purposes of this section.—
+
+    (a) information shall be taken to be supplied to a computer if it is supplied thereto in any appropriate form and whether
+    it is so supplied directly or (with or without human intervention) by means of any appropriate equipment;
+
+    (b) whether in the course of activities carried on by any official, information is supplied with a view to its being stored
+    or processed for the purposes of those activities by a computer operated otherwise than in the course of those activities,
+    that information, if duly supplied to that computer, shall be taken to be supplied to it in the course of those activities;
+
+    (c) a computer output shall be taken to have been produced by a computer whether it was produced by it directly or (with
+    or without human intervention) by means of any appropriate equipment.'
+  status: repealed
+  commencement_date: '1872-09-01'
+  repeal_date: '2024-07-01'
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: bsa-2023:63
+  act_id: bsa-2023
+  act_short: BSA
+  kind: section
+  ref: '63'
+  ref_norm: '63'
+  chapter_num: V
+  chapter_title: OF DOCUMENTARY EVIDENCE
+  part: null
+  title: Admissibility of electronic records
+  text: '(1) Notwithstanding anything contained in this Adhiniyam, any information contained in an electronic record which
+    is printed on paper, stored, recorded or copied in optical or magnetic media or semiconductor memory which is produced
+    by a computer or any communication device or otherwise stored, recorded or copied in any electronic form (hereinafter
+    referred to as the computer output) shall be deemed to be also a document, if the conditions mentioned in this section
+    are satisfied in relation to the information and computer in question and shall be admissible in any proceedings, without
+    further proof or production of the original, as evidence or any contents of the original or of any fact stated therein
+    of which direct evidence would be admissible.
+
+
+    (2) The conditions referred to in subsection (1) in respect of a computer output shall be the following, namely:
+
+    (a) the computer output containing the information was produced by the computer or communication device during the period
+    over which the computer or communication device was used regularly to create, store or process information for the purposes
+    of any activity regularly carried on over that period by the person having lawful control over the use of the computer
+    or communication device;
+
+    (b) during the said period, information of the kind contained in the electronic record or of the kind from which the information
+    so contained is derived was regularly fed into the computer or communication device in the ordinary course of the said
+    activities;
+
+    (c) throughout the material part of the said period, the computer or communication device was operating properly or, if
+    not, then in respect of any period in which it was not operating properly or was out of operation during that part of
+    the period, was not such as to affect the electronic record or the accuracy of its contents; and
+
+    (d) the information contained in the electronic record reproduces or is derived from such information fed into the computer
+    or communication device in the ordinary course of the said activities.
+
+
+    (3) Where over any period, the function of creating, storing or processing information for the purposes of any activity
+    regularly carried on over that period as mentioned in clause (a) of sub-section (2) was regularly performed by means of
+    one or more computers or communication device, whether—
+
+    (a) in standalone mode; or
+
+    (b) on a computer system; or
+
+    (c) on a computer network; or
+
+    (d) on a computer resource enabling information creation or providing information processing and storage; or
+
+    (e) through an intermediary, all the computers or communication devices used for that purpose during that period shall
+    be treated for the purposes of this section as constituting a single computer or communication device; and references
+    in this section to a computer or communication device shall be construed accordingly.
+
+
+    (4) In any proceeding where it is desired to give a statement in evidence by virtue of this section, a certificate doing
+    any of the following things shall be submitted along with the electronic record at each instance where it is being submitted
+    for admission, namely:—
+
+
+    (a) identifying the electronic record containing the statement and describing the manner in which it was produced;
+
+    (b) giving such particulars of any device involved in the production of that electronic record as may be appropriate for
+    the purpose of showing that the electronic record was produced by a computer or a communication device referred to in
+    clauses (a) to (e) of sub-section (3);
+
+    (c) dealing with any of the matters to which the conditions mentioned in sub-section (2) relate, and purporting to be
+    signed by a person in charge of the computer or communication device or the management of the relevant activities (whichever
+    is appropriate) and an expert shall be evidence of any matter stated in the certificate; and for the purposes of this
+    sub-section it shall be sufficient for a matter to be stated to the best of the knowledge and belief of the person stating
+    it in the certificate specified in the Schedule.
+
+
+    (5) For the purposes of this section,—
+
+    (a) information shall be taken to be supplied to a computer or communication device if it is supplied thereto in any appropriate
+    form and whether it is so supplied directly or (with or without human intervention) by means of any appropriate equipment;
+
+    (b) a computer output shall be taken to have been produced by a computer or communication device whether it was produced
+    by it directly or (with or without human intervention) by means of any appropriate equipment or by other electronic means
+    as referred to in clauses (a) to (e) of sub-section (3).'
+  status: in_force
+  commencement_date: '2024-07-01'
+  repeal_date: null
+  source_id: vaquill_central_legislation
+  source_url: https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet
+  commercial_safe: true
+- doc_id: constitution:art:14
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '14'
+  ref_norm: '14'
+  chapter_num: null
+  chapter_title: Right to Equality
+  part: Part III - Fundamental Rights
+  title: Equality before law
+  text: The State shall not deny to any person equality before the law or the equal protection of the laws within the territory
+    of India.
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:19
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '19'
+  ref_norm: '19'
+  chapter_num: null
+  chapter_title: Right to Freedom
+  part: Part III - Fundamental Rights
+  title: Protection of certain rights regarding freedom of speech, etc
+  text: '(1) All citizens shall have the right—
+
+
+    (a) to freedom of speech and expression;
+
+
+    (b) to assemble peaceably and without arms;
+
+
+    (c) to form associations or unions or co-operative societies;
+
+
+    (d) to move freely throughout the territory of India;
+
+
+    (e) to reside and settle in any part of the territory of India; and [(f) * * *]
+
+
+    (g) to practise any profession, or to carry on any occupation, trade or business. (2) Nothing in sub-clause (a) of clause
+    (1) shall affect the operation of any existing law, or prevent the State from making any law, in so far as such law imposes
+    reasonable restrictions on the exercise of the right conferred by the said sub-clause in the interests of the sovereignty
+    and integrity of India, the security of the State, friendly relations with foreign States, public order, decency or morality,
+    or in relation to contempt of court, defamation or incitement to an offence.
+
+
+    (3) Nothing in sub-clause (b) of the said clause shall affect the operation of any existing law in so far as it imposes,
+    or prevent the State from making any law imposing, in the interests of the sovereignty and integrity of India or public
+    order, reasonable restrictions on the exercise of the right conferred by the said sub-clause.
+
+
+    (4) Nothing in sub-clause (c) of the said clause shall affect the operation of any existing law in so far as it imposes,
+    or prevent the State from making any law imposing, in the interests of the sovereignty and integrity of India or public
+    order or morality, reasonable restrictions on the exercise of the right conferred by the said sub-clause.
+
+
+    (5) Nothing in sub-clauses (d) and (e) of the said clause shall affect the operation of any existing law in so far as
+    it imposes, or prevent the State from making any law imposing, reasonable restrictions on the exercise of any of the rights
+    conferred by the said sub-clauses either in the interests of the general public or for the protection of the interests
+    of any Scheduled Tribe.
+
+
+    (6) Nothing in sub-clause (g) of the said clause shall affect the operation of any existing law in so far as it imposes,
+    or prevent the State from making any law imposing, in the interests of the general public, reasonable restrictions on
+    the exercise of the right conferred by the said sub-clause, and, in particular, nothing in the said sub-clause shall affect
+    the operation of any existing law in so far as it relates to, or prevent the State from making any law relating to,—
+
+
+    (i) the professional or technical qualifications necessary for practising any profession or carrying on any occupation,
+    trade or business; or
+
+
+    (ii) the carrying on by the State, or by a corporation owned or controlled by the State, of any trade, business, industry
+    or service, whether to the exclusion, complete or partial, of citizens or otherwise.'
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:21
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '21'
+  ref_norm: '21'
+  chapter_num: null
+  chapter_title: Right to Freedom
+  part: Part III - Fundamental Rights
+  title: Protection of life and personal liberty
+  text: No person shall be deprived of his life or personal liberty except according to procedure established by law.
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:21A
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: 21A
+  ref_norm: 21A
+  chapter_num: null
+  chapter_title: Right to Freedom
+  part: Part III - Fundamental Rights
+  title: Right to education
+  text: The State shall provide free and compulsory education to all children of the age of six to fourteen years in such
+    manner as the State may, by law, determine.
+  status: in_force
+  commencement_date: '2010-04-01'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:32
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '32'
+  ref_norm: '32'
+  chapter_num: null
+  chapter_title: Right to Constitutional Remedies
+  part: Part III - Fundamental Rights
+  title: Remedies for enforcement of rights conferred by this Part
+  text: '(1) The right to move the Supreme Court by appropriate proceedings for the enforcement of the rights conferred by
+    this Part is guaranteed.
+
+
+    (2) The Supreme Court shall have power to issue directions or orders or writs, including writs in the nature of habeas
+    corpus, mandamus, prohibition, quo warranto and certiorari, whichever may be appropriate, for the enforcement of any of
+    the rights conferred by this Part.
+
+
+    (3) Without prejudice to the powers conferred on the Supreme Court by clauses (1) and (2), Parliament may by law empower
+    any other court to exercise within the local limits of its jurisdiction all or any of the powers exercisable by the Supreme
+    Court under clause (2).
+
+
+    (4) The right guaranteed by this article shall not be suspended except as otherwise provided for by this Constitution.'
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:136
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '136'
+  ref_norm: '136'
+  chapter_num: null
+  chapter_title: The Union Judiciary
+  part: Part V - The Union
+  title: Special leave to appeal by the Supreme Court
+  text: '(1) Notwithstanding anything in this Chapter, the Supreme Court may, in its discretion, grant special leave to appeal
+    from any judgment, decree, determination, sentence or order in any cause or matter passed or made by any court or tribunal
+    in the territory of India.
+
+
+    (2) Nothing in clause (1) shall apply to any judgment, determination, sentence or order passed or made by any court or
+    tribunal constituted by or under any law relating to the Armed Forces.'
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:226
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '226'
+  ref_norm: '226'
+  chapter_num: null
+  chapter_title: The High Courts in the States
+  part: Part VI - The States
+  title: Power of High Courts to issue certain writs
+  text: '(1) Notwithstanding anything in article 32, every High Court shall have power, throughout the territories in relation
+    to which it exercises jurisdiction, to issue to any person or authority, including in appropriate cases, any Government,
+    within those territories directions, orders or writs, including writs in the nature of habeas corpus, mandamus, prohibition,
+    quo warranto and certiorari, or any of them, for the enforcement of any of the rights conferred by Part III and for any
+    other purpose.
+
+
+    (2) The power conferred by clause (1) to issue directions, orders or writs to any Government, authority or person may
+    also be exercised by any High Court exercising jurisdiction in relation to the territories within which the cause of action,
+    wholly or in part, arises for the exercise of such power, notwithstanding that the seat of such Government or authority
+    or the residence of such person is not within those territories. (3) Where any party against whom an interim order, whether
+    by way of injunction or stay or in any other manner, is made on, or in any proceedings relating to, a petition under clause
+    (1), without—
+
+
+    (a) furnishing to such party copies of such petition and all documents in support of the plea for such interim order;
+    and
+
+
+    (b) giving such party an opportunity of being heard, makes an application to the High Court for the vacation of such order
+    and furnishes a copy of such application to the party in whose favour such order has been made or the counsel of such
+    party, the High Court shall dispose of the application within a period of two weeks from the date on which it is received
+    or from the date on which the copy of such application is so furnished, whichever is later, or where the High Court is
+    closed on the last day of that period, before the expiry of the next day afterwards on which the High Court is open; and
+    if the application is not so disposed of, the interim order shall, on the expiry of that period, or, as the case may be,
+    the expiry of the said next day, stand vacated. (4) The power conferred on a High Court by this article shall not be in
+    derogation of the power conferred on the Supreme Court by clause (2) of article 32.'
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true
+- doc_id: constitution:art:368
+  act_id: constitution
+  act_short: Constitution
+  kind: article
+  ref: '368'
+  ref_norm: '368'
+  chapter_num: null
+  chapter_title: Amendment of the Constitution
+  part: Part XX - Amendment of the Constitution
+  title: Power of Parliament to amend the Constitution and procedure therefor
+  text: '(1) Notwithstanding anything in this Constitution, Parliament may in exercise of its constituent power amend by way
+    of addition, variation or repeal any provision of this Constitution in accordance with the procedure laid down in this
+    article. (2) An amendment of this Constitution may be initiated only by the introduction of a Bill for the purpose in
+    either House of Parliament, and when the Bill is passed in each House by a majority of the total membership of that House
+    and by a majority of not less than two-thirds of the members of that House present and voting, it shall be presented to
+    the President who shall give his assent to the Bill and thereupon the Constitution shall stand amended in accordance with
+    the terms of the Bill:
+
+
+    Provided that if such amendment seeks to make any change in—
+
+
+    (a) article 54, article 55, article 73, article 162, article 241 or article 279A; or
+
+
+    (b) Chapter IV of Part V, Chapter V of Part VI, or Chapter I of Part XI; or
+
+
+    (c) any of the Lists in the Seventh Schedule; or
+
+
+    (d) the representation of States in Parliament; or
+
+
+    (e) the provisions of this article, the amendment shall also require to be ratified by the Legislatures of not less than
+    one-half of the States by resolutions to that effect passed by those Legislatures before the Bill making provision for
+    such amendment is presented to the President for assent. (3) Nothing in article 13 shall apply to any amendment made under
+    this article.(4) No amendment of this Constitution (including the provisions of Part III) made or purporting to have been
+    made under this article whether before or after the commencement of section 55 of the Constitution (Forty-second Amendment)
+    Act, 1976 shall be called in question in any court on any ground.
+
+
+    (5) For the removal of doubts, it is hereby declared that there shall be no limitation whatever on the constituent power
+    of Parliament to amend by way of addition, variation or repeal the provisions of this Constitution under this article.'
+  status: in_force
+  commencement_date: '1950-01-26'
+  repeal_date: null
+  source_id: legislative_constitution
+  source_url: https://legislative.gov.in/sites/default/files/COI_2026.pdf
+  commercial_safe: true

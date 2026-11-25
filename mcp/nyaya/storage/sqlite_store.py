@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import threading
@@ -11,7 +12,12 @@ from datetime import date as Date
 from pathlib import Path
 from typing import Any
 
-from ..citations import canonicalize_court, court_code_variants, parse_single_citation
+from ..citations import (
+    canonicalize_court,
+    court_code_variants,
+    normalize_jurisdiction,
+    parse_single_citation,
+)
 from ..exceptions import CommercialLicenseBlocked, NotFound, StorageUnavailable
 from ..models import (
     ActInfo,
@@ -312,6 +318,51 @@ def _normalize_ref(ref: str) -> tuple[str, str | None]:
     return cleaned.upper(), None
 
 
+_INFLECTION_SUFFIXES: tuple[str, ...] = (
+    "ment",
+    "tion",
+    "sion",
+    "ing",
+    "ity",
+    "es",
+    "ed",
+    "er",
+    "ly",
+    "s",
+)
+_INFLECTION_ALT = "s|es|ed|ing|er|ly|ment|tion|sion|ity"
+
+
+def _token_matches_boundary(tok: str, haystack: str) -> bool:
+    """Match a lowercased token against a lowercased haystack with strict word boundaries."""
+    tok = tok.lower()
+    if not tok:
+        return False
+    if len(tok) < 6:
+        return bool(
+            re.search(rf"(?<![a-z0-9])(?<![a-z0-9]'){re.escape(tok)}(?![a-z0-9])", haystack)
+        )
+    stems = [tok]
+    for suf in _INFLECTION_SUFFIXES:
+        if tok.endswith(suf):
+            stem = tok[: -len(suf)]
+            if len(stem) >= 5 and stem not in stems:
+                stems.append(stem)
+    for stem in stems:
+        if re.search(rf"\b{re.escape(stem)}(?:{_INFLECTION_ALT})?\b", haystack):
+            return True
+    return False
+
+
+def _multitoken_min_required(n: int) -> int:
+    """Return length-scaled minimum distinct content token matches for OR-fallback precision."""
+    if n <= 1:
+        return n
+    if n <= 3:
+        return 2
+    return max(3, math.ceil(0.6 * n))
+
+
 def _extract_fts_tokens(raw: str) -> tuple[list[str], list[str]]:
     """Extract normalized FTS tokens and non-stopword content tokens."""
     all_tokens = [t.strip(".-/()") for t in _FTS_TOKEN_RE.findall(raw)]
@@ -421,22 +472,38 @@ class SqliteStore:
         if not self.is_available():
             return {}
         con = self._conn()
+        alias_map: dict[str, str] = {}
+        act_rows = con.execute("SELECT short_name, full_name FROM acts").fetchall()
+        for r in act_rows:
+            short = str(r["short_name"])
+            full = str(r["full_name"] or "").strip()
+            if short:
+                alias_map[short.lower()] = short
+            if full:
+                full_l = full.lower()
+                alias_map[full_l] = short
+                stripped = re.sub(r"^the\s+", "", full_l).strip()
+                if stripped:
+                    alias_map[stripped] = short
         rows = con.execute(
             "SELECT aa.alias_lower, a.short_name "
             "FROM act_aliases aa JOIN acts a ON aa.act_id = a.act_id"
         ).fetchall()
-        return {str(r["alias_lower"]): str(r["short_name"]) for r in rows}
+        for r in rows:
+            alias_map[str(r["alias_lower"])] = str(r["short_name"])
+        return alias_map
 
     def _resolve_act_id(self, act: str, *, jurisdiction: str | None = None) -> str | None:
         clean = BIDI_RE.sub("", strip_control_chars(act)).strip().lower()
         if not clean:
             return None
         con = self._conn()
+        norm_juris = normalize_jurisdiction(jurisdiction)
         params: list[Any] = [clean, clean]
         juris_sql = ""
-        if jurisdiction:
+        if norm_juris:
             juris_sql = " AND lower(a.jurisdiction) = lower(?)"
-            params.append(jurisdiction.strip())
+            params.append(norm_juris)
         row = con.execute(
             f"SELECT a.act_id FROM acts a WHERE (lower(a.short_name) = ? OR lower(a.act_id) = ?){juris_sql} LIMIT 1",
             params,
@@ -447,7 +514,7 @@ class SqliteStore:
             "SELECT aa.act_id FROM act_aliases aa "
             "JOIN acts a ON aa.act_id = a.act_id "
             f"WHERE aa.alias_lower = ?{juris_sql} LIMIT 1",
-            [clean, *([jurisdiction.strip()] if jurisdiction else [])],
+            [clean, *([norm_juris] if norm_juris else [])],
         ).fetchone()
         return str(row["act_id"]) if row else None
 
@@ -548,7 +615,8 @@ class SqliteStore:
         commercial_safe_only: bool | None = None,
     ) -> ProvisionRecord | None:
         con = self._conn()
-        act_id = self._resolve_act_id(act, jurisdiction=jurisdiction)
+        norm_juris = normalize_jurisdiction(jurisdiction)
+        act_id = self._resolve_act_id(act, jurisdiction=norm_juris)
         if act_id is None:
             return None
         ref_norm, sub_ref = _normalize_ref(ref)
@@ -648,6 +716,7 @@ class SqliteStore:
     ) -> BrowseResult:
         con = self._conn()
         cs_only = self._effective_cs(commercial_safe_only)
+        norm_juris = normalize_jurisdiction(jurisdiction)
         limit = max(1, min(int(limit), 200))
         offset = max(0, int(offset))
 
@@ -656,9 +725,9 @@ class SqliteStore:
             params: list[Any] = []
             if cs_only:
                 where.append("a.commercial_safe = 1")
-            if jurisdiction:
+            if norm_juris:
                 where.append("lower(a.jurisdiction) = lower(?)")
-                params.append(jurisdiction.strip())
+                params.append(norm_juris)
             if category:
                 where.append("lower(a.category) = lower(?)")
                 params.append(category.strip())
@@ -709,7 +778,7 @@ class SqliteStore:
             ]
             return BrowseResult(mode="catalog", acts=acts, total=total, returned=len(acts))
 
-        act_id = self._resolve_act_id(act, jurisdiction=jurisdiction)
+        act_id = self._resolve_act_id(act, jurisdiction=norm_juris)
         if act_id is None:
             raise NotFound(f"Act {act!r} not found in corpus.", kind="act")
 
@@ -1414,6 +1483,7 @@ class SqliteStore:
         act: str | None = None,
         jurisdiction: str | None = None,
         kind: str | None = None,
+        category: str | None = None,
         status: str | None = None,
         exact_phrase: bool = False,
         limit: int = 25,
@@ -1422,6 +1492,7 @@ class SqliteStore:
     ) -> list[StatuteHit]:
         con = self._conn()
         cs_only = self._effective_cs(commercial_safe_only)
+        norm_juris = normalize_jurisdiction(jurisdiction)
         all_tokens, content_tokens = _extract_fts_tokens(query)
         if not all_tokens:
             return []
@@ -1431,31 +1502,42 @@ class SqliteStore:
         if cs_only:
             where.append("p.commercial_safe = 1")
         if act:
-            act_id = self._resolve_act_id(act, jurisdiction=jurisdiction)
+            act_id = self._resolve_act_id(act, jurisdiction=norm_juris)
             if act_id is None:
                 return []
             where.append("p.act_id = ?")
             base_params.append(act_id)
-        if jurisdiction:
+        if norm_juris:
             where.append("lower(a.jurisdiction) = lower(?)")
-            base_params.append(jurisdiction.strip())
+            base_params.append(norm_juris)
         if kind:
             where.append("p.kind = ?")
             base_params.append(kind)
+        if category:
+            where.append("a.category = ?")
+            base_params.append(category.strip())
         if status and status != "all":
             where.append("p.status = ?")
             base_params.append(status)
 
+        prefer_in_force = status is None or status == "all"
+        order_expr = (
+            "(bm25(provisions_fts, 0.0, 2.0, 3.0, 6.0, 1.0) "
+            "- CASE WHEN p.status = 'in_force' THEN 0.5 ELSE 0.0 END)"
+            if prefer_in_force
+            else "fts_rank"
+        )
         sql = (
             "SELECT p.*, a.short_name AS act_short_name, a.jurisdiction AS act_jurisdiction, "
+            "a.category AS act_category, "
             "s.name AS src_name, s.url AS src_url, s.license_spdx AS src_license, "
             "s.terms_status AS src_terms_status, s.as_of AS src_as_of, "
-            "bm25(provisions_fts) AS fts_rank "
+            "bm25(provisions_fts, 0.0, 2.0, 3.0, 6.0, 1.0) AS fts_rank "
             "FROM provisions_fts "
             "JOIN provisions p ON provisions_fts.rowid = p.rowid "
             "JOIN acts a ON p.act_id = a.act_id "
             "JOIN sources s ON p.source_id = s.source_id "
-            f"WHERE {' AND '.join(where)} ORDER BY fts_rank LIMIT ? OFFSET ?"
+            f"WHERE {' AND '.join(where)} ORDER BY {order_expr} LIMIT ? OFFSET ?"
         )
 
         def _run_fts(expr: str, q_limit: int, q_offset: int) -> list[sqlite3.Row]:
@@ -1464,37 +1546,83 @@ class SqliteStore:
             return con.execute(sql, [expr, *base_params, q_limit, q_offset]).fetchall()
 
         distinct_content = list(dict.fromkeys(t.lower() for t in content_tokens))
+        q_lower = query.lower()
+        q_bigrams = [
+            f"{distinct_content[i]} {distinct_content[i + 1]}"
+            for i in range(len(distinct_content) - 1)
+        ]
+
+        def _score_row(r: sqlite3.Row, *, in_and: bool) -> float:
+            s = max(0.0, -float(r["fts_rank"]))
+            if in_and:
+                s += 3.0
+            if prefer_in_force and r["status"] == "in_force":
+                s += 0.5
+            act_short_low = str(r["act_short_name"] or "").strip().lower()
+            if act_short_low and re.search(rf"(?<![a-z0-9]){re.escape(act_short_low)}(?![a-z0-9])", q_lower):
+                s += 10.0
+            if r["act_category"] == "constitution":
+                s += 24.0 if r["kind"] == "article" else 3.0
+            title_str = str(r["title"] or "").lower()
+            _, raw_title_toks = _extract_fts_tokens(title_str)
+            title_toks = list(dict.fromkeys(t.lower() for t in raw_title_toks))
+            if len(title_toks) >= 2:
+                matched_t = sum(1 for tt in title_toks if any(_token_matches_boundary(qt, tt) or _token_matches_boundary(tt, qt) for qt in distinct_content))
+                if matched_t == len(title_toks):
+                    s += 15.0
+                elif matched_t >= 2:
+                    s += 6.0 * (matched_t / len(title_toks))
+            if q_bigrams:
+                body_low = f"{title_str} {str(r['text'] or '').lower()}"
+                bg_hits = sum(1 for bg in q_bigrams if bg in body_low)
+                if bg_hits > 0:
+                    s += min(12.0, 6.0 * bg_hits)
+            return s
+
+        custom_scores: dict[str, float] = {}
         rows: list[sqlite3.Row]
         if exact_phrase or len(distinct_content) < 2:
             fts_expr = _fts_query(query, exact_phrase=exact_phrase, operator="OR")
             rows = _run_fts(fts_expr, limit, offset)
         elif len(distinct_content) == 2:
             and_expr = _fts_query(query, exact_phrase=False, operator="AND", max_tokens=8)
-            rows = _run_fts(and_expr, limit, offset)
+            raw_rows = _run_fts(and_expr, max(50, limit + offset), 0)
+            scored_2 = sorted(
+                ((_score_row(r, in_and=True), -len(str(r["ref"] or "")), r) for r in raw_rows),
+                key=lambda x: (x[0], x[1]),
+                reverse=True,
+            )
+            for sc_val, _, r in scored_2:
+                custom_scores[str(r["doc_id"])] = round(sc_val, 4)
+            rows = [r for _, _, r in scored_2[offset : offset + limit]]
         else:
             need = limit + offset
             and_expr = _fts_query(query, exact_phrase=False, operator="AND", max_tokens=8)
-            and_rows = _run_fts(and_expr, need, 0)
-            if len(and_rows) >= need:
-                rows = and_rows[offset : offset + limit]
-            else:
-                or_expr = _fts_query(query, exact_phrase=False, operator="OR", max_tokens=16)
-                or_candidates = _run_fts(or_expr, max(need * 5, 100), 0)
-                min_required = min(2, len(distinct_content))
-                seen_ids = {str(r["doc_id"]) for r in and_rows}
-                merged = list(and_rows)
-                for r in or_candidates:
-                    doc_id = str(r["doc_id"])
-                    if doc_id in seen_ids:
-                        continue
+            and_rows = _run_fts(and_expr, max(50, need * 3), 0)
+            or_expr = _fts_query(query, exact_phrase=False, operator="OR", max_tokens=16)
+            or_candidates = _run_fts(or_expr, max(need * 10, 400), 0)
+            min_required = _multitoken_min_required(len(distinct_content))
+            and_ids = {str(r["doc_id"]) for r in and_rows}
+            seen_ids: set[str] = set()
+            candidates: list[tuple[float, int, sqlite3.Row]] = []
+            for r in (*and_rows, *or_candidates):
+                doc_id = str(r["doc_id"])
+                if doc_id in seen_ids:
+                    continue
+                seen_ids.add(doc_id)
+                in_and = doc_id in and_ids
+                if not in_and:
                     haystack = (
                         f"{r['title'] or ''} {r['text'] or ''} "
                         f"{r['act_short_name'] or ''} {r['ref'] or ''}"
                     ).lower()
-                    if sum(1 for tok in distinct_content if tok in haystack) >= min_required:
-                        merged.append(r)
-                        seen_ids.add(doc_id)
-                rows = merged[offset : offset + limit]
+                    if sum(1 for tok in distinct_content if _token_matches_boundary(tok, haystack)) < min_required:
+                        continue
+                sc_val = _score_row(r, in_and=in_and)
+                custom_scores[doc_id] = round(sc_val, 4)
+                candidates.append((sc_val, -len(str(r["ref"] or "")), r))
+            candidates.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            rows = [r for _, _, r in candidates[offset : offset + limit]]
 
         hits: list[StatuteHit] = []
         for r in rows:
@@ -1515,7 +1643,11 @@ class SqliteStore:
                 for cr in conc
             ]
             # SQLite bm25() returns negative scores (more negative = better match)
-            score = max(0.0, -float(r["fts_rank"]))
+            score = custom_scores.get(str(r["doc_id"]))
+            if score is None:
+                score = max(0.0, -float(r["fts_rank"]))
+                if prefer_in_force and r["status"] == "in_force":
+                    score += 0.5
             hits.append(
                 StatuteHit(
                     doc_id=str(r["doc_id"]),
@@ -1608,14 +1740,37 @@ class SqliteStore:
             where.append("lower(coalesce(jm.case_type,'')) LIKE ?")
             params.append(f"%{case_type.strip().lower()}%")
 
+        has_structured_filter = any(
+            [court, judge, author_judge, party, min_bench_strength is not None, disposal_nature, case_type]
+        )
+        j_tokens: list[str] = []
+        if query and not has_structured_filter:
+            _, raw_j_tokens = _extract_fts_tokens(query)
+            j_tokens = list(dict.fromkeys(t.lower() for t in raw_j_tokens))
+        apply_trap_filter = len(j_tokens) >= 4
+        fetch_limit = max(limit * 4, 100) if apply_trap_filter else limit
+        fetch_offset = 0 if apply_trap_filter else offset
+
         rows = con.execute(
             "SELECT jm.*, s.name AS src_name, s.url AS src_url, s.license_spdx AS src_license, "
             "s.terms_status AS src_terms_status, s.as_of AS src_as_of "
             f"FROM judgments_meta jm {join_fts}"
             "JOIN sources s ON jm.source_id = s.source_id "
             f"WHERE {' AND '.join(where)} ORDER BY {order_by} LIMIT ? OFFSET ?",
-            [*params, limit, offset],
+            [*params, fetch_limit, fetch_offset],
         ).fetchall()
+        if apply_trap_filter:
+            min_req = _multitoken_min_required(len(j_tokens))
+            filtered_rows = []
+            for r in rows:
+                haystack = (
+                    f"{r['title'] or ''} {r['petitioner'] or ''} {r['respondent'] or ''} "
+                    f"{r['judge_coram'] or ''} {r['neutral_citation'] or ''} "
+                    f"{r['air_citation'] or ''} {r['scc_citation'] or ''}"
+                ).lower()
+                if sum(1 for tok in j_tokens if _token_matches_boundary(tok, haystack)) >= min_req:
+                    filtered_rows.append(r)
+            rows = filtered_rows[offset : offset + limit]
         return [self._meta_to_card(self._row_to_judgment_meta(r), matched_via="metadata") for r in rows]
 
     def list_courts(self, query: str | None = None) -> list[CourtInfo]:

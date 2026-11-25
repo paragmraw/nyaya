@@ -10,7 +10,13 @@ import pytest
 
 from nyaya.exceptions import PdfFetchError
 from nyaya.models import JudgmentMeta, SourceProvenance
-from nyaya.storage.pdf_fetcher import MAX_PDF_BYTES, DirectS3PdfFetcher, validate_s3_pdf_target
+from nyaya.storage.pdf_fetcher import (
+    MAX_PDF_BYTES,
+    DirectS3PdfFetcher,
+    _clean_pdf_text,
+    _split_paragraphs,
+    validate_s3_pdf_target,
+)
 from tests.fixtures.mini_corpus.builder import make_minimal_pdf
 
 
@@ -180,5 +186,85 @@ async def test_pdf_fetcher_default_client_instantiation_and_offline_error(tmp_pa
         with pytest.raises(PdfFetchError) as exc_info:
             await fetcher.fetch_and_read(_meta(), mode="overview")
         assert exc_info.value.reason == "http_error"
+    finally:
+        await fetcher.aclose()
+
+
+def test_clean_pdf_text_strips_scr_headers_and_repairs_ligatures() -> None:
+    raw = (
+        "123 SUPREME COURT REPORTS [2024] 1 S.C.R.\r\n"
+        "[2024] 1 S.C.R. 123\r\n"
+        "[45]\r\n"
+        "The Offi cer found Insuffi ciently suffici ent and diff erent evidence. "
+        "It refl ected eff ective affi rmation of the specifi c confi rmation. "
+        "Signifi cant notifi cation was classifi ed, qualifi ed, identifi ed, and fulfi lled "
+        "despite diffi culty over the off ence and profi t defi nition. "
+        "The certifi cate was veri fied and modifi ed after FI NDING was fi led as fi nal "
+        "without confl ict. 456 SUPREME COURT REPORTS [2023] 2 S.C.R. Next sentence."
+    )
+    cleaned = _clean_pdf_text(raw)
+    assert "SUPREME COURT REPORTS" not in cleaned
+    assert "[2024] 1 S.C.R." not in cleaned
+    assert "\n[45]\n" not in cleaned
+    assert "Officer" in cleaned
+    assert "Insufficiently" in cleaned
+    assert "sufficient" in cleaned
+    assert "different" in cleaned
+    assert "reflected" in cleaned
+    assert "effective" in cleaned
+    assert "affirmation" in cleaned
+    assert "specific" in cleaned
+    assert "confirmation" in cleaned
+    assert "Significant" in cleaned
+    assert "notification" in cleaned
+    assert "classified" in cleaned
+    assert "qualified" in cleaned
+    assert "identified" in cleaned
+    assert "fulfilled" in cleaned
+    assert "difficulty" in cleaned
+    assert "offence" in cleaned
+    assert "profit" in cleaned
+    assert "definition" in cleaned
+    assert "certificate" in cleaned
+    assert "verified" in cleaned
+    assert "modified" in cleaned
+    assert "FINDING" in cleaned
+    assert "filed" in cleaned
+    assert "final" in cleaned
+    assert "conflict" in cleaned
+    assert "Next sentence." in cleaned
+
+
+def test_split_paragraphs_splits_mega_blob_under_1400() -> None:
+    mega_p1 = "\n\n".join(
+        [f"HEADING {i}\n" + ("This is a long legal sentence in the preamble. " * 20) for i in range(15)]
+    )
+    assert len(mega_p1) > 10_000
+    paras = _split_paragraphs([mega_p1, "1. First numbered paragraph."])
+    assert len(paras) > 5
+    assert all(len(p) <= 1400 for p in paras)
+    assert paras[-1].startswith("1. First numbered paragraph.")
+
+
+async def test_overview_skips_leading_header_noise_when_numbered_paras_follow(tmp_path: Path) -> None:
+    pdf_bytes = make_minimal_pdf(
+        [
+            "IN THE SUPREME COURT OF INDIA\nCIVIL APPELLATE JURISDICTION\n\n"
+            "FOR THE APPELLANT: Mr. Senior Counsel, Adv.\nFOR THE RESPONDENT: Ms. Counsel, Adv.\n\n"
+            "1. Leave granted. This appeal arises out of a dispute under Section 138 of the NI Act.\n"
+            "2. The High Court dismissed the petition without appreciating the settled legal position.\n"
+            "3. Accordingly, the appeal is allowed and the impugned judgment is set aside.",
+        ]
+    )
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, content=pdf_bytes)),
+        follow_redirects=False,
+    )
+    fetcher = DirectS3PdfFetcher(cache_dir=tmp_path / "overview_skip", client=client)
+    try:
+        res = await fetcher.fetch_and_read(_meta(), mode="overview")
+        assert res.excerpts
+        assert res.excerpts[0].text.startswith("1. Leave granted.")
+        assert res.excerpts[0].para_num == 2
     finally:
         await fetcher.aclose()

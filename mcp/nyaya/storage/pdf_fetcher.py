@@ -44,6 +44,109 @@ _PARA_SPLIT_RE = re.compile(
     r"(?m)(?=^\s*(?:\d{1,4}\.|\[\d{1,4}\]|\(\d{1,4}\))\s+)"
 )
 
+_SCR_HEADER_LINE_1_RE = re.compile(
+    r"(?im)^\s*(?:\d+\s+)?SUPREME\s+COURT\s+REPORTS\s*\[\d{4}\][^\n]*$"
+)
+_SCR_HEADER_LINE_2_RE = re.compile(
+    r"(?im)^\s*\[\d{4}\]\s+\d+\s+S\.?C\.?R\.?[^\n]*$"
+)
+_SCR_HEADER_INLINE_RE = re.compile(
+    r"(?i)\d+\s+SUPREME\s+COURT\s+REPORTS\s+\[\d{4}\]\s+\d+\s+S\.?C\.?R\.?\s*"
+)
+_ISOLATED_PAGE_NUM_RE = re.compile(r"(?m)^\s*\[\d+\]\s*$")
+_MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
+
+# Case-preserving PDF ligature space-dropout repairs (fi/fl/ff/ffi/ffl).
+_LIGATURE_REPAIRS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(rf"\b({left})\s+({right})\b", re.IGNORECASE)
+    for left, right in (
+        (r"(?:in)?suffi", r"cient(?:ly|cy)?|ce|ces"),
+        (r"(?:in)?suffici", r"ent(?:ly|cy)?"),
+        (r"(?:in)?su", r"ffi(?:cient(?:ly|cy)?|ce|ces)"),
+        (r"diff", r"eren(?:ce|ces|t|tly|tiate|tiated|tial)"),
+        (r"diffi", r"cult(?:y|ies)?"),
+        (r"(?:in|un)?eff", r"ect(?:ive|ively|iveness|s|ed|ing|uate|uated)?"),
+        (r"effi", r"cien(?:t|tly|cy)|cac(?:y|ious)"),
+        (r"(?:re)?refl", r"ect(?:s|ed|ing|ion|ions|ive)?"),
+        (r"(?:re)?affi", r"rm(?:s|ed|ing|ation|ative|atively)?|davit(?:s)?"),
+        (r"(?:re)?af", r"firm(?:s|ed|ing|ation|ative|atively)?"),
+        (r"(?:un)?offi", r"c(?:e|es|er|ers|ial|ials|ially|iate|iating)"),
+        (r"(?:un)?speci", r"fi(?:c|cally|city|ed|es|cation|cations)"),
+        (r"(?:un)?specifi", r"c(?:ally|ity)?|ed|es|cation(?:s)?"),
+        (r"(?:un)?confi", r"rm(?:s|ed|ing|ation|atory)?|d(?:e|ed|ence|ent|ential|entiality)"),
+        (r"(?:in)?signi", r"fi(?:cant|cantly|cance)"),
+        (r"(?:in)?signifi", r"can(?:t|tly|ce)"),
+        (r"noti", r"fi(?:ed|es|cation|cations|able)"),
+        (r"notifi", r"ed|es|cation(?:s)?|able"),
+        (r"(?:de|re|un)?classi", r"fi(?:ed|es|cation|cations|able)"),
+        (r"(?:de|re|un)?classifi", r"ed|es|cation(?:s)?|able"),
+        (r"(?:dis|un)?quali", r"fi(?:ed|es|cation|cations|ying)"),
+        (r"(?:dis|un)?qualifi", r"ed|es|cation(?:s)?|ying"),
+        (r"(?:un)?identi", r"fi(?:ed|es|cation|able)"),
+        (r"(?:un)?identifi", r"ed|es|cation|able"),
+        (r"(?:un)?fulfi", r"l(?:l|led|ling|ment|lment|s)?"),
+        (r"off", r"en(?:ce|ces|d|ded|der|ders|ding|se|ses|sive)"),
+        (r"(?:non|un)?profi", r"t(?:s|ed|ing|able|ability)?"),
+        (r"(?:in|re|un)?defi", r"n(?:e|ed|es|ing|ite|itely|ition|itions|itive|itively)"),
+        (r"certi", r"fi(?:ed|es|cate|cates|cation|cations)"),
+        (r"certifi", r"ed|es|cate(?:s)?|cation(?:s)?"),
+        (r"(?:un)?veri", r"fi(?:ed|es|cation|able)"),
+        (r"(?:un)?verifi", r"ed|es|cation|able"),
+        (r"(?:un)?modi", r"fi(?:ed|es|cation|cations|able)"),
+        (r"(?:un)?modifi", r"ed|es|cation(?:s)?|able"),
+        (r"fi", r"nd(?:s|ing|ings)?|l(?:e|ed|es|ing|ings)|nal(?:ly|ity|ize|ized|ise|ised)?|rst|ve|x(?:ed|es|ing)?"),
+        (r"confl", r"ict(?:s|ed|ing)?"),
+        (r"benefi", r"t(?:s|ted|ting)?|cial(?:ly)?|ciar(?:y|ies)"),
+        (r"plainti", r"ff(?:s)?"),
+        (r"(?:un)?justi", r"fi(?:ed|es|cation|able)"),
+        (r"(?:un)?justifi", r"ed|es|cation|able"),
+        (r"(?:dis)?satis", r"fi(?:ed|es)"),
+        (r"(?:dis)?satisfi", r"ed|es"),
+        (r"clari", r"fi(?:ed|es|cation)"),
+        (r"clarifi", r"ed|es|cation"),
+        (r"rati", r"fi(?:ed|es|cation)"),
+        (r"ratifi", r"ed|es|cation"),
+        (r"recti", r"fi(?:ed|es|cation)"),
+        (r"rectifi", r"ed|es|cation"),
+        (r"nulli", r"fi(?:ed|es|cation)"),
+        (r"nullifi", r"ed|es|cation"),
+        (r"testi", r"fi(?:ed|es)"),
+        (r"testifi", r"ed|es"),
+    )
+)
+
+_MAX_PARAGRAPH_CHARS = 1800
+_CHUNK_TARGET_CHARS = 1400
+_HEADING_SPLIT_RE = re.compile(
+    r"(?m)(?=^\s*(?:JUDGMENT|ORDER|O\s*R\s*D\s*E\s*R|J\s*U\s*D\s*G\s*M\s*E\s*N\s*T|"
+    r"HELD|FACTS|ISSUES?|CONCLUSION|BACKGROUND|SUBMISSIONS?|HEADNOTE|INDEX|APPEARANCES?)\b)"
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+_NUMBERED_PARA_START_RE = re.compile(r"^\s*(?:\d{1,4}\.|\[\d{1,4}\]|\(\d{1,4}\))\s+\S")
+_HEADER_NOISE_CUE_RE = re.compile(
+    r"(?i)\b(?:supreme\s+court\s+of\s+india|high\s+court\s+of|civil\s+appellate\s+jurisdiction|"
+    r"criminal\s+appellate\s+jurisdiction|original\s+jurisdiction|reportable|non-?reportable|"
+    r"for\s+the\s+appellant|for\s+the\s+respondent|for\s+the\s+petitioner|appearances?|"
+    r"counsel\s+for|advocate|coram\s*:|bench\s*:|case\s+no\.|civil\s+appeal\s+no\.|"
+    r"criminal\s+appeal\s+no\.|writ\s+petition|special\s+leave\s+petition|versus|appellant\(?s\)?|"
+    r"respondent\(?s\)?|date\s+of\s+judgment|index|headnote)\b"
+)
+
+
+def _clean_pdf_text(text: str) -> str:
+    """Normalize line endings, strip SCR running headers/footers, and repair ligature splits."""
+    if not text:
+        return ""
+    cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = _SCR_HEADER_LINE_1_RE.sub("", cleaned)
+    cleaned = _SCR_HEADER_LINE_2_RE.sub("", cleaned)
+    cleaned = _SCR_HEADER_INLINE_RE.sub("", cleaned)
+    cleaned = _ISOLATED_PAGE_NUM_RE.sub("", cleaned)
+    for pat in _LIGATURE_REPAIRS:
+        cleaned = pat.sub(r"\1\2", cleaned)
+    cleaned = _MULTI_NEWLINE_RE.sub("\n\n", cleaned)
+    return cleaned.strip()
+
 
 def validate_s3_pdf_target(bucket: str | None, key: str | None) -> str:
     """Strictly validate S3 bucket + key against SSRF/path-traversal and build HTTPS URL."""
@@ -70,14 +173,116 @@ def validate_s3_pdf_target(bucket: str | None, key: str | None) -> str:
     return f"https://{bucket}.s3.ap-south-1.amazonaws.com/{key}"
 
 
+def _split_oversized_block(text: str, *, max_len: int = _CHUNK_TARGET_CHARS) -> list[str]:
+    """Split a single block > _MAX_PARAGRAPH_CHARS into chunks <= max_len along headings/sentences."""
+    pieces: list[str] = []
+    for sub in re.split(r"\n\s*\n", text):
+        sub = sub.strip()
+        if not sub:
+            continue
+        if len(sub) <= max_len:
+            pieces.append(sub)
+            continue
+        # Split on section headings or line breaks first
+        heading_parts = [h.strip() for h in _HEADING_SPLIT_RE.split(sub) if h.strip()]
+        if len(heading_parts) <= 1:
+            heading_parts = [ln.strip() for ln in sub.split("\n") if ln.strip()]
+        for hp in heading_parts:
+            if len(hp) <= max_len:
+                pieces.append(hp)
+                continue
+            # Split on sentence boundaries
+            for sent in _SENTENCE_SPLIT_RE.split(hp):
+                sent = sent.strip()
+                if not sent:
+                    continue
+                if len(sent) <= max_len:
+                    pieces.append(sent)
+                else:
+                    # Hard word-boundary wrap as last resort
+                    words = sent.split()
+                    cur = ""
+                    for w in words:
+                        if not cur:
+                            if len(w) <= max_len:
+                                cur = w
+                            else:
+                                for i in range(0, len(w), max_len):
+                                    pieces.append(w[i : i + max_len])
+                        elif len(cur) + 1 + len(w) <= max_len:
+                            cur = f"{cur} {w}"
+                        else:
+                            pieces.append(cur)
+                            cur = w if len(w) <= max_len else ""
+                            if not cur:
+                                for i in range(0, len(w), max_len):
+                                    pieces.append(w[i : i + max_len])
+                    if cur:
+                        pieces.append(cur)
+
+    # Greedily pack smaller pieces into chunks <= max_len
+    packed: list[str] = []
+    buf = ""
+    for piece in pieces:
+        if not buf:
+            buf = piece
+        elif len(buf) + 2 + len(piece) <= max_len:
+            buf = f"{buf}\n\n{piece}"
+        else:
+            packed.append(buf)
+            buf = piece
+    if buf:
+        packed.append(buf)
+    return packed
+
+
 def _split_paragraphs(pages: list[str]) -> list[str]:
-    joined = "\n\n".join(p.strip() for p in pages if p.strip())
+    cleaned_pages = [_clean_pdf_text(p) for p in pages]
+    joined = "\n\n".join(p for p in cleaned_pages if p)
     if not joined:
         return []
     parts = [p.strip() for p in _PARA_SPLIT_RE.split(joined) if p.strip()]
     if len(parts) <= 1:
         parts = [p.strip() for p in re.split(r"\n\s*\n", joined) if p.strip()]
-    return parts
+    out: list[str] = []
+    for part in parts:
+        if len(part) > _MAX_PARAGRAPH_CHARS:
+            out.extend(_split_oversized_block(part, max_len=_CHUNK_TARGET_CHARS))
+        else:
+            out.append(part)
+    return out
+
+
+def _is_header_noise(para: str) -> bool:
+    """Return True if a leading paragraph looks like pure index/counsel-appearance header noise."""
+    if _NUMBERED_PARA_START_RE.match(para):
+        return False
+    # Never drop if it looks like substantive judgment prose
+    if re.search(
+        r"(?i)\b(?:leave\s+granted|this\s+appeal|heard\s+learned\s+counsel|"
+        r"the\s+question\s+(?:that\s+)?arises|we\s+have\s+heard)\b",
+        para,
+    ):
+        return False
+    return bool(_HEADER_NOISE_CUE_RE.search(para)) or len(para) <= 180
+
+
+def _overview_start_index(paragraphs: list[str]) -> int:
+    """Find opening substantive paragraph index, skipping leading header noise only if numbered paras follow."""
+    if not paragraphs:
+        return 0
+    if _NUMBERED_PARA_START_RE.match(paragraphs[0]):
+        return 0
+    first_numbered: int | None = None
+    for idx, p in enumerate(paragraphs):
+        if _NUMBERED_PARA_START_RE.match(p) and len(p) >= 25:
+            first_numbered = idx
+            break
+    if first_numbered is None or first_numbered == 0:
+        return 0
+    if all(_is_header_noise(paragraphs[i]) for i in range(first_numbered)):
+        return first_numbered
+    return 0
 
 
 def _extract_pdf_sync(
@@ -121,13 +326,15 @@ def _extract_pdf_sync(
         if chars_per_page < MIN_CHARS_PER_PAGE or printable_ratio < MIN_PRINTABLE_RATIO:
             quality = "scanned_image_only"
             paragraphs: list[str] = []
+            cleaned_pages = pages_text
         else:
             quality = "truncated" if truncated_pages else "verified"
             paragraphs = _split_paragraphs(pages_text)
+            cleaned_pages = [_clean_pdf_text(p) for p in pages_text]
 
         return {
             "total_pages": total_pages,
-            "pages": pages_text,
+            "pages": cleaned_pages,
             "paragraphs": paragraphs,
             "chars_per_page": round(chars_per_page, 2),
             "extraction_quality": quality,
@@ -350,8 +557,10 @@ class DirectS3PdfFetcher:
         budget = max(1000, min(int(max_chars), 30_000))
 
         if mode == "overview":
-            head = [(i + 1, paragraphs[i]) for i in range(min(8, total_paras))]
-            tail_start = max(len(head), total_paras - 8)
+            start_idx = _overview_start_index(paragraphs)
+            head_end = min(start_idx + 8, total_paras)
+            head = [(i + 1, paragraphs[i]) for i in range(start_idx, head_end)]
+            tail_start = max(head_end, total_paras - 8)
             tail = [(i + 1, paragraphs[i]) for i in range(tail_start, total_paras)]
             used = 0
             for pnum, txt in head + tail:

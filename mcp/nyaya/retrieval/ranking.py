@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Callable, Sequence
 from typing import TypeVar
@@ -135,11 +136,18 @@ def rank_judgment_cards(
         stamped.sort(key=lambda c: rrf_scores.get(c.case_id, 0.0), reverse=True)
     else:
         # Default: authority_relevance
+        def _eff(c: JudgmentCard) -> float:
+            return rrf_scores.get(c.case_id, 0.0) * (
+                1.0
+                + 0.18 * math.log1p(max(0, c.cited_by_count or 0))
+                + 0.04 * min(max(0, c.bench_strength or 0), 13)
+            )
+
         stamped.sort(
             key=lambda c: (
                 _AUTHORITY_WEIGHTS.get(c.authority_level, 2),
                 1 if c.matched_via == "direct" else 0,
-                rrf_scores.get(c.case_id, 0.0),
+                round(_eff(c), 6),
                 c.bench_strength or 0,
                 c.cited_by_count or 0,
             ),

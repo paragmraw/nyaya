@@ -20,12 +20,18 @@ from ..models import (
     StatuteHit,
     StatuteSearchQuery,
     StatuteSearchResponse,
+    TextAvailability,
 )
 from ..storage.duckdb_store import DuckDBStore
 from ..storage.lance_store import LanceStore
 from ..storage.memory_backend import InMemoryCorpusBackend
 from ..storage.protocols import CorpusBackend
-from ..storage.sqlite_store import SqliteStore, _extract_fts_tokens
+from ..storage.sqlite_store import (
+    SqliteStore,
+    _extract_fts_tokens,
+    _multitoken_min_required,
+    _token_matches_boundary,
+)
 from .query_analyzer import analyze_query
 from .ranking import (
     apply_definition_promotion,
@@ -84,6 +90,77 @@ def _lance_row_to_statute_hit(row: dict[str, Any]) -> StatuteHit:
     )
 
 
+_DATTAM_SOURCES = frozenset(
+    {"dattam_sc_judgments", "dattam-sc", "dattam_hc_judgments", "dattam-hc"}
+)
+
+
+def _canonical_judgment_key(card: JudgmentCard) -> str:
+    if card.cnr and card.cnr.strip():
+        return f"cnr:{card.cnr.strip().upper()}"
+    if card.neutral_citation and card.neutral_citation.strip():
+        return f"nc:{card.neutral_citation.strip().upper()}"
+    return f"id:{card.case_id}"
+
+
+def _dedup_cards(cards: list[JudgmentCard]) -> list[JudgmentCard]:
+    seen: set[str] = set()
+    out: list[JudgmentCard] = []
+    for c in cards:
+        key = _canonical_judgment_key(c)
+        if key not in seen:
+            seen.add(key)
+            out.append(c)
+    return out
+
+
+def _enrich_cards_from_meta(
+    cards: list[JudgmentCard],
+    meta_cards: list[JudgmentCard],
+) -> list[JudgmentCard]:
+    if not cards or not meta_cards:
+        return cards
+    by_case_id: dict[str, JudgmentCard] = {}
+    by_cnr: dict[str, JudgmentCard] = {}
+    by_nc: dict[str, JudgmentCard] = {}
+    for m in meta_cards:
+        if m.case_id and m.case_id not in by_case_id:
+            by_case_id[m.case_id] = m
+        if m.cnr and m.cnr.strip():
+            by_cnr.setdefault(m.cnr.strip().upper(), m)
+        if m.neutral_citation and m.neutral_citation.strip():
+            by_nc.setdefault(m.neutral_citation.strip().upper(), m)
+
+    enriched: list[JudgmentCard] = []
+    for c in cards:
+        match = by_case_id.get(c.case_id)
+        if match is None and c.cnr and c.cnr.strip():
+            match = by_cnr.get(c.cnr.strip().upper())
+        if match is None and c.neutral_citation and c.neutral_citation.strip():
+            match = by_nc.get(c.neutral_citation.strip().upper())
+        if match is None:
+            enriched.append(c)
+            continue
+
+        updates: dict[str, Any] = {}
+        if c.cnr is None and match.cnr:
+            updates["cnr"] = match.cnr
+        if match.cited_by_count is not None and (
+            c.cited_by_count is None or match.cited_by_count > c.cited_by_count
+        ):
+            updates["cited_by_count"] = match.cited_by_count
+        if match.bench_strength is not None and (
+            c.bench_strength is None or match.bench_strength > c.bench_strength
+        ):
+            updates["bench_strength"] = match.bench_strength
+        if not c.reporter_citations and match.reporter_citations:
+            updates["reporter_citations"] = list(match.reporter_citations)
+        if not c.coram and match.coram:
+            updates["coram"] = list(match.coram)
+        enriched.append(c.model_copy(update=updates) if updates else c)
+    return enriched
+
+
 def _lance_row_to_judgment_card(
     row: dict[str, Any],
     *,
@@ -102,12 +179,20 @@ def _lance_row_to_judgment_card(
         if tier == "supreme_court"
         else str(row.get("court_name") or court_code or "High Court")
     )
+    title_str = str(row.get("title") or "Untitled")
+    text_str = str(row.get("text") or "")
+    source_id = str(row.get("source_id") or ("dattam-sc" if tier == "supreme_court" else "dattam-hc"))
+    text_avail: TextAvailability = (
+        "on_demand_s3_pdf"
+        if source_id in _DATTAM_SOURCES and len(text_str) <= len(title_str) + 60
+        else "indexed_bm25"
+    )
     return JudgmentCard(
         case_id=str(row["case_id"]),
         cnr=row.get("cnr") or None,
         neutral_citation=row.get("neutral_citation") or None,
         reporter_citations=reps,
-        title=str(row.get("title") or "Untitled"),
+        title=title_str,
         court=court_name,
         court_code=court_code,
         court_tier=tier,
@@ -118,10 +203,10 @@ def _lance_row_to_judgment_card(
         disposal_nature=row.get("disposal_nature"),
         acts_cited=[str(a) for a in (row.get("acts_cited") or [])],
         matched_via=matched_via,  # type: ignore[arg-type]
-        snippet=str(row.get("text") or "")[:450],
-        text_availability="indexed_bm25",
+        snippet=text_str[:450],
+        text_availability=text_avail,
         provenance=SourceProvenance(
-            source_id=str(row.get("source_id") or ("dattam-sc" if tier == "supreme_court" else "dattam-hc")),
+            source_id=source_id,
             source_name="Dattam Labs Judgments",
             source_url=str(row.get("source_url") or "https://aws.amazon.com/opendata"),
             license_spdx=str(row.get("license_spdx") or "CC-BY-4.0"),
@@ -214,9 +299,10 @@ class LexicalRetrievalEngine:
                 act=q.act,
                 jurisdiction=q.jurisdiction,
                 kind=q.kind,
+                category=q.category,
                 status=q.status,
                 exact_phrase=(q.query_mode == "exact_phrase"),
-                limit=max(25, offset + limit),
+                limit=max(50, offset + limit),
                 offset=0,
                 commercial_safe_only=cs_only,
             )
@@ -225,7 +311,7 @@ class LexicalRetrievalEngine:
                 q.query,
                 act=q.act,
                 commercial_safe_only=cs_only,
-                limit=max(25, offset + limit),
+                limit=max(50, offset + limit),
             )
 
         # 3. LanceDB State Acts & Regulators FTS
@@ -245,20 +331,22 @@ class LexicalRetrievalEngine:
             except StorageUnavailable:
                 degraded.append("lance_fts")
 
-        # Stopword-aware multi-token overlap guard to suppress LanceDB OR-noise on out-of-corpus queries
+        # Stopword-aware multi-token word-boundary overlap guard to suppress LanceDB OR-noise
         if lance_hits and q.query_mode != "exact_phrase" and not exact_hits and not q.act:
             _, raw_content_tokens = _extract_fts_tokens(q.query)
             content_tokens = list(dict.fromkeys(t.lower() for t in raw_content_tokens))
             if len(content_tokens) >= 2:
-                min_matches = min(2, len(content_tokens))
-                needles = [tok[:5] if len(tok) >= 6 else tok for tok in content_tokens]
+                min_matches = _multitoken_min_required(len(content_tokens))
                 lance_hits = [
                     lh
                     for lh in lance_hits
                     if sum(
                         1
-                        for needle in needles
-                        if needle in f"{lh.act} {lh.ref} {lh.title or ''} {lh.snippet}".lower()
+                        for tok in content_tokens
+                        if _token_matches_boundary(
+                            tok,
+                            f"{lh.act} {lh.ref} {lh.title or ''} {lh.snippet}".lower(),
+                        )
                     )
                     >= min_matches
                 ]
@@ -296,13 +384,52 @@ class LexicalRetrievalEngine:
             elif act_matched:
                 lance_promoted.append(lh)
 
+        # Lookup practitioner-shorthand / pari-materia equivalent statutory provisions
+        equiv_hits: list[StatuteHit] = []
+        if not q.category or q.category == "central_act":
+            canon_q_act = alias_map.get(q.act.strip().lower(), q.act.strip()) if q.act else None
+            for s_act, s_ref in analyzed.equivalent_statute_refs:
+                if canon_q_act and canon_q_act.lower() not in {
+                    s_act.lower(),
+                    alias_map.get(s_act.lower(), "").lower(),
+                }:
+                    continue
+                rec = self.backend.get_provision(
+                    s_act,
+                    s_ref,
+                    jurisdiction=q.jurisdiction,
+                    include_links=False,
+                    commercial_safe_only=cs_only,
+                )
+                if rec is not None and rec.doc_id not in exact_doc_ids:
+                    if q.status != "all" and rec.validity.status != q.status:
+                        continue
+                    equiv_hits.append(
+                        StatuteHit(
+                            doc_id=rec.doc_id,
+                            act=rec.act,
+                            jurisdiction=rec.jurisdiction,
+                            kind=rec.kind,
+                            ref=rec.ref,
+                            title=rec.title,
+                            status=rec.validity.status,
+                            replaced_by=rec.validity.replaced_by,
+                            snippet=rec.text[:400],
+                            bm25_score=50.0,
+                            provenance=rec.provenance,
+                        )
+                    )
+
         # 4. Weighted RRF (k=60) + definition promotion + exact-citation top-3 floor
+        sql_w = 1.2 if (q.category is None and q.jurisdiction is None) else 1.0
+        lance_w = 0.75 if (q.category is None and q.jurisdiction is None) else 0.95
         fused_pairs = reciprocal_rank_fusion(
             [
                 (1.5, exact_hits),
                 (1.15, lance_promoted),
-                (1.0, sqlite_hits),
-                (0.95, lance_hits),
+                (1.1, equiv_hits),
+                (sql_w, sqlite_hits),
+                (lance_w, lance_hits),
             ],
             key_fn=lambda h: h.doc_id,
             k=60,
@@ -424,7 +551,7 @@ class LexicalRetrievalEngine:
                         author_judge=q.author_judge,
                         min_bench_strength=q.min_bench_strength,
                         commercial_safe_only=cs_only,
-                        limit=20,
+                        limit=30,
                     ):
                         lance_direct.append(_lance_row_to_judgment_card(r, tier="supreme_court", matched_via="direct"))
                 if base_q and tier in ("all", "high_court"):
@@ -442,7 +569,7 @@ class LexicalRetrievalEngine:
                         min_bench_strength=q.min_bench_strength,
                         disposal_nature=q.disposal_nature,
                         commercial_safe_only=cs_only,
-                        limit=20,
+                        limit=30,
                     ):
                         lance_direct.append(_lance_row_to_judgment_card(r, tier="high_court", matched_via="direct"))
 
@@ -460,6 +587,32 @@ class LexicalRetrievalEngine:
                             )
             except StorageUnavailable:
                 degraded.append("lance_fts")
+
+        # Multi-token word-boundary precision guard for LanceDB direct judgment hits
+        if lance_direct and q.query and not exact_cards:
+            _, raw_j_tokens = _extract_fts_tokens(q.query)
+            j_tokens = list(dict.fromkeys(t.lower() for t in raw_j_tokens))
+            if len(j_tokens) >= 4:
+                min_j_matches = _multitoken_min_required(len(j_tokens))
+                lance_direct = [
+                    card
+                    for card in lance_direct
+                    if sum(
+                        1
+                        for tok in j_tokens
+                        if _token_matches_boundary(
+                            tok,
+                            (
+                                f"{card.title} {card.court} {card.court_code or ''} "
+                                f"{card.bench or ''} {card.author_judge or ''} "
+                                f"{card.neutral_citation or ''} {' '.join(card.reporter_citations)} "
+                                f"{' '.join(card.acts_cited)} {card.decision_date or ''} "
+                                f"{card.disposal_nature or ''} {card.snippet or ''}"
+                            ).lower(),
+                        )
+                    )
+                    >= min_j_matches
+                ]
 
         # 4. DuckDB Parquet metadata search when targeting specific tiers or metadata filters
         duck_cards: list[JudgmentCard] = []
@@ -521,7 +674,25 @@ class LexicalRetrievalEngine:
                 if not (sqlite_cards or lance_direct or lance_equiv or exact_cards):
                     raise
 
-        # 5. Weighted RRF (k=60), authority ranking, and exact-citation top-3 floor
+        # 5. Enrich metadata across sources, deduplicate by canonical judgment identity,
+        # weighted RRF (k=60), authority ranking, and exact-citation top-3 floor
+        meta_sources = exact_cards + sqlite_cards
+        known_meta_ids = {c.case_id for c in meta_sources}
+        for c in (*lance_direct, *lance_equiv, *duck_cards):
+            if c.case_id and c.case_id not in known_meta_ids and c.cited_by_count is None:
+                known_meta_ids.add(c.case_id)
+                try:
+                    resolved = self.backend.resolve_judgment_id(c.case_id, commercial_safe_only=cs_only)
+                    for m in resolved:
+                        meta_sources.append(SqliteStore._meta_to_card(m, matched_via="metadata"))
+                except Exception:
+                    pass
+        exact_cards = _dedup_cards(exact_cards)
+        sqlite_cards = _dedup_cards(sqlite_cards)
+        lance_direct = _dedup_cards(_enrich_cards_from_meta(lance_direct, meta_sources))
+        lance_equiv = _dedup_cards(_enrich_cards_from_meta(lance_equiv, meta_sources))
+        duck_cards = _dedup_cards(_enrich_cards_from_meta(duck_cards, meta_sources))
+
         fused_pairs = reciprocal_rank_fusion(
             [
                 (1.5, exact_cards),
@@ -530,11 +701,11 @@ class LexicalRetrievalEngine:
                 (0.95, lance_equiv),
                 (0.85, duck_cards),
             ],
-            key_fn=lambda c: c.case_id,
+            key_fn=_canonical_judgment_key,
             k=60,
         )
         rrf_scores = {c.case_id: sc for c, sc in fused_pairs}
-        fused_cards = [c for c, _ in fused_pairs]
+        fused_cards = _enrich_cards_from_meta([c for c, _ in fused_pairs], meta_sources)
 
         ranked = rank_judgment_cards(
             fused_cards,
@@ -542,7 +713,9 @@ class LexicalRetrievalEngine:
             binding_for_court=q.binding_for_court,
             sort_by=q.sort_by,
         )
-        ordered = apply_exact_citation_floor(ranked, exact_cards, key_fn=lambda c: c.case_id, floor=3)
+        ordered = apply_exact_citation_floor(
+            ranked, exact_cards, key_fn=_canonical_judgment_key, floor=3
+        )
 
         total = len(ordered)
         page = ordered[offset : offset + limit]

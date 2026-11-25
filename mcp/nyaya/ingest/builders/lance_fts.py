@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
@@ -191,15 +192,34 @@ def _iter_hc_records(
 ) -> Iterator[dict[str, Any]]:
     merged_hc = dedupe_and_merge_hc_rows(bundle.hc_web_rows, bundle.hc_mobile_rows)
     if len(merged_hc) > hot_hc_limit:
-        merged_hc = sorted(
-            merged_hc,
-            key=lambda r: (
-                1 if str(r.get("text") or "").strip() else 0,
-                int(r.get("year") or 0),
-                str(r.get("decision_date") or ""),
-            ),
-            reverse=True,
-        )[:hot_hc_limit]
+        by_court: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for r in merged_hc:
+            if commercial_safe_only and not bool(r.get("commercial_safe", True)):
+                continue
+            cc = str(r.get("court_code") or "HC")
+            by_court[cc].append(r)
+        for court_rows in by_court.values():
+            court_rows.sort(
+                key=lambda r: (
+                    1 if str(r.get("text") or "").strip() else 0,
+                    int(r.get("year") or 0),
+                    str(r.get("decision_date") or ""),
+                ),
+                reverse=True,
+            )
+        court_iters = [iter(by_court[cc]) for cc in sorted(by_court.keys())]
+        selected: list[dict[str, Any]] = []
+        while len(selected) < hot_hc_limit and court_iters:
+            next_iters = []
+            for it in court_iters:
+                item = next(it, None)
+                if item is not None:
+                    selected.append(item)
+                    next_iters.append(it)
+                    if len(selected) >= hot_hc_limit:
+                        break
+            court_iters = next_iters
+        merged_hc = selected
 
     for j in merged_hc:
         comm_safe = bool(j.get("commercial_safe", True))

@@ -573,3 +573,99 @@ async def test_cross_reference_merges_concordance_without_duplicate_edges():
     res_dedup = await tools["cross_reference"].fn(act="IPC", ref="302", direction="both")
     assert res_dedup.total == 1
     assert res_dedup.returned == 1
+
+
+async def test_verify_citations_norm_quote_lance_and_pdf_fallback(monkeypatch: Any) -> None:
+    backend = _build_rich_memory_backend()
+    # Add India Code style superscript and markdown/curly punctuation to IPC 302
+    backend.provisions["ipc-1860:302"] = backend.provisions["ipc-1860:302"].model_copy(
+        update={
+            "text": "1[Whoever commits **murder** shall be punished with \u201cdeath\u201d \u2014 or imprisonment.]"
+        }
+    )
+    jm = backend.judgments["sc:1973:kesavananda"]
+    jm.pdf_s3_bucket = "indian-supreme-court-judgments"
+    jm.pdf_s3_key = "data/pdf/year=1973/english/kesavananda.pdf"
+    storage.set_backend(backend)
+
+    class _FakeLance:
+        def get_judgment_chunks(
+            self, case_id: str, *, commercial_safe_only: bool | None = None
+        ) -> list[dict[str, Any]]:
+            if case_id == "sc:1973:kesavananda":
+                return [
+                    {
+                        "para_start": 42,
+                        "text": "Article 368 does not enable Parliament to alter the basic structure.",
+                    }
+                ]
+            return []
+
+    class _FakeRetrieval:
+        lance = _FakeLance()
+
+    class _FakePdfFetcher:
+        async def fetch_and_read(self, meta: JudgmentMeta, **kwargs: Any) -> JudgmentContent:
+            return JudgmentContent(
+                case_id=meta.case_id,
+                mode=kwargs.get("mode", "search_within"),
+                extraction_quality="verified",
+                extraction_method="pypdfium2_s3_pdf",
+                excerpts=[
+                    JudgmentExcerpt(
+                        para_num=107,
+                        text="Fundamental rights and directive principles form the conscience of the Constitution.",
+                    )
+                ],
+                total_paragraphs=200,
+                total_pages=50,
+                chars_per_page=1500.0,
+            )
+
+        async def aclose(self) -> None:
+            return None
+
+    storage.set_retrieval(_FakeRetrieval())
+    storage.set_pdf_fetcher(_FakePdfFetcher())
+    monkeypatch.delenv("NYAYA_OFFLINE_ONLY", raising=False)
+    from nyaya.config import get_settings
+
+    get_settings.cache_clear()
+
+    try:
+        tools = await _tool_map(_fresh_mcp())
+        res = await tools["verify_citations"].fn(
+            text="Reliance on 2024 INSC 999999.",
+            verify_quotes=[
+                {
+                    "citation": "IPC s. 302",
+                    "quote": '[Whoever commits murder shall be punished with "death" - or imprisonment.]',
+                },
+                {
+                    "citation": "AIR 1973 SC 1461",
+                    "quote": "Article 368 does not enable Parliament to alter the basic structure.",
+                },
+                {
+                    "citation": "AIR 1973 SC 1461",
+                    "quote": "conscience of the Constitution",
+                },
+            ],
+        )
+        assert res.findings[0].raw_citation == "2024 INSC 999999"
+        assert res.findings[0].status == "NOT_FOUND_IN_CORPUS"
+
+        # Quote 1: India Code superscript + curly quote + em-dash + markdown normalized
+        assert res.findings[1].status == "QUOTE_VERIFIED"
+        assert res.findings[1].matched_para_num == 1
+
+        # Quote 2: Verified via LanceDB judgment chunk with exact para_start=42
+        assert res.findings[2].status == "QUOTE_VERIFIED"
+        assert res.findings[2].matched_para_num == 42
+
+        # Quote 3: Verified via PDF search_within fallback with para_num=107
+        assert res.findings[3].status == "QUOTE_VERIFIED"
+        assert res.findings[3].matched_para_num == 107
+        assert res.summary.get("QUOTE_VERIFIED") == 3
+    finally:
+        storage.set_retrieval(None)
+        storage.set_pdf_fetcher(None)

@@ -39,6 +39,14 @@ def test_lance_native_fts_search_across_3_tables(lance_store: LanceStore) -> Non
     assert len(state_hits) >= 1
     assert state_reg_match(state_hits, "SEBI-LODR")
 
+    mh_hits = lance_store.search_state_regulators(
+        "promoter agreement for sale",
+        jurisdiction="Maharashtra",
+        limit=5,
+    )
+    assert len(mh_hits) >= 1
+    assert state_reg_match(mh_hits, "MH-MOFA")
+
 
 def state_reg_match(hits: list[dict], short_name: str) -> bool:
     return any(h.get("short_name") == short_name for h in hits)

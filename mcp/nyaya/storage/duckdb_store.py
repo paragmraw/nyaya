@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import threading
+from collections.abc import Sequence
 from datetime import date as Date
 from pathlib import Path
 from typing import Any
@@ -25,7 +27,8 @@ from ..models import (
     JudgmentCard,
     SourceProvenance,
 )
-from .manifest import CorpusManifest, resolve_partitions
+from .manifest import CorpusManifest, PartitionEntry, resolve_partitions
+from .sqlite_store import _extract_fts_tokens
 
 _ANALYTICS_DATASET_MAP: dict[str, str] = {
     "sc": "supreme_court",
@@ -58,6 +61,83 @@ _ALLOWED_GROUP_BY: dict[str, str] = {
     "district": "district",
     "regulator": "regulator_code",
 }
+
+
+_GROUP_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?:^|[/\\])court=([^/\\]+)"),
+    re.compile(r"(?:^|[/\\])state=([^/\\]+)"),
+    re.compile(r"(?:^|[/\\])forum=([^/\\]+)"),
+    re.compile(r"(?:^|[/\\])regulator=([^/\\]+)"),
+)
+_YEAR_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?:^|[/\\])year=(\d{4})"),
+    re.compile(r"(?:^|[/\\])decade=(\d{4})s?"),
+)
+
+
+def _select_diverse_partitions(
+    partitions: Sequence[str],
+    max_partitions: int = 24,
+    *,
+    manifest_partitions: Sequence[PartitionEntry] | None = None,
+) -> list[str]:
+    """Select up to ``max_partitions`` URIs round-robin across courts/groups, newest year first."""
+    if len(partitions) <= max_partitions:
+        return list(partitions)
+
+    by_suffix: list[tuple[str, PartitionEntry]] = []
+    if manifest_partitions:
+        for p in manifest_partitions:
+            by_suffix.append((p.s3_key.replace("\\", "/"), p))
+
+    grouped: dict[str, list[tuple[int, str]]] = {}
+    for uri in partitions:
+        norm_uri = uri.replace("\\", "/")
+        group_key: str | None = None
+        year_val = 0
+
+        for s3_key, p in by_suffix:
+            if norm_uri == p.public_url or norm_uri.endswith(s3_key):
+                group_key = p.court_code or p.state_code or p.forum_code or p.regulator_code
+                year_val = int(p.year_max or p.year_min or 0)
+                break
+
+        if not group_key:
+            for pat in _GROUP_PATTERNS:
+                m = pat.search(norm_uri)
+                if m:
+                    group_key = m.group(1)
+                    break
+        if not group_key:
+            group_key = norm_uri
+
+        if year_val == 0:
+            for pat in _YEAR_PATTERNS:
+                m = pat.search(norm_uri)
+                if m:
+                    year_val = int(m.group(1))
+                    break
+
+        grouped.setdefault(group_key, []).append((year_val, uri))
+
+    for items in grouped.values():
+        items.sort(key=lambda pair: pair[0], reverse=True)
+
+    selected: list[str] = []
+    group_queues = list(grouped.values())
+    idx = 0
+    while len(selected) < max_partitions:
+        progressed = False
+        for items in group_queues:
+            if idx < len(items):
+                selected.append(items[idx][1])
+                progressed = True
+                if len(selected) >= max_partitions:
+                    break
+        if not progressed:
+            break
+        idx += 1
+    return selected
 
 
 def normalize_duckdb_endpoint(endpoint: str) -> tuple[str, bool]:
@@ -290,7 +370,8 @@ class DuckDBStore:
             year_to=year_to,
         )
 
-        partitions = resolve_partitions(
+        ds_meta = self.manifest.datasets.get(dataset)
+        raw_partitions = resolve_partitions(
             self.manifest,
             dataset,
             court=court,
@@ -301,7 +382,12 @@ class DuckDBStore:
             base_dir=self.base_dir,
             s3_bucket=self.settings.bucket_name if self.settings else None,
             offline_only=self.offline_only,
-        )[:12]
+        )
+        partitions = _select_diverse_partitions(
+            raw_partitions,
+            max_partitions=24,
+            manifest_partitions=ds_meta.partitions if ds_meta else None,
+        )
         if not partitions:
             return [], 0
 
@@ -345,10 +431,46 @@ class DuckDBStore:
         if year_to is not None:
             where.append("year <= ?")
             params.append(int(year_to))
-        if query:
-            qlike = f"%{query.strip().lower()}%"
-            where.append("lower(coalesce(title, '')) LIKE ?")
-            params.append(qlike)
+        if query and query.strip():
+            all_q_tokens, content_q_tokens = _extract_fts_tokens(query)
+            q_tokens = list(dict.fromkeys(t.lower() for t in (content_q_tokens or all_q_tokens)))
+            if q_tokens:
+                _, desc_rows = self._execute_with_timeout(
+                    f"DESCRIBE SELECT * FROM read_parquet([{pq_list}], union_by_name=true)",
+                    require_httpfs=require_httpfs,
+                )
+                avail_cols = {str(r[0]) for r in desc_rows}
+                text_cols = [
+                    c
+                    for c in ("title", "petitioner", "respondent", "case_type", "act", "disposal_nature")
+                    if c in avail_cols
+                ]
+                if text_cols:
+                    concat_args = ", ".join(f"coalesce({c}, '')" for c in text_cols)
+                    haystack_expr = f"lower(concat_ws(' ', {concat_args}))"
+                else:
+                    haystack_expr = "lower(coalesce(title, ''))"
+
+                has_anticipatory_bail = "anticipatory" in q_tokens and "bail" in q_tokens
+                if has_anticipatory_bail:
+                    where.append(
+                        f"((regexp_matches({haystack_expr}, ?) AND regexp_matches({haystack_expr}, ?)) "
+                        f"OR regexp_matches({haystack_expr}, ?))"
+                    )
+                    params.extend(
+                        [
+                            r"(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])",
+                            r"(?:^|[^a-z0-9])bail(?:$|[^a-z0-9])",
+                            r"(?:^|[^a-z0-9])(?:aba|abail|anticipatory\s+bail)(?:$|[^a-z0-9])",
+                        ]
+                    )
+                    remaining_tokens = [t for t in q_tokens if t not in ("anticipatory", "bail")]
+                else:
+                    remaining_tokens = q_tokens
+
+                for tok in remaining_tokens:
+                    where.append(f"regexp_matches({haystack_expr}, ?)")
+                    params.append(rf"(?:^|[^a-z0-9]){re.escape(tok)}(?:$|[^a-z0-9])")
 
         where_sql = " AND ".join(where)
         max_lim = 50 if dataset == "district_court" else 100

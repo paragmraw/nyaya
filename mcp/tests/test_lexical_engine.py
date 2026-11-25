@@ -135,7 +135,7 @@ def test_pari_materia_equivalent_expansion_and_authority_ranking(
         # Binding hierarchy: binding_sc > binding_home_hc > persuasive_other_hc
         all_resp = engine.search_judgments(
             JudgmentSearchQuery(
-                query="Constitution liberty bail rejection",
+                query="Constitution liberty rejection",
                 binding_for_court="DHC",
                 sort_by="authority_relevance",
                 limit=10,
@@ -266,3 +266,125 @@ def test_lance_multitoken_guard_rejects_single_token_noise_keeps_real_queries(
         assert any(h.act == "MH-MOFA" for h in mofa_resp.results)
     finally:
         sqlite.close()
+
+
+def test_p0_shorthand_precision_dedup_and_landmark_ranking(
+    corpus_paths: dict[str, Path],
+    tmp_path: Path,
+) -> None:
+    from datetime import date as Date
+
+    from nyaya.models import JudgmentCard, SourceProvenance
+    from nyaya.retrieval.lexical_engine import _lance_row_to_judgment_card
+    from nyaya.retrieval.query_analyzer import analyze_query
+    from nyaya.retrieval.ranking import rank_judgment_cards
+
+    # 1. Practitioner shorthand expansion in analyze_query
+    q_ab = analyze_query("anticipatory bail standards")
+    assert ("BNSS", "482") in q_ab.equivalent_statute_refs
+    assert ("CrPC", "438") in q_ab.equivalent_statute_refs
+    assert analyze_query("anticipatory bail", act="IPC").equivalent_statute_refs == []
+
+    q_cb = analyze_query("cheque bounce limitation")
+    assert ("NIAct", "138") in q_cb.equivalent_statute_refs
+    q_cd = analyze_query("cheque dishonour notice")
+    assert ("NIAct", "138") in q_cd.equivalent_statute_refs
+    q_rp = analyze_query("application for rejection of plaint")
+    assert ("CPC", "Order 7 Rule 11") in q_rp.equivalent_statute_refs
+
+    # 2. _lance_row_to_judgment_card text_availability for Dattam metadata-only vs full text
+    short_dattam = _lance_row_to_judgment_card(
+        {
+            "case_id": "sc:2024:short",
+            "title": "State v. Respondent",
+            "text": "State v. Respondent decided on 2024-01-01",
+            "source_id": "dattam_sc_judgments",
+        },
+        tier="supreme_court",
+    )
+    assert short_dattam.text_availability == "on_demand_s3_pdf"
+    long_dattam = _lance_row_to_judgment_card(
+        {
+            "case_id": "sc:2024:long",
+            "title": "State v. Respondent",
+            "text": "Detailed constitutional judgment text " + ("x" * 120),
+            "source_id": "dattam_sc_judgments",
+        },
+        tier="supreme_court",
+    )
+    assert long_dattam.text_availability == "indexed_bm25"
+
+    # 3. Landmark prominence & bench strength ranking
+    prov = SourceProvenance(
+        source_id="dattam-sc",
+        source_name="Dattam",
+        source_url="https://example.invalid",
+        license_spdx="CC-BY-4.0",
+        commercial_safe=True,
+        terms_status="cleared",
+        as_of=Date(2026, 11, 22),
+    )
+    minor_sc = JudgmentCard(
+        case_id="sc:minor",
+        title="Minor SC Case",
+        court="Supreme Court of India",
+        court_code="SCI",
+        court_tier="supreme_court",
+        bench_strength=2,
+        cited_by_count=0,
+        provenance=prov,
+    )
+    landmark_sc = JudgmentCard(
+        case_id="sc:landmark",
+        title="Landmark Constitution Bench",
+        court="Supreme Court of India",
+        court_code="SCI",
+        court_tier="supreme_court",
+        bench_strength=13,
+        cited_by_count=1450,
+        provenance=prov,
+    )
+    ranked = rank_judgment_cards(
+        [minor_sc, landmark_sc],
+        {"sc:minor": 0.030, "sc:landmark": 0.025},
+        sort_by="authority_relevance",
+    )
+    assert ranked[0].case_id == "sc:landmark"
+
+    # 4. Precision traps on search_statutes & search_judgments + CNR deduplication
+    settings = _make_settings(corpus_paths["root"], tmp_path / "cache")
+    sqlite = SqliteStore(corpus_paths["sqlite"])
+    lance = LanceStore(local_dir=corpus_paths["lancedb"], offline_only=True)
+    duck = DuckDBStore(
+        manifest=load_manifest(corpus_paths["manifest"]),
+        base_dir=corpus_paths["root"],
+        temp_dir=tmp_path / "duck_tmp_p0",
+        offline_only=True,
+    )
+    engine = build_retrieval_engine(settings, sqlite, lance=lance, duckdb=duck)
+    try:
+        for trap in (
+            "Delaware LLC fiduciary duty",
+            "EU GDPR Article 17 right to erasure",
+            "Martian space mining treaty",
+        ):
+            assert engine.search_statutes(StatuteSearchQuery(query=trap, limit=10)).total == 0
+            assert engine.search_judgments(JudgmentSearchQuery(query=trap, limit=10)).total == 0
+
+        # CNR deduplication & metadata enrichment across SQLite, LanceDB, and DuckDB
+        j_resp = engine.search_judgments(
+            JudgmentSearchQuery(
+                query="Arjun Mehta anticipatory bail Section 438 CrPC",
+                court_tier="high_court",
+                court="DHC",
+                limit=10,
+            )
+        )
+        cnrs = [r.cnr for r in j_resp.results if r.cnr]
+        assert cnrs.count("DLHC010123452024") == 1
+        arjun = next(r for r in j_resp.results if r.cnr == "DLHC010123452024")
+        assert arjun.cited_by_count == 12
+        assert arjun.bench_strength == 2
+    finally:
+        sqlite.close()
+        duck.close()

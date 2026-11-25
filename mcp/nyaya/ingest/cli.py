@@ -294,6 +294,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             else load_staged_ingest_bundle(
                 args.work_dir,
                 commercial_safe_only=bool(args.commercial_safe_only),
+                include_hc=False,
             )
         )
         build_sqlite_core(

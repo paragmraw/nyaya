@@ -88,18 +88,23 @@ _DEFAULT_ALIAS_MAP: dict[str, str] = {
     "ica": "ContractAct",
     "contract act": "ContractAct",
     "indian contract act": "ContractAct",
-    "tpa": "TPA",
-    "transfer of property act": "TPA",
-    "sra": "SRA",
-    "specific relief act": "SRA",
+    "indian contract act, 1872": "ContractAct",
+    "tpa": "TransferOfPropertyAct",
+    "transfer of property act": "TransferOfPropertyAct",
+    "sra": "SpecificReliefAct",
+    "specific relief act": "SpecificReliefAct",
+    "specific relief act, 1963": "SpecificReliefAct",
     "ni act": "NIAct",
+    "niact": "NIAct",
     "negotiable instruments act": "NIAct",
+    "negotiable instruments act, 1881": "NIAct",
     "ibc": "IBC",
     "insolvency and bankruptcy code": "IBC",
     "sarfaesi": "SARFAESI",
-    "arbitration": "Arbitration",
-    "arbitration act": "Arbitration",
-    "arbitration and conciliation act": "Arbitration",
+    "arbitration": "ArbitrationAct",
+    "arbitration act": "ArbitrationAct",
+    "arbitration and conciliation act": "ArbitrationAct",
+    "arbitration and conciliation act, 1996": "ArbitrationAct",
     "consumer protection act": "ConsumerProtection",
     "consumerprotection": "ConsumerProtection",
     "cgst": "CGST",
@@ -112,10 +117,13 @@ _DEFAULT_ALIAS_MAP: dict[str, str] = {
     "uapa": "UAPA",
     "hma": "HMA",
     "hindu marriage act": "HMA",
-    "limitation": "Limitation",
-    "limitation act": "Limitation",
+    "limitation": "LimitationAct",
+    "limitation act": "LimitationAct",
+    "limitation act, 1963": "LimitationAct",
     "rti": "RTI",
     "right to information act": "RTI",
+    "sebi act": "SEBIAct",
+    "sebi act, 1992": "SEBIAct",
     "sebi lodr": "SEBI-LODR",
     "sebi (lodr)": "SEBI-LODR",
     "sebi-lodr": "SEBI-LODR",
@@ -315,17 +323,86 @@ def court_code_variants(raw: str | None) -> tuple[str, ...]:
     return tuple(variants)
 
 
+_JURISDICTION_NAME_MAP: dict[str, str] = {
+    "central": "Central",
+    "union of india": "Central",
+    "andaman and nicobar islands": "AN",
+    "andaman and nicobar": "AN",
+    "andhra pradesh": "AP",
+    "arunachal pradesh": "AR",
+    "assam": "AS",
+    "bihar": "BR",
+    "chandigarh": "CH",
+    "chhattisgarh": "CG",
+    "chattisgarh": "CG",
+    "dadra and nagar haveli and daman and diu": "DN",
+    "dadra and nagar haveli": "DN",
+    "daman and diu": "DN",
+    "delhi": "DL",
+    "nct of delhi": "DL",
+    "national capital territory of delhi": "DL",
+    "new delhi": "DL",
+    "goa": "GA",
+    "gujarat": "GJ",
+    "haryana": "HR",
+    "himachal pradesh": "HP",
+    "jammu and kashmir": "JK",
+    "jharkhand": "JH",
+    "karnataka": "KA",
+    "kerala": "KL",
+    "ladakh": "LA",
+    "lakshadweep": "LD",
+    "madhya pradesh": "MP",
+    "maharashtra": "MH",
+    "manipur": "MN",
+    "meghalaya": "ML",
+    "mizoram": "MZ",
+    "nagaland": "NL",
+    "odisha": "OD",
+    "orissa": "OD",
+    "puducherry": "PY",
+    "pondicherry": "PY",
+    "punjab": "PB",
+    "rajasthan": "RJ",
+    "sikkim": "SK",
+    "tamil nadu": "TN",
+    "telangana": "TS",
+    "tripura": "TR",
+    "uttar pradesh": "UP",
+    "uttarakhand": "UK",
+    "uttaranchal": "UK",
+    "west bengal": "WB",
+}
+
+
+def normalize_jurisdiction(jurisdiction: str | None) -> str | None:
+    """Map full Indian state/UT names case-insensitively to canonical codes, preserving short codes."""
+    if not jurisdiction:
+        return None
+    cleaned = BIDI_RE.sub("", strip_control_chars(jurisdiction)).strip()
+    if not cleaned:
+        return None
+    key = re.sub(
+        r"\s+",
+        " ",
+        cleaned.lower().replace("&", " and ").replace("-", " "),
+    ).strip()
+    if key in _JURISDICTION_NAME_MAP:
+        return _JURISDICTION_NAME_MAP[key]
+    return cleaned
+
+
 # Priority 1..11 compiled patterns (applied strictly in order)
 _CNR_RE = re.compile(r"\b([A-Z]{2}[A-Z0-9]{2}\d{2}\d{6}\d{4})\b")
-_SC_NEUTRAL_RE = re.compile(r"\b((?:19|20)\d{2})(?:\s+INSC\s+|:INSC:)(\d{1,5})\b", re.IGNORECASE)
+_SC_NEUTRAL_RE = re.compile(r"\b((?:19|20)\d{2})(?:\s+INSC\s+|:INSC:)(\d{1,7})\b", re.IGNORECASE)
 _HC_NEUTRAL_RE = re.compile(r"\b((?:19|20)\d{2}):([A-Z]{2,6}(?:-[A-Z]{2,4})?):(\d{1,7})\b")
-_AIR_RE = re.compile(r"\bAIR\s+((?:19|20)\d{2})\s+(SC|PC|[A-Z][a-zA-Z&]{1,12})\s+(\d{1,5})\b")
+_AIR_RE = re.compile(r"\bAIR\s+((?:19|20)\d{2})\s+(SC|PC|[A-Z][a-zA-Z&]{1,12})\s+(\d{1,7})\b")
 _SCC_RE = re.compile(
-    r"\(((?:19|20)\d{2})\)\s*(\d{1,2})\s+SCC(?:\s*\((Cri|L&S|Civ|Tax|Supp)\))?\s+(\d{1,5})\b",
+    r"\(((?:19|20)\d{2})\)\s*(\d{1,2})\s+SCC(?:\s*\((Cri|L&S|Civ|Tax|Supp)\))?\s+(\d{1,7})\b",
     re.IGNORECASE,
 )
 _SCR_RE = re.compile(
-    r"[\[(]((?:19|20)\d{2})[\])]\s*(?:(\d{1,2})|(Supp\.?\s*\d?))?\s*S\.?C\.?R\.?\s+(\d{1,5})\b",
+    r"[\[(]((?:19|20)\d{2})[\])]\s*(?:(\d{1,2})|(Supp\.?\s*\d?))?\s*S\.?C\.?R\.?\s+(\d{1,7})\b",
     re.IGNORECASE,
 )
 _OTHER_REPORTER_RE = re.compile(
@@ -341,6 +418,28 @@ _CONST_SCHED_RE = re.compile(
 )
 _CONST_ART_RE = re.compile(
     r"\bArt(?:icle|s)?\.?\s*(\d{1,3}[A-Z]?)((?:\([0-9a-zA-Z]+\)){0,4})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_SINGLE_CPC_RULE_RE = re.compile(
+    r"(?P<rule>\d{1,3}[A-Z]?)(?P<sub>(?:\([0-9a-zA-Z]+\)){0,3})"
+)
+_CPC_PLURAL_RE = re.compile(
+    r"(?:\bCPC\s*,?\s*)?\bO(?:rder)?\.?\s*"
+    r"(?P<order>(?=[IVX\d])(?:X{0,3}(?:IX|IV|V?I{0,3})|\d{1,2}[A-Z]?))\s*,?\s*"
+    r"R(?:ules?|s)\.?\s*"
+    r"(?P<rules>\d{1,3}[A-Z]?(?:\([0-9a-zA-Z]+\)){0,3}"
+    r"(?:\s*(?:,|&|\band\b|\bor\b|r/w|read\s+with|/)\s*(?:R(?:ules?)?\.?\s*)?\d{1,3}[A-Z]?(?:\([0-9a-zA-Z]+\)){0,3})+)"
+    r"(?:\s+(?:of\s+(?:the\s+)?)?(?:CPC|Code\s+of\s+Civil\s+Procedure))?(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+_CPC_INVERTED_RE = re.compile(
+    r"\bR(?:ules?)?\.?\s*"
+    r"(?P<rules>\d{1,3}[A-Z]?(?:\([0-9a-zA-Z]+\)){0,3}"
+    r"(?:\s*(?:,|&|\band\b|\bor\b|r/w|read\s+with|/)\s*(?:R(?:ules?)?\.?\s*)?\d{1,3}[A-Z]?(?:\([0-9a-zA-Z]+\)){0,3})*)"
+    r"(?:\s+of|\s*,)\s*O(?:rder)?\.?\s*"
+    r"(?P<order>(?=[IVX\d])(?:X{0,3}(?:IX|IV|V?I{0,3})|\d{1,2}[A-Z]?))"
+    r"(?!\s*,?\s*R(?:ule)?\.?\s*\d)"
+    r"(?:\s+(?:of\s+(?:the\s+)?)?(?:CPC|Code\s+of\s+Civil\s+Procedure))?(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
 _CPC_ORDER_RULE_RE = re.compile(
@@ -593,23 +692,72 @@ def parse_citations(
                 )
             )
 
-    # 10. CPC Order / Rule
+    # 10. CPC Order / Rule (plural and inverted forms before single Order/Rule)
+    def _emit_cpc_rule(order_raw: str, rule_raw: str, sub: str | None, raw_text: str, span: tuple[int, int]) -> None:
+        order_num = _roman_or_int(order_raw)
+        rule_num = rule_raw.upper()
+        results.append(
+            ParsedCitation(
+                raw_text=raw_text,
+                span=span,
+                kind="cpc_order_rule",
+                canonical_key=f"statute::CPC::O{order_num}-R{rule_num}",
+                act_or_court="CPC",
+                base_ref=f"Order {order_num} Rule {rule_num}",
+                sub_ref=sub,
+                components={"order": order_num, "rule": rule_num},
+            )
+        )
+
+    for m in _CPC_PLURAL_RE.finditer(text):
+        if _claim(m.span()):
+            order_raw = m.group("order")
+            rules_text = m.group("rules")
+            rules_start = m.start("rules")
+            for rm in _SINGLE_CPC_RULE_RE.finditer(rules_text):
+                r_span = (rules_start + rm.start(), rules_start + rm.end())
+                _emit_cpc_rule(
+                    order_raw,
+                    rm.group("rule"),
+                    rm.group("sub") or None,
+                    rm.group(0),
+                    r_span,
+                )
+
+    for m in _CPC_INVERTED_RE.finditer(text):
+        if _claim(m.span()):
+            order_raw = m.group("order")
+            rules_text = m.group("rules")
+            rules_start = m.start("rules")
+            rule_matches = list(_SINGLE_CPC_RULE_RE.finditer(rules_text))
+            if len(rule_matches) <= 1 and rule_matches:
+                rm = rule_matches[0]
+                _emit_cpc_rule(
+                    order_raw,
+                    rm.group("rule"),
+                    rm.group("sub") or None,
+                    m.group(0),
+                    m.span(),
+                )
+            else:
+                for rm in rule_matches:
+                    r_span = (rules_start + rm.start(), rules_start + rm.end())
+                    _emit_cpc_rule(
+                        order_raw,
+                        rm.group("rule"),
+                        rm.group("sub") or None,
+                        rm.group(0),
+                        r_span,
+                    )
+
     for m in _CPC_ORDER_RULE_RE.finditer(text):
         if _claim(m.span()):
-            order_num = _roman_or_int(m.group(1))
-            rule_num = m.group(2).upper()
-            sub = m.group(3) or None
-            results.append(
-                ParsedCitation(
-                    raw_text=m.group(0),
-                    span=m.span(),
-                    kind="cpc_order_rule",
-                    canonical_key=f"statute::CPC::O{order_num}-R{rule_num}",
-                    act_or_court="CPC",
-                    base_ref=f"Order {order_num} Rule {rule_num}",
-                    sub_ref=sub,
-                    components={"order": order_num, "rule": rule_num},
-                )
+            _emit_cpc_rule(
+                m.group(1),
+                m.group(2),
+                m.group(3) or None,
+                m.group(0),
+                m.span(),
             )
 
     # 11. Constitution Amendment
@@ -633,7 +781,7 @@ def parse_citations(
     if act_keys:
         act_alt = "|".join(re.escape(k) for k in act_keys)
         act_before_re = re.compile(
-            rf"(?<![A-Za-z0-9])(?P<act>{act_alt})\s*,?\s*{_MARKER_EXPR}\.?\s*{_CHAIN_EXPR}",
+            rf"(?<![A-Za-z0-9])(?P<act>{act_alt})(?:\s*,?\s*(?:18|19|20)\d{{2}})?\s*,?\s*{_MARKER_EXPR}\.?\s*{_CHAIN_EXPR}",
             re.IGNORECASE,
         )
         sec_before_re = re.compile(

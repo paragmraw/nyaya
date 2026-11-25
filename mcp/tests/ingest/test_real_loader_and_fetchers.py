@@ -341,5 +341,190 @@ def test_staged_loader_builds_and_passes_quality_gate(tmp_path: Path) -> None:
         # State/Regulator parent acts registered with lance_bucket
         mh_acts = store.browse_statute(jurisdiction="MH")
         assert mh_acts.total >= 1
+
+        # Curated provisions & P1 metadata hygiene checks
+        c73 = store.get_provision("ContractAct", "73")
+        assert c73 is not None and "naturally arose in the usual course" in c73.text
+        crpc438 = store.get_provision("CrPC", "438")
+        assert crpc438 is not None and crpc438.validity.commencement_date.isoformat() == "1974-04-01"
+        iea65b = store.get_provision("EvidenceAct", "65B")
+        assert iea65b is not None and "(4)" in iea65b.text and "(5)" in iea65b.text
+        bsa63 = store.get_provision("BSA", "63")
+        assert bsa63 is not None and "(4)" in bsa63.text and "Schedule" in bsa63.text
+        it66a = store.get_provision("ITAct", "66A")
+        assert it66a is not None and it66a.validity.status == "struck_down"
+        cpc_r11 = store.get_provision("CPC", "Order 7 Rule 11")
+        assert cpc_r11 is not None and "(d) where the suit appears" in cpc_r11.text
+
+        # Vaquill header/footnote stripped on idx == 0 & sub-clause inherits parent text
+        assert not bns103.text.startswith("Act:")
+        bns103_1 = store.get_provision("BNS", "103(1)")
+        assert bns103_1 is not None and "(2) When a group of five" in bns103_1.text
+
+        # Source record counts populated (> 0)
+        status = store.corpus_status()
+        counts_by_src = {s.source_id: s.record_count for s in status.sources}
+        assert counts_by_src.get("vaquill_central_legislation", 0) > 0
+        assert counts_by_src.get("dattam_sc_judgments", 0) > 0
+    finally:
+        store.close()
+
+
+def test_p1_series_grouping_vaquill_cleaning_and_sc_cnr_dedup(tmp_path: Path) -> None:
+    """Verify series-aware ArbitrationAct 9 / IBC 14 selection, idx==0 footnote stripping, and SC CNR deduplication."""
+    work_dir = tmp_path / "work2"
+    vq_dir = work_dir / "raw" / "vaquill" / "v2026.08.1"
+    vq_dir.mkdir(parents=True)
+
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                # Arbitration Act s.9 collision: _s009 TOC vs _s009_p0 + _s009_p1 statutory body
+                {
+                    "act_id": "IND_central_1978",
+                    "chunk_id": "IND_central_1978_s009",
+                    "title": "The Arbitration and Conciliation Act, 1996",
+                    "chapter": "VI",
+                    "section_number": "9",
+                    "section_title": "The Arbitration and Conciliation Act, 1996",
+                    "text": (
+                        "Act: The Arbitration and Conciliation Act, 1996 | India | Central | In Force\n"
+                        "Chapter VI: ## _Making of arbitral award_ | "
+                        "Section 29: Decision making\nSection 30: Settlement\nSection 31: Form and contents"
+                    ),
+                    "act_status": "in_force",
+                    "in_force": True,
+                    "section_type": "section",
+                    "year": 1996.0,
+                    "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                },
+                {
+                    "act_id": "IND_central_1978",
+                    "chunk_id": "IND_central_1978_s009_p0",
+                    "title": "The Arbitration and Conciliation Act, 1996",
+                    "chapter": "II",
+                    "section_number": "9",
+                    "section_title": "Interim measures, etc., by Court",
+                    "text": (
+                        "Act: The Arbitration and Conciliation Act, 1996 | India | Central | In Force\n"
+                        "Chapter II: ## _Arbitration agreement_ | Section 9: **Interim measures, etc., by Court**\n"
+                        "1[(1)] A party may, before or during arbitral proceedings apply to a Court for interim measure.\n"
+                        "> 1. Subs. by Act 3 of 2016, s. 5 (w.e.f. 23-10-2015)."
+                    ),
+                    "act_status": "in_force",
+                    "in_force": True,
+                    "section_type": "section",
+                    "year": 1996.0,
+                    "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                },
+                {
+                    "act_id": "IND_central_1978",
+                    "chunk_id": "IND_central_1978_s009_p1",
+                    "title": "The Arbitration and Conciliation Act, 1996",
+                    "chapter": "II",
+                    "section_number": "9",
+                    "section_title": "Interim measures, etc., by Court",
+                    "text": (
+                        "Act: The Arbitration and Conciliation Act, 1996 | India | Central | In Force\n"
+                        "(2) Where the Court passes an order for any interim measure, arbitral proceedings shall commence within ninety days."
+                    ),
+                    "act_status": "in_force",
+                    "in_force": True,
+                    "section_type": "section",
+                    "year": 1996.0,
+                    "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                },
+                # IBC s.14 collision: _s014 Schedule amendment vs _s014_p0 + _s014_p1 moratorium
+                {
+                    "act_id": "IND_central_2154",
+                    "chunk_id": "IND_central_2154_s014",
+                    "title": "The Insolvency and Bankruptcy Code, 2016.",
+                    "chapter": "VII",
+                    "section_number": "14",
+                    "section_title": "The Insolvency and Bankruptcy Code, 2016.",
+                    "text": (
+                        "Act: The Insolvency and Bankruptcy Code, 2016. | India | Central | In Force\n"
+                        "Chapter VII: FINANCE, ACCOUNTS AND AUDIT | Section 14: For section 280, the following section shall be substituted."
+                    ),
+                    "act_status": "in_force",
+                    "in_force": True,
+                    "section_type": "section",
+                    "year": 2016.0,
+                    "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                },
+                {
+                    "act_id": "IND_central_2154",
+                    "chunk_id": "IND_central_2154_s014_p0",
+                    "title": "The Insolvency and Bankruptcy Code, 2016.",
+                    "chapter": "II",
+                    "section_number": "14",
+                    "section_title": "Moratorium",
+                    "text": (
+                        "Act: The Insolvency and Bankruptcy Code, 2016. | India | Central | In Force\n"
+                        "Chapter II: CORPORATE INSOLVENCY RESOLUTION PROCESS | Section 14: Moratorium**\n"
+                        "14. Moratorium** .—( 1 ) Subject to provisions of sub-sections (2) and (3), on the insolvency commencement date, the Adjudicating Authority shall by order declare moratorium."
+                    ),
+                    "act_status": "in_force",
+                    "in_force": True,
+                    "section_type": "section",
+                    "year": 2016.0,
+                    "source_url": "https://oss-data-in.vaquill.ai/v2026.08.1/in_central_legislation.parquet",
+                },
+            ]
+        ),
+        vq_dir / "in_central_legislation.parquet",
+    )
+
+    # Same SC judgment duplicated across year=1976 and year=1977 with identical CNR
+    for yr in (1976, 1977):
+        ydir = work_dir / f"raw/indian-supreme-court-judgments/metadata/parquet/year={yr}"
+        ydir.mkdir(parents=True)
+        pq.write_table(
+            pa.Table.from_pylist(
+                [
+                    {
+                        "title": "Sample Appellant versus Sample Respondent",
+                        "petitioner": "Sample Appellant",
+                        "respondent": "Sample Respondent",
+                        "description": "Arbitration interim relief precedent." if yr == 1976 else "",
+                        "judge": "Y.V. CHANDRACHUD",
+                        "author_judge": "Y.V. CHANDRACHUD",
+                        "citation": "AIR 1976 SC 1234",
+                        "case_id": "1976 INSC 276",
+                        "cnr": "ESCR010000071977",
+                        "decision_date": "15-10-1976",
+                        "disposal_nature": "Allowed",
+                        "available_languages": "ENG",
+                        "path": "1976_sample",
+                        "nc_display": "1976INSC276",
+                        "year": yr,
+                    }
+                ]
+            ),
+            ydir / "metadata.parquet",
+        )
+
+    bundle = load_staged_ingest_bundle(work_dir)
+    matching_cnrs = [j for j in bundle.sc_judgments if j.get("cnr") == "ESCR010000071977"]
+    assert len(matching_cnrs) == 1
+
+    build_dir = tmp_path / "build2"
+    build_sqlite_core(build_dir / "nyaya-core.sqlite", input_data=bundle)
+    store = SqliteStore(build_dir / "nyaya-core.sqlite")
+    try:
+        arb9 = store.get_provision("ArbitrationAct", "9")
+        assert arb9 is not None
+        assert "A party may, before or during arbitral proceedings" in arb9.text
+        assert "within ninety days" in arb9.text
+        assert "Act:" not in arb9.text
+        assert "Subs. by Act" not in arb9.text
+        assert "**" not in arb9.text
+
+        ibc14 = store.get_provision("IBC", "14")
+        assert ibc14 is not None
+        assert "declare moratorium" in ibc14.text
+        assert "For section 280" not in ibc14.text
+        assert "**" not in ibc14.text
+        assert " .—" not in ibc14.text
     finally:
         store.close()

@@ -7,6 +7,7 @@ import json
 from nyaya.citations import (
     canonicalize_court,
     extract_grounded_keys,
+    normalize_jurisdiction,
     parse_citations,
     parse_single_citation,
     verify_inline_markers,
@@ -157,3 +158,87 @@ def test_verify_inline_markers_negative_matrix_fixes_v02_bugs() -> None:
     assert "AIR 1973 SC 9999" not in verified
     assert "302A" not in verified
     assert "did not include verifiable citations" not in verified
+
+
+def test_parse_wide_hallucinated_citations() -> None:
+    text = (
+        "Reliance on 2024 INSC 999999, AIR 1973 SC 9999999, "
+        "(2017) 10 SCC 999999, and [1973] Supp SCR 999999."
+    )
+    parsed = parse_citations(text)
+    keys = [c.canonical_key for c in parsed]
+    assert "judgment::INSC::2024:999999" in keys
+    assert "judgment::AIR::1973:SC:9999999" in keys
+    assert "judgment::SCC::2017:10::999999" in keys
+    assert "judgment::SCR::1973:SUPP:999999" in keys
+
+
+def test_alias_map_and_act_year_before_section() -> None:
+    cases = [
+        ("Arbitration and Conciliation Act, 1996, Section 11", "ArbitrationAct", "11"),
+        ("Arbitration Act s. 34", "ArbitrationAct", "34"),
+        ("Negotiable Instruments Act, 1881, Section 138", "NIAct", "138"),
+        ("NIAct s. 138", "NIAct", "138"),
+        ("Specific Relief Act, 1963, Section 14", "SpecificReliefAct", "14"),
+        ("SRA s. 10", "SpecificReliefAct", "10"),
+        ("SEBI Act, 1992, Section 11", "SEBIAct", "11"),
+        ("Transfer of Property Act, 1882, Section 54", "TransferOfPropertyAct", "54"),
+        ("TPA s. 54", "TransferOfPropertyAct", "54"),
+        ("Limitation Act, 1963, Section 5", "LimitationAct", "5"),
+        ("Indian Contract Act, 1872, Section 73", "ContractAct", "73"),
+    ]
+    for raw, exp_act, exp_ref in cases:
+        p = parse_single_citation(raw)
+        assert p is not None, raw
+        assert p.kind == "statute_section", raw
+        assert p.act_or_court == exp_act, raw
+        assert p.base_ref == exp_ref, raw
+        assert p.canonical_key == f"statute::{exp_act}::{exp_ref}", raw
+
+
+def test_parse_cpc_plural_and_inverted_order_rule() -> None:
+    plural1 = parse_citations("Under Order 7 Rules 11 and 14 of CPC")
+    assert [c.canonical_key for c in plural1] == ["statute::CPC::O7-R11", "statute::CPC::O7-R14"]
+    assert [c.base_ref for c in plural1] == ["Order 7 Rule 11", "Order 7 Rule 14"]
+
+    plural2 = parse_citations("Order VII Rules 11, 14")
+    assert [c.canonical_key for c in plural2] == ["statute::CPC::O7-R11", "statute::CPC::O7-R14"]
+
+    inv = parse_single_citation("Rule 11 of Order 7")
+    assert inv is not None
+    assert inv.kind == "cpc_order_rule"
+    assert inv.canonical_key == "statute::CPC::O7-R11"
+    assert inv.base_ref == "Order 7 Rule 11"
+
+    pair = parse_citations("Order 7 Rule 11, Order 8 Rule 1")
+    assert [c.canonical_key for c in pair] == ["statute::CPC::O7-R11", "statute::CPC::O8-R1"]
+
+
+def test_normalize_jurisdiction_all_states_uts_and_short_codes() -> None:
+    assert normalize_jurisdiction(None) is None
+    assert normalize_jurisdiction("   ") is None
+    assert normalize_jurisdiction("Maharashtra") == "MH"
+    assert normalize_jurisdiction("maharashtra") == "MH"
+    assert normalize_jurisdiction("Delhi") == "DL"
+    assert normalize_jurisdiction("NCT of Delhi") == "DL"
+    assert normalize_jurisdiction("Karnataka") == "KA"
+    assert normalize_jurisdiction("Tamil Nadu") == "TN"
+    assert normalize_jurisdiction("West Bengal") == "WB"
+    assert normalize_jurisdiction("Uttar Pradesh") == "UP"
+    assert normalize_jurisdiction("Gujarat") == "GJ"
+    assert normalize_jurisdiction("Jammu & Kashmir") == "JK"
+    assert normalize_jurisdiction("Jammu and Kashmir") == "JK"
+    assert normalize_jurisdiction("Telangana") == "TS"
+    assert normalize_jurisdiction("Odisha") == "OD"
+    assert normalize_jurisdiction("Orissa") == "OD"
+    assert normalize_jurisdiction("Uttarakhand") == "UK"
+    assert normalize_jurisdiction("Andaman and Nicobar Islands") == "AN"
+    assert normalize_jurisdiction("Dadra and Nagar Haveli and Daman and Diu") == "DN"
+    assert normalize_jurisdiction("Ladakh") == "LA"
+    assert normalize_jurisdiction("Lakshadweep") == "LD"
+    assert normalize_jurisdiction("Puducherry") == "PY"
+    assert normalize_jurisdiction("central") == "Central"
+    assert normalize_jurisdiction("Central") == "Central"
+    assert normalize_jurisdiction("MH") == "MH"
+    assert normalize_jurisdiction("SEBI") == "SEBI"
+    assert normalize_jurisdiction("RBI") == "RBI"
