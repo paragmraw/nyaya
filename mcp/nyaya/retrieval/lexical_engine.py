@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 from datetime import date as Date
 from typing import Any
@@ -44,10 +45,12 @@ _STATUTE_TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")
 _DIGITS_COURT_CODE_RE = re.compile(r"^\d+[_~]\d+$")
 _ANTICIPATORY_BAIL_SIGNAL_RE = re.compile(
     r"(?i)(?:\banticipatory\b|\bpre[- ]?arrest\b|\bapprehending\s+arrest\b|"
-    r"\baba\b|\babail\b|\bcr\.?\s*p\.?\s*c\.?\s*(?:s\.?\s*)?438\b|"
+    r"\baba\b|\babail\b|\bcrm\s*\(\s*a\s*\)|\ba\.?\s*b\.?\s*a\.?(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|"
+    r"\bcr\.?\s*p\.?\s*c\.?\s*(?:s\.?\s*)?438\b|"
     r"\bbnss\s*(?:s\.?\s*)?482\b|\bs(?:ec(?:tion)?)?\.?\s*(?:438|482)\b|"
     r"(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d))"
 )
+logger = logging.getLogger(__name__)
 
 
 def _resolve_court_display_name(
@@ -609,6 +612,12 @@ class LexicalRetrievalEngine:
             if not base_q and analyzed.exact_statute_refs:
                 base_q = " ".join(f"{a} {r}" for a, r in analyzed.exact_statute_refs)
             try:
+                c_code: str | None = None
+                if isinstance(q.court, str):
+                    # Pick Dattam numeric code if known
+                    variants = court_code_variants(q.court)
+                    c_code = next((v for v in variants if "_" in v), None)
+
                 if base_q and tier in ("all", "supreme_court"):
                     for r in self.lance.search_sc(
                         base_q,
@@ -621,12 +630,7 @@ class LexicalRetrievalEngine:
                     ):
                         lance_direct.append(_lance_row_to_judgment_card(r, tier="supreme_court", matched_via="direct"))
                 if base_q and tier in ("all", "high_court"):
-                    c_code: str | None = None
-                    if isinstance(q.court, str):
-                        # Pick Dattam numeric code if known
-                        variants = court_code_variants(q.court)
-                        c_code = next((v for v in variants if "_" in v), None)
-                    hc_limit = 60 if (tier == "high_court" and q.court is None) else 30
+                    hc_limit = 150 if (tier == "high_court" and q.court is None) else 30
                     for r in self.lance.search_hc(
                         base_q,
                         court_code=c_code,
@@ -643,12 +647,26 @@ class LexicalRetrievalEngine:
                 if analyzed.equivalent_statute_refs:
                     eq_q = " ".join(f"{base_q} {a} {r}".strip() for a, r in analyzed.equivalent_statute_refs)
                     if tier in ("all", "supreme_court"):
-                        for r in self.lance.search_sc(eq_q, commercial_safe_only=cs_only, limit=10):
+                        for r in self.lance.search_sc(
+                            eq_q,
+                            year_from=year_from,
+                            year_to=year_to,
+                            commercial_safe_only=cs_only,
+                            limit=10,
+                        ):
                             lance_equiv.append(
                                 _lance_row_to_judgment_card(r, tier="supreme_court", matched_via="pari_materia_equivalent")
                             )
                     if tier in ("all", "high_court"):
-                        for r in self.lance.search_hc(eq_q, commercial_safe_only=cs_only, limit=10):
+                        eq_hc_limit = 30 if (tier == "high_court" and q.court is None) else 10
+                        for r in self.lance.search_hc(
+                            eq_q,
+                            court_code=c_code,
+                            year_from=year_from,
+                            year_to=year_to,
+                            commercial_safe_only=cs_only,
+                            limit=eq_hc_limit,
+                        ):
                             lance_equiv.append(
                                 _lance_row_to_judgment_card(r, tier="high_court", matched_via="pari_materia_equivalent")
                             )
@@ -769,7 +787,8 @@ class LexicalRetrievalEngine:
                             ),
                         )
                     )
-            except (QueryTooBroad, StorageUnavailable):
+            except (QueryTooBroad, StorageUnavailable) as exc:
+                logger.warning("DuckDB search_judgments fallback triggered: %s", exc)
                 if not (sqlite_cards or lance_direct or lance_equiv or exact_cards):
                     raise
 

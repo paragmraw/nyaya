@@ -466,7 +466,7 @@ class DuckDBStore:
                 if has_anticipatory_bail:
                     where.append(f"regexp_matches({haystack_expr}, ?)")
                     params.append(
-                        r"(?:(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])|(?:^|[^a-z0-9])pre[- ]?arrest(?:$|[^a-z0-9])|apprehending\s+arrest|(?:^|[^a-z0-9])(?:aba|abail)(?:$|[^a-z0-9])|(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:cr\.?\s*p\.?\s*c\.?|bnss|s\.?|sec\.?|section)\s*(?:438|482)(?:$|[^a-z0-9]))"
+                        r"(?:(?:^|[^a-z0-9])anticipatory(?:$|[^a-z0-9])|(?:^|[^a-z0-9])pre[- ]?arrest(?:$|[^a-z0-9])|apprehending\s+arrest|(?:^|[^a-z0-9])(?:aba|abail)(?:$|[^a-z0-9])|(?:^|[^a-z0-9])crm\s*\(\s*a\s*\)|(?:^|[^a-z0-9])a\.?\s*b\.?\s*a\.?(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:^|[^a-z0-9])ab(?:\s*[/.-]\s*\d|\s+no\.?\s*\d|\s+\d)|(?:cr\.?\s*p\.?\s*c\.?|bnss|s\.?|sec\.?|section)\s*(?:438|482)(?:$|[^a-z0-9]))"
                     )
                     remaining_tokens = [t for t in q_tokens if t not in ("anticipatory", "bail")]
                 else:
@@ -488,18 +488,21 @@ class DuckDBStore:
         )
         total = int(cnt_rows[0][0]) if cnt_rows else 0
 
+        hc_cols = _get_avail_cols() if dataset == "high_court" else set()
+        order_clause = "year DESC, decision_date DESC" if (not hc_cols or "decision_date" in hc_cols) else "year DESC"
         use_hc_diversity = (
             dataset == "high_court"
             and court is None
-            and "court_code" in _get_avail_cols()
+            and "court_code" in hc_cols
         )
         if use_hc_diversity:
             select_sql = (
                 f"SELECT * EXCLUDE (_rn) FROM ("
-                f"SELECT *, ROW_NUMBER() OVER (PARTITION BY court_code ORDER BY year DESC, decision_date DESC) AS _rn "
+                f"SELECT *, ROW_NUMBER() OVER (PARTITION BY court_code ORDER BY {order_clause}) AS _rn "
                 f"FROM read_parquet([{pq_list}], union_by_name=true) "
-                f"WHERE {where_sql}"
-                f") ORDER BY _rn ASC, year DESC, decision_date DESC LIMIT ? OFFSET ?"
+                f"WHERE {where_sql} "
+                f"ORDER BY _rn ASC, {order_clause} LIMIT ? OFFSET ?"
+                f")"
             )
         else:
             select_sql = (

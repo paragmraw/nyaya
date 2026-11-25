@@ -314,6 +314,22 @@ def test_clean_pdf_text_strips_scr_running_footers_interplay_and_page_nums() -> 
     assert "20. Final substantive holding paragraph." in cleaned
 
 
+def test_clean_pdf_text_strips_same_line_scr_title_plus_judge_footer() -> None:
+    raw = (
+        "113. Paragraph before footer.\n\n"
+        "THE ARBITRATION AND CONCILIATION ACT 1996 AND THE INDIAN \n"
+        "STAMP ACT 1899 [DR. DHANANJAYA Y CHANDRACHUD, CJI ]\n\n"
+        "AND ANOTHER CASE TITLE [ SANJIV KHANNA, J.]\n\n"
+        "210. Paragraph after footer with [Para 85 in judgment of Dr. D.Y. Chandrachud, CJI] preserved."
+    )
+    cleaned = _clean_pdf_text(raw)
+    assert "DR. DHANANJAYA Y CHANDRACHUD" not in cleaned
+    assert "SANJIV KHANNA" not in cleaned
+    assert "STAMP ACT 1899" not in cleaned
+    assert "113. Paragraph before footer." in cleaned
+    assert "[Para 85 in judgment of Dr. D.Y. Chandrachud, CJI] preserved." in cleaned
+
+
 def test_repair_ligature_splits_general_and_exclusions() -> None:
     text = (
         "fi scal fl exible suffi ciency insuffi ciency off er eff ectual aff airs "

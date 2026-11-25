@@ -74,7 +74,7 @@ _SCR_JUDGE_FOOTER_RE = re.compile(
     r"(?m)^(?:(?![ \t]*(?:JUDGMENT|ORDER|HELD|FACTS|ISSUES?|CONCLUSION|BACKGROUND|SUBMISSIONS?|HEADNOTE|INDEX|APPEARANCES?)[ \t]*$)"
     r"[A-Z0-9 ,&():./'-]{8,}\n){0,4}"
     r"[ \t]*(?:IN[ \t]+RE:[^\n]*\n(?:[A-Z0-9 ,&():./'-]{5,}\n){0,3})?"
-    r"[ \t]*\[[ \t]*[A-Z][A-Z., \t&'-]+(?:,[ \t]*)?(?:CJI|J\.|JJ\.)[ \t]*\][ \t]*$"
+    r"(?:[A-Z0-9 ,&():./'-]{0,120})\[[ \t]*[A-Z][A-Z., \t&'-]+(?:,[ \t]*)?(?:CJI|J\.|JJ\.)[ \t]*\][ \t]*$"
 )
 _SCR_ORPHAN_INTERPLAY_RE = re.compile(r"(?m)^[ \t]*IN[ \t]+RE:[ \t]*INTERPLAY[^\n]*$")
 _STANDALONE_PAGE_NUM_RE = re.compile(r"(?m)^[ \t]*\d{1,4}[ \t]*$")

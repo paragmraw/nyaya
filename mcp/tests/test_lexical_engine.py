@@ -450,14 +450,14 @@ def test_hc_display_name_strict_anticipatory_bail_and_court_interleaving(
     assert len({c.court_code for c in interleaved[:5]}) == 5
     assert [c.case_id for c in interleaved] == ["m1", "t1", "d1", "b1", "c1", "m2", "m3"]
 
-    # 3. End-to-end LexicalRetrievalEngine test: limit=60, strict AB filter on direct/equiv/sqlite, interleaving
+    # 3. End-to-end LexicalRetrievalEngine test: limit=150, year filters on equiv, CRM(A), interleaving
     class _StubLance:
         def __init__(self) -> None:
-            self.hc_calls: list[tuple[str, int]] = []
+            self.hc_calls: list[tuple[str, int, int | None, int | None]] = []
 
         def search_hc(self, query: str, **kwargs):
             limit = int(kwargs.get("limit", 10))
-            self.hc_calls.append((query, limit))
+            self.hc_calls.append((query, limit, kwargs.get("year_from"), kwargs.get("year_to")))
             if "BNSS" in query or "CrPC" in query:
                 # Equiv OR-expansion returns an unrelated regular BAIL APPLN. + a genuine s.438 CrPC hit
                 return [
@@ -564,12 +564,39 @@ def test_hc_display_name_strict_anticipatory_bail_and_court_interleaving(
             JudgmentSearchQuery(
                 query="anticipatory bail",
                 court_tier="high_court",
+                year_from=2023,
+                year_to=2025,
                 sort_by="relevance",
                 limit=5,
             )
         )
-        # First search_hc call uses limit=60 when tier=="high_court" and court is None
-        assert stub_lance.hc_calls[0][1] == 60
+        # First search_hc call uses limit=150 when tier=="high_court" and court is None,
+        # and equiv search_hc propagates year_from/year_to cleanly.
+        assert stub_lance.hc_calls[0][1] == 150
+        assert len(stub_lance.hc_calls) >= 2
+        assert stub_lance.hc_calls[1][2:] == (2023, 2025)
+        from nyaya.retrieval.lexical_engine import _has_anticipatory_bail_signal
+
+        assert _has_anticipatory_bail_signal(
+            JudgmentCard(
+                case_id="hc:cal:crma",
+                title="CRM (A)/3455/2026 of SK SAHARUK Vs STATE",
+                court="High Court at Calcutta",
+                court_code="19_16",
+                court_tier="high_court",
+                provenance=prov,
+            )
+        )
+        assert _has_anticipatory_bail_signal(
+            JudgmentCard(
+                case_id="hc:bhc:aba",
+                title="A.B.A. No. 412 of 2024",
+                court="High Court of Bombay",
+                court_code="27_1",
+                court_tier="high_court",
+                provenance=prov,
+            )
+        )
         ids = [r.case_id for r in resp.results]
         assert "hc:man:plain" not in ids
         assert "hc:equiv:plain_bail" not in ids
