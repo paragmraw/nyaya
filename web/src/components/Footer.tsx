@@ -5,11 +5,24 @@ import { useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { API_VERSION } from "@/lib/site";
 
-const FOOTER_LINKS = [
+// Exported for tests/legal-pages.test.ts (site-link route validation).
+export const FOOTER_LINKS = [
   { href: "/corpus/", label: "Corpus" },
   { href: "/citations/", label: "Citations" },
   { href: "/architecture/", label: "Architecture" },
   { href: "https://github.com/paragmraw/nyaya", label: "GitHub", external: true },
+];
+
+// Product links in the first nav; legal/help/meta links in the second.
+// Sourced from src/lib/legal-facts.ts-style constants where values repeat
+// (REPO_URL lives here too, matching FOOTER_LINKS above).
+export const SITE_LINKS = [
+  { href: "/privacy/", label: "Privacy" },
+  { href: "/terms/", label: "Terms" },
+  { href: "/disclaimer/", label: "Disclaimer" },
+  { href: "/faq/", label: "FAQ" },
+  { href: "/contact/", label: "Contact" },
+  { href: "/accessibility/", label: "Accessibility" },
 ];
 
 export default function Footer() {
@@ -38,6 +51,13 @@ export default function Footer() {
               target={link.external ? "_blank" : undefined}
               rel={link.external ? "noopener noreferrer" : undefined}
             >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
+        <nav className="footer-nav" aria-label="Site">
+          {SITE_LINKS.map((link) => (
+            <Link key={link.href} href={link.href} className="footer-link">
               {link.label}
             </Link>
           ))}
