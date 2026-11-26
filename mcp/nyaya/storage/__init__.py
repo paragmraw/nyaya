@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+from datetime import date as Date
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -298,6 +299,16 @@ def enrich_corpus_status(
                         setattr(resp.counts, field_name, remote_val)
         except Exception:
             log.warning("Failed to roll up DuckDB manifest counts", exc_info=True)
+
+        try:
+            manifest = getattr(duck, "manifest", None)
+            gen_at = getattr(manifest, "generated_at", None) if manifest is not None else None
+            if gen_at:
+                m_date = Date.fromisoformat(str(gen_at)[:10])
+                if resp.as_of is None or m_date > resp.as_of:
+                    resp.as_of = m_date
+        except Exception:
+            log.warning("Failed to parse DuckDB manifest generated_at", exc_info=True)
 
     tiers = dict(resp.tiers)
     tiers.setdefault("sqlite_core", "ok")

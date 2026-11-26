@@ -144,6 +144,8 @@ _DEFAULT_ALIAS_MAP: dict[str, str] = {
     "it act, 1961": "IncomeTax1961",
     "ita 1961": "IncomeTax1961",
     "incometax1961": "IncomeTax1961",
+    "itact1961": "IncomeTax1961",
+    "itact 1961": "IncomeTax1961",
     "income tax act 2025": "IncomeTax2025",
     "income tax act, 2025": "IncomeTax2025",
     "income-tax act 2025": "IncomeTax2025",
@@ -152,6 +154,8 @@ _DEFAULT_ALIAS_MAP: dict[str, str] = {
     "it act, 2025": "IncomeTax2025",
     "ita 2025": "IncomeTax2025",
     "incometax2025": "IncomeTax2025",
+    "itact2025": "IncomeTax2025",
+    "itact 2025": "IncomeTax2025",
 }
 
 _REGULATOR_ACTS = frozenset({"SEBI-LODR", "SEBI", "RBI"})
@@ -966,7 +970,7 @@ def parse_citations(
     if act_keys:
         act_alt = "|".join(re.escape(k) for k in act_keys)
         act_before_re = re.compile(
-            rf"(?<![A-Za-z0-9])(?P<act>{act_alt})(?:\s*,?\s*(?:18|19|20)\d{{2}})?\s*,?\s*{_MARKER_EXPR}\.?\s*{_CHAIN_EXPR}",
+            rf"(?<![A-Za-z0-9])(?P<act>{act_alt})(?![A-Za-z0-9])(?:\s*,?\s*(?:18|19|20)\d{{2}})?\s*,?\s*{_MARKER_EXPR}\.?\s*{_CHAIN_EXPR}",
             re.IGNORECASE,
         )
         sec_before_re = re.compile(
@@ -1013,6 +1017,37 @@ def parse_citations(
                 if matched_any:
                     occupied.append(act_span)
                     occupied.append(marker_span)
+
+        # 13. Bare statutory section citations without "s." (excluding Constitution, regulators, and year numbers)
+        bare_act_keys = [
+            k
+            for k in act_keys
+            if aliases[k] != "Constitution" and aliases[k] not in _REGULATOR_ACTS
+        ]
+        if bare_act_keys:
+            bare_act_alt = "|".join(re.escape(k) for k in bare_act_keys)
+            bare_act_re = re.compile(
+                rf"(?<![A-Za-z0-9])(?P<act>{bare_act_alt})(?![A-Za-z0-9])\s+(?!(?:18|19|20)\d{{2}}(?![A-Za-z0-9]))(?P<base>\d{{1,4}}[A-Z]{{0,2}})(?!\s*(?:INSC\b|:|SCC\b|SCR\b|SCALE\b|JT\b|Cr\.?\s*LJ\b|CrLJ\b))(?P<sub>(?:\([0-9a-zA-Z]+\)){{0,4}})",
+                re.IGNORECASE,
+            )
+            for m in bare_act_re.finditer(text):
+                if not _claim(m.span()):
+                    continue
+                canon_act = _resolve_act_alias(m.group("act"), aliases)
+                base = m.group("base").upper()
+                sub = m.group("sub") or None
+                results.append(
+                    ParsedCitation(
+                        raw_text=m.group(0),
+                        span=m.span(),
+                        kind="statute_section",
+                        canonical_key=f"statute::{canon_act}::{base}",
+                        act_or_court=canon_act,
+                        base_ref=base,
+                        sub_ref=sub,
+                        components={"act": canon_act, "marker": None},
+                    )
+                )
 
     results.sort(key=lambda c: c.span[0] if c.span else 0)
     return results

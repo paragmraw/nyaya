@@ -608,9 +608,13 @@ class SqliteStore:
                 holding_summary=str(inval_row["holding_summary"]),
             )
 
+        ref_norm = str(row["ref_norm"])
         amend_cnt_row = con.execute(
-            "SELECT count(*) AS n FROM provision_amendments WHERE target_act_id = ? AND (target_ref_norm = ? OR target_ref_norm IS NULL)",
-            (row["act_id"], row["ref_norm"]),
+            "SELECT count(*) AS n FROM provision_amendments "
+            "WHERE target_act_id = ? "
+            "AND (upper(target_ref_norm) = upper(?) "
+            "OR ',' || upper(replace(coalesce(articles_affected, ''), ' ', '')) || ',' LIKE ?)",
+            (row["act_id"], ref_norm, f"%,{ref_norm.upper()},%"),
         ).fetchone()
         amend_count = int(amend_cnt_row["n"]) if amend_cnt_row else 0
 

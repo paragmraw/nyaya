@@ -38,6 +38,15 @@ _BANNED_HOSTS = frozenset(
 )
 
 
+def _is_same_site_www_redirect(initial_host: str, next_host: str) -> bool:
+    """Allow same-host and allowlisted apex <-> ``www.`` host transitions only."""
+    return (
+        next_host == initial_host
+        or next_host == f"www.{initial_host}"
+        or initial_host == f"www.{next_host}"
+    )
+
+
 class SafeHttpFetcher:
     """Domain-allowlisted HTTP client that refuses cross-domain redirects and verifies SHA-256."""
 
@@ -88,7 +97,7 @@ class SafeHttpFetcher:
         ) as client:
             for _ in range(self.max_redirects + 1):
                 host = self._validate_url(current_url)
-                if host != initial_host:
+                if not _is_same_site_www_redirect(initial_host, host):
                     raise SecurityError(
                         f"Cross-domain redirect blocked from {initial_host!r} to {host!r}"
                     )
@@ -101,7 +110,7 @@ class SafeHttpFetcher:
                             )
                         next_url = urljoin(current_url, location)
                         next_host = self._validate_url(next_url)
-                        if next_host != initial_host:
+                        if not _is_same_site_www_redirect(initial_host, next_host):
                             raise SecurityError(
                                 f"Cross-domain redirect blocked from {initial_host!r} to {next_host!r}"
                             )

@@ -13,6 +13,7 @@ from typing import Any
 from fastmcp import FastMCP
 from fastmcp.server.lifespan import lifespan as lifespan_decorator
 
+from . import __version__
 from . import prompts as _prompts
 from . import resources as _resources
 from . import storage as _storage
@@ -27,7 +28,7 @@ from .storage.protocols import (
 MCP_INSTRUCTIONS = (
     "Nyaya v2.1 is an Indian legal intelligence MCP server with 15 tools covering 37 Central & State/UT "
     "jurisdiction packs, the Constitution (with verified Amendments 1-106 and Constituent Assembly Debates), "
-    "CPC First Schedule (Orders I-LI + Rules), 12 regulators, 15 tribunals, Supreme Court (38k+), "
+    "CPC First Schedule (Orders I-LI + Rules), 12 regulators, 24 tribunals & Consumer Commissions (14 order datasets indexed), Supreme Court (38k+), "
     "25 High Courts (20.7M+), and DDL District Courts (81M metadata).\n\n"
     "Tool Guidance:\n"
     "- Use `search_statutes` / `browse_statute` / `get_provision` / `get_provisions_batch` for statutes, "
@@ -85,6 +86,7 @@ def create_mcp(
 
     mcp = FastMCP(
         name="nyaya",
+        version=__version__,
         instructions=MCP_INSTRUCTIONS,
         lifespan=lifespan or _default_lifespan,
     )

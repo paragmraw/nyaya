@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 from . import __version__
 from .config import _is_truthy, get_settings
@@ -277,16 +277,21 @@ async def judgments_endpoint(request: Request) -> JSONResponse:
 
 
 async def analytics_endpoint(request: Request) -> JSONResponse:
-    """GET /api/analytics?dataset=hc&group_by=year&court=&state=&year_from=&year_to=&top_n=25&commercial_safe_only=."""
+    """GET /api/analytics?dataset=hc&group_by=year&court=&state=&year_from=&year_to=&top_n=25&limit=&commercial_safe_only=."""
     try:
-        top_n = max(1, min(int(request.query_params.get("top_n", "25")), 100))
+        top_n_raw = (
+            request.query_params.get("top_n")
+            or request.query_params.get("limit")
+            or "25"
+        )
+        top_n = max(1, min(int(top_n_raw), 100))
         year_from_raw = request.query_params.get("year_from")
         year_to_raw = request.query_params.get("year_to")
         year_from = int(year_from_raw) if year_from_raw else None
         year_to = int(year_to_raw) if year_to_raw else None
     except ValueError:
         return JSONResponse(
-            {"error": "bad_request", "detail": "top_n/year_from/year_to must be integers"},
+            {"error": "bad_request", "detail": "top_n/limit/year_from/year_to must be integers"},
             status_code=400,
         )
 
@@ -405,6 +410,247 @@ async def health_summary_endpoint(request: Request) -> JSONResponse:
     return JSONResponse(payload)
 
 
+def _qparam(name: str, schema: dict[str, Any], description: str) -> dict[str, Any]:
+    return {"name": name, "in": "query", "required": False, "schema": schema, "description": description}
+
+
+def _json_resp(desc: str) -> dict[str, Any]:
+    return {"description": desc, "content": {"application/json": {"schema": {"type": "object"}}}}
+
+
+def _build_openapi_spec() -> dict[str, Any]:
+    """Build a valid OpenAPI 3.1.0 specification covering all REST, health, and MCP routes."""
+    cs_param = _qparam("commercial_safe_only", {"type": "boolean"}, "Restrict results to commercially cleared sources.")
+
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "Nyaya Indian Legal Intelligence API",
+            "version": __version__,
+            "description": "REST, Health, and Streamable HTTP MCP endpoints for Indian statutes, Constitution, concordance, judgments, and judicial analytics.",
+        },
+        "paths": {
+            "/health": {
+                "get": {
+                    "summary": "Service health & 3-tier corpus status",
+                    "operationId": "getHealth",
+                    "responses": {"200": _json_resp("Healthy or degraded status payload")},
+                }
+            },
+            "/mcp": {
+                "post": {
+                    "summary": "Streamable HTTP MCP JSON-RPC 2.0 endpoint",
+                    "operationId": "mcpJsonRpc",
+                    "requestBody": {
+                        "required": True,
+                        "content": {"application/json": {"schema": {"type": "object"}}},
+                    },
+                    "responses": {"200": _json_resp("MCP JSON-RPC 2.0 response or SSE stream")},
+                }
+            },
+            "/api/corpus-status": {
+                "get": {
+                    "summary": "Corpus counts, tiers, and source provenances",
+                    "operationId": "getCorpusStatus",
+                    "parameters": [
+                        _qparam("court", {"type": "string"}, "Optional court code filter."),
+                        cs_param,
+                    ],
+                    "responses": {"200": _json_resp("CorpusStatusResponse"), "503": _json_resp("Storage unavailable")},
+                }
+            },
+            "/api/corpus-stats": {
+                "get": {
+                    "summary": "Alias for /api/corpus-status",
+                    "operationId": "getCorpusStats",
+                    "parameters": [
+                        _qparam("court", {"type": "string"}, "Optional court code filter."),
+                        cs_param,
+                    ],
+                    "responses": {"200": _json_resp("CorpusStatusResponse"), "503": _json_resp("Storage unavailable")},
+                }
+            },
+            "/api/acts": {
+                "get": {
+                    "summary": "Browse and filter legislation catalog",
+                    "operationId": "listActs",
+                    "parameters": [
+                        _qparam("jurisdiction", {"type": "string"}, "Jurisdiction code or state name."),
+                        _qparam("category", {"type": "string"}, "Act category (central_act, state_act, constitution, regulator, etc.)."),
+                        _qparam("q", {"type": "string"}, "Substring/keyword search query."),
+                        _qparam("limit", {"type": "integer", "default": 50, "minimum": 1, "maximum": 200}, "Page size."),
+                        _qparam("offset", {"type": "integer", "default": 0, "minimum": 0}, "Pagination offset."),
+                        cs_param,
+                    ],
+                    "responses": {"200": _json_resp("Paginated acts list"), "400": _json_resp("Invalid query parameters")},
+                }
+            },
+            "/api/judgments": {
+                "get": {
+                    "summary": "Search and filter indexed judgments",
+                    "operationId": "listJudgments",
+                    "parameters": [
+                        _qparam("tier", {"type": "string", "default": "supreme_court"}, "Court tier: sc, hc, tribunal, district, all."),
+                        _qparam("court", {"type": "string"}, "Court or tribunal code."),
+                        _qparam("year_from", {"type": "integer"}, "Minimum decision year."),
+                        _qparam("year_to", {"type": "integer"}, "Maximum decision year."),
+                        _qparam("q", {"type": "string"}, "Search query."),
+                        _qparam("limit", {"type": "integer", "default": 50, "minimum": 1, "maximum": 100}, "Page size."),
+                        _qparam("offset", {"type": "integer", "default": 0, "minimum": 0}, "Pagination offset."),
+                        cs_param,
+                    ],
+                    "responses": {"200": _json_resp("Paginated judgment cards"), "400": _json_resp("Invalid query parameters")},
+                }
+            },
+            "/api/analytics": {
+                "get": {
+                    "summary": "Aggregate corpus analytics across court tiers",
+                    "operationId": "getAnalytics",
+                    "parameters": [
+                        _qparam("dataset", {"type": "string", "default": "high_court"}, "Dataset tier: sc, hc, district, tribunal, regulator, all."),
+                        _qparam("group_by", {"type": "string", "default": "year"}, "Grouping dimension (year, court, state, judge, act, etc.)."),
+                        _qparam("court", {"type": "string"}, "Court filter."),
+                        _qparam("state", {"type": "string"}, "State filter."),
+                        _qparam("judge", {"type": "string"}, "Judge filter."),
+                        _qparam("act", {"type": "string"}, "Act filter."),
+                        _qparam("year_from", {"type": "integer"}, "Start year."),
+                        _qparam("year_to", {"type": "integer"}, "End year."),
+                        _qparam("top_n", {"type": "integer", "default": 25, "minimum": 1, "maximum": 100}, "Maximum buckets to return."),
+                        _qparam("limit", {"type": "integer", "default": 25, "minimum": 1, "maximum": 100}, "Alias for top_n."),
+                        cs_param,
+                    ],
+                    "responses": {"200": _json_resp("Aggregated analytics buckets"), "400": _json_resp("Invalid filter"), "403": _json_resp("Commercial license blocked")},
+                }
+            },
+            "/api/tools": {
+                "get": {
+                    "summary": "Introspect registered MCP tools, resources, and prompts",
+                    "operationId": "listTools",
+                    "responses": {"200": _json_resp("MCP tool catalog")},
+                }
+            },
+            "/api/health-summary": {
+                "get": {
+                    "summary": "Non-failing health summary (always HTTP 200)",
+                    "operationId": "getHealthSummary",
+                    "parameters": [
+                        _qparam("court", {"type": "string"}, "Optional court code filter."),
+                        cs_param,
+                    ],
+                    "responses": {"200": _json_resp("Healthy or degraded corpus summary")},
+                }
+            },
+            "/openapi.json": {
+                "get": {
+                    "summary": "OpenAPI 3.1.0 schema document",
+                    "operationId": "getOpenApiSpec",
+                    "responses": {"200": _json_resp("OpenAPI 3.1.0 JSON")},
+                }
+            },
+            "/docs": {
+                "get": {
+                    "summary": "Self-contained interactive API documentation",
+                    "operationId": "getDocs",
+                    "responses": {"200": {"description": "HTML documentation page", "content": {"text/html": {"schema": {"type": "string"}}}}},
+                }
+            },
+        },
+    }
+
+
+_DOCS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nyaya API Documentation</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, -apple-system, sans-serif; }
+  body { max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  header { border-bottom: 1px solid #8884; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.85rem; background: #0b5fff22; color: #0b5fff; font-weight: 600; }
+  .ep { border: 1px solid #8884; border-radius: 6px; padding: 0.9rem 1rem; margin-bottom: 0.9rem; }
+  .method { font-family: ui-monospace, monospace; font-weight: 700; margin-right: 0.5rem; }
+  .path { font-family: ui-monospace, monospace; font-weight: 600; }
+  .params { margin: 0.5rem 0 0; padding-left: 1.25rem; font-size: 0.92rem; }
+  code { font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Nyaya API Documentation <span class="badge" id="ver">v__VERSION__</span></h1>
+  <p>OpenAPI 3.1.0 schema: <a href="/openapi.json">/openapi.json</a></p>
+</header>
+<main id="endpoints"><p>Loading endpoints from <code>/openapi.json</code>...</p></main>
+<script>
+(async function () {
+  var root = document.getElementById("endpoints");
+  try {
+    var res = await fetch("/openapi.json");
+    var spec = await res.json();
+    if (spec.info && spec.info.version) {
+      document.getElementById("ver").textContent = "v" + spec.info.version;
+    }
+    var frag = document.createDocumentFragment();
+    Object.keys(spec.paths || {}).forEach(function (path) {
+      var ops = spec.paths[path];
+      Object.keys(ops).forEach(function (method) {
+        var op = ops[method];
+        var card = document.createElement("section");
+        card.className = "ep";
+        var h = document.createElement("div");
+        var m = document.createElement("span");
+        m.className = "method";
+        m.textContent = method.toUpperCase();
+        var p = document.createElement("span");
+        p.className = "path";
+        p.textContent = path;
+        h.appendChild(m);
+        h.appendChild(p);
+        card.appendChild(h);
+        if (op.summary) {
+          var s = document.createElement("p");
+          s.textContent = op.summary;
+          card.appendChild(s);
+        }
+        if (Array.isArray(op.parameters) && op.parameters.length) {
+          var ul = document.createElement("ul");
+          ul.className = "params";
+          op.parameters.forEach(function (param) {
+            var li = document.createElement("li");
+            var c = document.createElement("code");
+            c.textContent = param.name;
+            li.appendChild(c);
+            li.appendChild(document.createTextNode(" (" + ((param.schema && param.schema.type) || "string") + ") - " + (param.description || "")));
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+        }
+        frag.appendChild(card);
+      });
+    });
+    root.textContent = "";
+    root.appendChild(frag);
+  } catch (err) {
+    root.textContent = "Failed to load /openapi.json: " + err;
+  }
+})();
+</script>
+</body>
+</html>
+"""
+
+
+async def openapi_endpoint(_request: Request) -> JSONResponse:
+    """GET /openapi.json -> OpenAPI 3.1.0 specification JSON."""
+    return JSONResponse(_build_openapi_spec())
+
+
+async def docs_endpoint(_request: Request) -> HTMLResponse:
+    """GET /docs -> self-contained HTML API documentation referencing /openapi.json."""
+    return HTMLResponse(_DOCS_HTML.replace("__VERSION__", __version__))
+
+
 def register(app: Any, mcp_instance: Any) -> None:
     """Mount the v2 REST endpoints on the Starlette app."""
     app.state.mcp = mcp_instance
@@ -417,6 +663,8 @@ def register(app: Any, mcp_instance: Any) -> None:
         ("api/analytics", "GET", analytics_endpoint),
         ("api/tools", "GET", tools_endpoint),
         ("api/health-summary", "GET", health_summary_endpoint),
+        ("openapi.json", "GET", openapi_endpoint),
+        ("docs", "GET", docs_endpoint),
     ]
     for path, method, handler in routes:
         app.router.add_route(f"/{path}", handler, methods=[method])

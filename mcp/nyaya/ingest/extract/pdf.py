@@ -1,5 +1,5 @@
 """Apache-2.0 `pypdfium2` page-tracked PDF extractor with `%PDF-` magic check,
-15 MiB / 500-page bomb guard, and scanned-PDF quality detection.
+50 MiB / 1200-page bomb guard, and scanned-PDF quality detection.
 """
 
 from __future__ import annotations
@@ -13,8 +13,8 @@ import pypdfium2 as pdfium
 
 from .ocr import OcrEngine, get_default_ocr_engine, render_pdf_page_to_png
 
-MAX_PDF_BYTES = 15 * 1024 * 1024
-MAX_PDF_PAGES = 500
+MAX_PDF_BYTES = 50 * 1024 * 1024
+MAX_PDF_PAGES = 1200
 MIN_CHARS_PER_PAGE = 100.0
 
 
@@ -87,7 +87,7 @@ def extract_pdf_bytes(
         )
     if len(pdf_bytes) > max_bytes:
         raise PdfExtractionError(
-            f"PDF payload size ({len(pdf_bytes)} bytes) exceeds 15 MiB cap ({max_bytes} bytes)."
+            f"PDF payload size ({len(pdf_bytes)} bytes) exceeds 50 MiB cap ({max_bytes} bytes)."
         )
 
     try:
@@ -172,7 +172,7 @@ def extract_pdf_file(
     size = fpath.stat().st_size
     if size > max_bytes:
         raise PdfExtractionError(
-            f"PDF file {fpath} size ({size} bytes) exceeds 15 MiB cap ({max_bytes} bytes)."
+            f"PDF file {fpath} size ({size} bytes) exceeds 50 MiB cap ({max_bytes} bytes)."
         )
     return extract_pdf_bytes(
         fpath.read_bytes(),
