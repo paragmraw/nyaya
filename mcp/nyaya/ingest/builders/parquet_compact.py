@@ -143,7 +143,7 @@ def build_compacted_parquets(
     *,
     input_data: IngestInputBundle | None = None,
     commercial_safe_only: bool = False,
-    public_base_url: str = "https://huggingface.co/datasets/nyaya-mcp/corpus/resolve/main",
+    public_base_url: str | None = None,
 ) -> Path:
     """Compact raw records into the 5 canonical ZSTD Parquet layouts and emit `manifest.json`."""
     bundle = input_data or create_mini_ingest_input()
@@ -208,7 +208,7 @@ def build_compacted_parquets(
             "year_max": meta.get("year_max", ((max(years) // 10) * 10 + 9) if years else 2029),
             "rows": row_cnt,
             "s3_key": rel_key,
-            "public_url": f"{public_base_url.rstrip('/')}/{rel_key}",
+            "public_url": f"{public_base_url.rstrip('/')}/{rel_key}" if public_base_url else None,
             "bytes": fpath.stat().st_size,
             "sha256": _sha256_file(fpath),
         }

@@ -59,7 +59,7 @@ def search_judgments(
     offset: int = 0,
     cursor: str | None = None,
 ) -> JudgmentSearchResponse:
-    """Search Indian judgments across SC, 25 High Courts, 15 Tribunals, and DDL District Courts."""
+    """Search Indian judgments across SC, 25 High Courts, 24 Tribunals & Consumer Commissions, and DDL District Courts."""
     if query is not None and query.strip():
         validate_query_length(query)
         clean_query: str | None = query.strip()
@@ -130,7 +130,7 @@ def register(mcp: Any) -> None:
         name="search_judgments",
         description=(
             "Multi-facet search across Indian Supreme Court (38k+), 25 High Courts (20.7M+), "
-            "15 Tribunals (NCLT, NCLAT, ITAT, NGT, SAT, etc.), and DDL District Courts (81M metadata). "
+            "24 Tribunals & Consumer Commissions (NCLT, NCLAT, NCDRC, ITAT, NGT, SAT, etc.), and DDL District Courts (81M metadata). "
             "Supports authority-weighted sorting for a target forum via binding_for_court, automatic "
             "IPC<->BNS / CrPC<->BNSS / IEA<->BSA pari-materia expansion via include_equivalent_provisions=True, "
             "bench-strength filtering, and commercial_safe_only enforcement."

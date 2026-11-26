@@ -225,7 +225,7 @@ async def test_native_remaining_tools_and_error_paths(sample_backend):
     # 3. corpus_status
     raw_cs = await _corpus_status()
     data_cs = json.loads(raw_cs)
-    assert data_cs["service_version"] == "2.0.0"
+    assert data_cs["service_version"] == "2.1.0"
 
     # 4. judgment_analytics (error or valid response)
     raw_ja = await _judgment_analytics(

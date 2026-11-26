@@ -7,6 +7,7 @@ from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.testclient import TestClient
 
+import nyaya
 from nyaya import storage
 from nyaya.config import get_settings
 from nyaya.exceptions import StorageUnavailable
@@ -28,7 +29,7 @@ def test_health_endpoint():
         body = r.json()
         assert body["service"] == "nyaya"
         assert body["status"] == "healthy"
-        assert body["version"] == "2.0.0"
+        assert body["version"] == nyaya.__version__
         assert "counts" in body
         assert "backends" in body
 

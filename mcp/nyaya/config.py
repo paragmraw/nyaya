@@ -1,4 +1,4 @@
-"""Stateless runtime configuration for nyaya v2.0.
+"""Stateless runtime configuration for nyaya v2.1.
 
 Importing this module or ``nyaya`` has zero I/O side effects: ``get_settings()``
 is evaluated lazily only when requested by the runtime, CLI, or HTTP server.
@@ -217,7 +217,6 @@ class RateLimitSettings:
 
     read_per_min: int = RATE_READ_PER_MIN
     mcp_per_min: int = RATE_MCP_PER_MIN
-    embedding_per_min: int = RATE_MCP_PER_MIN
     analytics_per_min: int = RATE_ANALYTICS_PER_MIN
     chat_per_min: int = RATE_CHAT_PER_MIN
     body_size_max_bytes: int = RATE_BODY_MAX_BYTES

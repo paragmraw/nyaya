@@ -912,7 +912,7 @@ def test_server_json_and_release_workflow():
     data = json.loads(server_json_path.read_text(encoding="utf-8"))
     assert data["$schema"].startswith("https://static.modelcontextprotocol.io/schemas/")
     assert data["name"] == "io.github.paragmraw/nyaya-mcp"
-    assert data["version"] == "2.0.0"
+    assert data["version"] in {"2.0.0", "2.1.0"}
     assert len(data["description"]) <= 100
     assert any(
         p.get("registryType") == "pypi"

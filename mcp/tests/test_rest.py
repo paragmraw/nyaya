@@ -33,7 +33,7 @@ def test_corpus_status_and_alias_shape():
             r = client.get(path)
             assert r.status_code == 200
             body = r.json()
-            assert body["service_version"] == "2.0.0"
+            assert body["service_version"] == "2.1.0"
             assert "counts" in body
             assert body["counts"]["central_acts"] >= 2
             assert body["counts"]["provisions"] >= 2
