@@ -414,6 +414,73 @@ courts:
     hc_jurisdiction: ["All India"]
 
   # ---------------------------------------------------------------------------
+  # 3b. Additional Tribunals, Consumer Commissions & Adjudicators (Pillar 2)
+  # ---------------------------------------------------------------------------
+  - court_code: "NCDRC"
+    court_name: "National Consumer Disputes Redressal Commission"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["NCDRC", "National Consumer Commission"]
+  - court_code: "SCDRC"
+    court_name: "State Consumer Disputes Redressal Commissions"
+    tier: "tribunal"
+    state_ut: "All States"
+    seat_city: "State Capitals"
+    hc_jurisdiction: ["All India"]
+    aliases: ["SCDRC", "State Consumer Commission"]
+  - court_code: "DCDRC"
+    court_name: "District Consumer Disputes Redressal Commissions"
+    tier: "tribunal"
+    state_ut: "All States and Union Territories"
+    seat_city: "District Headquarters"
+    hc_jurisdiction: ["All India"]
+    aliases: ["DCDRC", "District Consumer Commission", "District Consumer Forum"]
+  - court_code: "DRAT"
+    court_name: "Debts Recovery Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["DRAT", "Debts Recovery Appellate Tribunal"]
+  - court_code: "AFT"
+    court_name: "Armed Forces Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["AFT", "Armed Forces Tribunal"]
+  - court_code: "GSTAT"
+    court_name: "Goods and Services Tax Appellate Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["GSTAT", "GST Appellate Tribunal"]
+  - court_code: "RCT"
+    court_name: "Railway Claims Tribunal"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["RCT", "Railway Claims Tribunal"]
+  - court_code: "CIC"
+    court_name: "Central Information Commission"
+    tier: "tribunal"
+    state_ut: "Delhi"
+    seat_city: "New Delhi"
+    hc_jurisdiction: ["All India"]
+    aliases: ["CIC", "Central Information Commission"]
+  - court_code: "SEBI_ADJ"
+    court_name: "SEBI Adjudicating Officers"
+    tier: "tribunal"
+    state_ut: "Maharashtra"
+    seat_city: "Mumbai"
+    hc_jurisdiction: ["All India"]
+    aliases: ["SEBI_ADJ", "SEBI AO", "SEBI Adjudicating Officer"]
+
+  # ---------------------------------------------------------------------------
   # 4. 12 Sectoral & Financial Regulators
   # ---------------------------------------------------------------------------
   - court_code: "RBI"
