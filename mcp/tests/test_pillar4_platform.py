@@ -19,6 +19,7 @@ import tarfile
 import zipfile
 from datetime import date as Date
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import pytest
@@ -341,7 +342,9 @@ def test_cause_list_store_sqlite_jsonl_and_html_parser(tmp_path: Path):
     assert "Maharashtra" in (hit.parties or "")
     assert "Adv. A. Singhvi" in hit.advocates
     assert hit.purpose == "Final Hearing"
-    assert hit.source_url.startswith("https://www.sci.gov.in")
+    assert urlsplit(hit.source_url).scheme == "https"
+    assert urlsplit(hit.source_url).hostname == "www.sci.gov.in"
+    assert hit.source_url == "https://www.sci.gov.in/daily-cause-list/2026-11-26"
 
     cnr_hits = store.search_cause_lists(cnr="DLHC010000422026")
     assert len(cnr_hits) == 1
@@ -910,7 +913,10 @@ def test_server_json_and_release_workflow():
 
     assert server_json_path.is_file()
     data = json.loads(server_json_path.read_text(encoding="utf-8"))
-    assert data["$schema"].startswith("https://static.modelcontextprotocol.io/schemas/")
+    schema_url = urlsplit(data["$schema"])
+    assert schema_url.scheme == "https"
+    assert schema_url.hostname == "static.modelcontextprotocol.io"
+    assert schema_url.path.startswith("/schemas/")
     assert data["name"] == "io.github.paragmraw/nyaya-mcp"
     assert data["version"] in {"2.0.0", "2.1.0"}
     assert len(data["description"]) <= 100
