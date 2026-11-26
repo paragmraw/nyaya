@@ -15,6 +15,10 @@ allowed_domains:
   - www.devdatalab.org
   - dataverse.harvard.edu
   - huggingface.co
+  - ncdrc.nic.in
+  - nclat.nic.in
+  - egazette.gov.in
+  - sci.gov.in
 
 sources:
   - id: dattam_sc_judgments
@@ -268,3 +272,59 @@ sources:
     target_store: "lance_fts"
     tier: "static"
     update_cadence: "static"
+
+  - id: ncdrc_jagriti
+    name: "NCDRC & Consumer Commissions Orders Portal (e-Jagriti / Confonet)"
+    domain: tribunals
+    access_method: https_json
+    uri: "https://ncdrc.nic.in"
+    license_spdx: "IN-S52-1-q"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) official Consumer Commission judicial orders"
+    attribution: "National Consumer Disputes Redressal Commission (NCDRC), Government of India"
+    target_store: "bucket_parquet"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: nclat_orders
+    name: "National Company Law Appellate Tribunal (NCLAT) Official Orders"
+    domain: tribunals
+    access_method: https_pdf
+    uri: "https://nclat.nic.in"
+    license_spdx: "IN-S52-1-q"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) official appellate tribunal orders"
+    attribution: "National Company Law Appellate Tribunal (NCLAT)"
+    target_store: "bucket_parquet"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: egazette_rules
+    name: "The Gazette of India (e-Gazette) Central Rules, Regulations & Notifications"
+    domain: subordinate_legislation
+    access_method: https_pdf
+    uri: "https://egazette.gov.in"
+    license_spdx: "IN-S52-1-q"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(i)-(ii) official Gazette of India notifications and subordinate rules"
+    attribution: "Department of Publication, Ministry of Housing and Urban Affairs, Government of India (e-Gazette)"
+    target_store: "sqlite_core"
+    tier: "daily"
+    update_cadence: "daily"
+
+  - id: sci_cause_lists
+    name: "Supreme Court of India Official Daily & Weekly Cause Lists"
+    domain: supreme_court_cause_lists
+    access_method: https_pdf
+    uri: "https://sci.gov.in"
+    license_spdx: "CC0-1.0"
+    commercial_safe: true
+    terms_status: "cleared"
+    copyright_basis: "Copyright Act 1957 s.52(1)(q)(iv) official court cause list schedules"
+    attribution: "Supreme Court of India Registry (sci.gov.in)"
+    target_store: "sqlite_core"
+    tier: "daily"
+    update_cadence: "daily"

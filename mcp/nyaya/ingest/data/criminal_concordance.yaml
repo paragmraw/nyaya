@@ -2,7 +2,7 @@ schema_version: 2
 effective_date: "2024-07-01"
 source_id: "prs_2026_delta"
 verified_by: "bprd_prs_gazette_concordance_v2"
-updated_at: "2026-11-22"
+updated_at: "2026-11-26"
 
 mappings:
   # ---------------------------------------------------------------------------
@@ -24,6 +24,34 @@ mappings:
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
+    old_ref: "96"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "34"
+    new_base_ref: "34"
+    mapping_type: "one_to_one"
+    substantive_delta: "Things done in private defence moved verbatim from IPC s.96 to BNS s.34."
+    punishment_delta: "General exception; no offence."
+    procedural_delta: "Affirmative defence; burden under BSA s.108."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "100"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "38"
+    new_base_ref: "38"
+    mapping_type: "one_to_one"
+    substantive_delta: "When the right of private defence of the body extends to causing death moved from IPC s.100 to BNS s.38."
+    punishment_delta: "General exception; includes acid attack defence clause."
+    procedural_delta: "Affirmative defence; burden under BSA s.108."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
     old_ref: "107"
     new_act: "BNS"
     new_act_id: "bns-2023"
@@ -34,6 +62,20 @@ mappings:
     punishment_delta: "No change in substantive definition."
     procedural_delta: "Governed by BNSS First Schedule."
     savings_note: "BNS s.358 savings applies to pre-2024-07-01 acts."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "120A"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "61(1)"
+    new_base_ref: "61"
+    mapping_type: "many_to_one"
+    substantive_delta: "Definition of criminal conspiracy moved from IPC s.120A to BNS s.61(1)."
+    punishment_delta: "Definitional; punished under BNS s.61(2)."
+    procedural_delta: "Same as principal/abetted offence."
+    savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
 
   - old_act: "IPC"
@@ -49,6 +91,12 @@ mappings:
     procedural_delta: "Same as abetted/conspired offence."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Same as abetment of offence (where death/life/2+ yrs); else up to 6 months and/or fine"
+      triable_by: "Court by which abetted offence is triable / Magistrate of First Class"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -64,6 +112,86 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
     savings_note: "Pending IPC s.124A prosecutions remain subject to Supreme Court directions in S.G. Vombatkere v. Union of India."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment for life, or imprisonment up to 7 years and fine"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "141"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "189(1)"
+    new_base_ref: "189"
+    mapping_type: "many_to_one"
+    substantive_delta: "Definition of unlawful assembly (five or more persons with common object) moved from IPC s.141 to BNS s.189(1)."
+    punishment_delta: "Definitional; punished under BNS s.189(2)-(5)."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "143"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "189(2)"
+    new_base_ref: "189"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for being member of an unlawful assembly moved from IPC s.143 to BNS s.189(2)."
+    punishment_delta: "Imprisonment up to 6 months, or fine, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 6 months, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "147"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "191(2)"
+    new_base_ref: "191"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for rioting moved from IPC s.147 to BNS s.191(2) (consolidated with definition in s.191(1))."
+    punishment_delta: "Imprisonment up to 2 years, or fine, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 2 years, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "148"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "191(3)"
+    new_base_ref: "191"
+    mapping_type: "many_to_one"
+    substantive_delta: "Rioting armed with deadly weapon moved from IPC s.148 to BNS s.191(3)."
+    punishment_delta: "Imprisonment up to 3 years, or fine, or both."
+    procedural_delta: "Cognizable, bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 3 years, or fine, or both"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -78,6 +206,200 @@ mappings:
     procedural_delta: "According to offence committed."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "153A"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "196"
+    new_base_ref: "196"
+    mapping_type: "one_to_one"
+    substantive_delta: "Promoting enmity between different groups on grounds of religion, race, place of birth, residence, language, etc. moved from IPC s.153A to BNS s.196, expressly covering electronic communication."
+    punishment_delta: "Up to 3 years and/or fine under s.196(1); up to 5 years and fine if committed in place of worship under s.196(2)."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class; prior sanction required under BNSS s.217."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years (or 5 years in place of worship), or fine, or both"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "186"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "221"
+    new_base_ref: "221"
+    mapping_type: "one_to_one"
+    substantive_delta: "Obstructing public servant in discharge of public functions moved from IPC s.186 to BNS s.221."
+    punishment_delta: "Up to 3 months imprisonment, or fine up to Rs. 2,500, or both."
+    procedural_delta: "Non-cognizable, bailable, triable by any Magistrate on public servant complaint (BNSS s.215)."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 3 months, or fine up to Rs. 2,500, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "188"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "223"
+    new_base_ref: "223"
+    mapping_type: "one_to_one"
+    substantive_delta: "Disobedience to order duly promulgated by public servant moved from IPC s.188 to BNS s.223 with enhanced fine thresholds."
+    punishment_delta: "Up to 6 months simple imprisonment or Rs. 2,500 fine (clause (a)); up to 1 year or Rs. 5,000 fine if danger to human life/safety/riot (clause (b))."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; requires written complaint under BNSS s.215."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Simple imprisonment up to 6 months or fine up to Rs. 2,500 (1 year / Rs. 5,000 if endangering life/safety)"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "191"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "227"
+    new_base_ref: "227"
+    mapping_type: "one_to_one"
+    substantive_delta: "Giving false evidence (perjury definition) moved from IPC s.191 to BNS s.227."
+    punishment_delta: "Definitional; punished under BNS s.229."
+    procedural_delta: "Court complaint prerequisite under BNSS s.215 / s.379."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "193"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "229"
+    new_base_ref: "229"
+    mapping_type: "one_to_one"
+    substantive_delta: "Punishment for false evidence moved from IPC s.193 to BNS s.229."
+    punishment_delta: "Up to 7 years + Rs. 10,000 fine in judicial proceeding; up to 3 years + Rs. 5,000 fine in other cases."
+    procedural_delta: "Non-cognizable, bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 7 years and fine up to Rs. 10,000 (judicial proceeding)"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "201"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "238"
+    new_base_ref: "238"
+    mapping_type: "one_to_one"
+    substantive_delta: "Causing disappearance of evidence of offence, or giving false information to screen offender, moved from IPC s.201 to BNS s.238."
+    punishment_delta: "Up to 7 years + fine if principal offence is capital; up to 3 years + fine if life/10-year offence."
+    procedural_delta: "According to principal offence; bailable."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Up to 7 years and fine (capital offence) / up to 3 years and fine (10-year or life offence)"
+      triable_by: "Court of Session / Magistrate of First Class (by tier)"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "228A"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "72"
+    new_base_ref: "72"
+    mapping_type: "one_to_one"
+    substantive_delta: "Disclosure of identity of victim of certain sexual offences relocated from IPC s.228A to BNS s.72 (cross-referencing BNS ss.64-71)."
+    punishment_delta: "Imprisonment up to 2 years and fine."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 2 years and fine"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "279"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "281"
+    new_base_ref: "281"
+    mapping_type: "one_to_one"
+    substantive_delta: "Rash driving or riding on a public way moved from IPC s.279 to BNS s.281."
+    punishment_delta: "Imprisonment up to 6 months, or fine up to Rs. 1,000, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 6 months, or fine up to Rs. 1,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "292"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "294"
+    new_base_ref: "294"
+    mapping_type: "one_to_one"
+    substantive_delta: "Sale, distribution, or public exhibition of obscene books/objects moved from IPC s.292 to BNS s.294 (explicitly covering electronic form)."
+    punishment_delta: "First conviction up to 2 years and fine up to Rs. 5,000; subsequent up to 5 years and Rs. 10,000."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Up to 2 years and fine up to Rs. 5,000 (first conviction); up to 5 years (subsequent)"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "295A"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "299"
+    new_base_ref: "299"
+    mapping_type: "one_to_one"
+    substantive_delta: "Deliberate and malicious acts intended to outrage religious feelings moved from IPC s.295A to BNS s.299 (expressly includes electronic means)."
+    punishment_delta: "Imprisonment up to 3 years, or fine, or both."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class; sanction under BNSS s.217."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years, or fine, or both"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -120,6 +442,12 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
     savings_note: "BNSS s.531: pre-2024-07-01 offences and pending trials continue under IPC s.302."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Death or imprisonment for life, and fine"
+      triable_by: "Court of Session"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -134,6 +462,12 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Life imprisonment or 5-10 years and fine (Part I); up to 10 years and fine (Part II)"
+      triable_by: "Court of Session"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -148,6 +482,12 @@ mappings:
     procedural_delta: "Cognizable, bailable (s.106(1)), triable by Magistrate of First Class."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 5 years and fine (up to 2 years for registered medical practitioner); up to 10 years under s.106(2)"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -162,6 +502,32 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment not less than 7 years up to imprisonment for life"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "306"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "108"
+    new_base_ref: "108"
+    mapping_type: "one_to_one"
+    substantive_delta: "Abetment of suicide moved from IPC s.306 to BNS s.108."
+    punishment_delta: "Imprisonment up to 10 years and fine unchanged."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 10 years and fine"
+      triable_by: "Court of Session"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -176,6 +542,212 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 10 years and fine (life imprisonment if hurt caused)"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "308"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "110"
+    new_base_ref: "110"
+    mapping_type: "one_to_one"
+    substantive_delta: "Attempt to commit culpable homicide moved from IPC s.308 to BNS s.110."
+    punishment_delta: "Up to 3 years and/or fine; up to 7 years and/or fine if hurt caused."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years, or fine, or both (up to 7 years if hurt caused)"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "323"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "115(2)"
+    new_base_ref: "115"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for voluntarily causing hurt moved from IPC s.323 to BNS s.115(2) (consolidated with definition in s.115(1))."
+    punishment_delta: "Imprisonment up to 1 year, or fine up to Rs. 10,000 (increased from Rs. 1,000), or both."
+    procedural_delta: "Non-cognizable, bailable, triable by any Magistrate; compoundable by person hurt."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 1 year, or fine up to Rs. 10,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "324"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "118(1)"
+    new_base_ref: "118"
+    mapping_type: "many_to_one"
+    substantive_delta: "Voluntarily causing hurt by dangerous weapons or means moved from IPC s.324 to BNS s.118(1)."
+    punishment_delta: "Imprisonment up to 3 years, or fine up to Rs. 20,000, or both."
+    procedural_delta: "Cognizable, non-bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years, or fine up to Rs. 20,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "325"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "117(2)"
+    new_base_ref: "117"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for voluntarily causing grievous hurt moved from IPC s.325 to BNS s.117(2) (s.117(3)-(4) add permanent disability and group hurt provisions)."
+    punishment_delta: "Imprisonment up to 7 years and fine."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; compoundable with court permission."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 7 years and fine"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "326"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "118(2)"
+    new_base_ref: "118"
+    mapping_type: "many_to_one"
+    substantive_delta: "Voluntarily causing grievous hurt by dangerous weapons or means moved from IPC s.326 to BNS s.118(2)."
+    punishment_delta: "Imprisonment for life, or imprisonment of 1 to 10 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment for life, or imprisonment of 1 to 10 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "326A"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "124(1)"
+    new_base_ref: "124"
+    mapping_type: "many_to_one"
+    substantive_delta: "Voluntarily causing grievous hurt by use of acid, etc. moved from IPC s.326A to BNS s.124(1)."
+    punishment_delta: "Minimum 10 years imprisonment up to life imprisonment and fine (payable to victim)."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment not less than 10 years up to life imprisonment and fine"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "332"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "121(1)"
+    new_base_ref: "121"
+    mapping_type: "many_to_one"
+    substantive_delta: "Voluntarily causing hurt to deter public servant from his duty moved from IPC s.332 to BNS s.121(1)."
+    punishment_delta: "Imprisonment up to 5 years (enhanced from 3 years), or fine, or both."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 5 years, or fine, or both"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "341"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "126(2)"
+    new_base_ref: "126"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for wrongful restraint moved from IPC s.341 to BNS s.126(2)."
+    punishment_delta: "Simple imprisonment up to 1 month, or fine up to Rs. 5,000, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; compoundable by person restrained."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Simple imprisonment up to 1 month, or fine up to Rs. 5,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "342"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "127(2)"
+    new_base_ref: "127"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for wrongful confinement moved from IPC s.342 to BNS s.127(2)."
+    punishment_delta: "Imprisonment up to 1 year, or fine up to Rs. 5,000, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; compoundable by person confined."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 1 year, or fine up to Rs. 5,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "353"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "132"
+    new_base_ref: "132"
+    mapping_type: "one_to_one"
+    substantive_delta: "Assault or criminal force to deter public servant from discharge of his duty moved from IPC s.353 to BNS s.132."
+    punishment_delta: "Imprisonment up to 2 years, or fine, or both."
+    procedural_delta: "Cognizable, non-bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 2 years, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -190,6 +762,12 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by any Magistrate."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment from 1 year to 5 years and fine"
+      triable_by: "Any Magistrate"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -204,6 +782,52 @@ mappings:
     procedural_delta: "Cognizable, bailable, triable by any Magistrate."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Rigorous imprisonment up to 3 years and/or fine (clauses (i)-(iii)); up to 1 year (clause (iv))"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "354B"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "76"
+    new_base_ref: "76"
+    mapping_type: "one_to_one"
+    substantive_delta: "Assault or use of criminal force to woman with intent to disrobe moved from IPC s.354B to BNS s.76."
+    punishment_delta: "Imprisonment from 3 years to 7 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment from 3 years to 7 years and fine"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "354C"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "77"
+    new_base_ref: "77"
+    mapping_type: "one_to_one"
+    substantive_delta: "Voyeurism relocated from IPC s.354C to BNS s.77 (made gender-neutral as to perpetrator)."
+    punishment_delta: "First conviction 1 to 3 years and fine; subsequent conviction 3 to 7 years and fine."
+    procedural_delta: "Cognizable, bailable on first conviction / non-bailable on subsequent, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment 1 to 3 years and fine (first conviction); 3 to 7 years and fine (subsequent)"
+      triable_by: "Any Magistrate"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -218,6 +842,72 @@ mappings:
     procedural_delta: "Cognizable, bailable on first conviction / non-bailable on second, triable by any Magistrate."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 3 years and fine (first conviction); up to 5 years and fine (subsequent)"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "363"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "137(2)"
+    new_base_ref: "137"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for kidnapping moved from IPC s.363 to BNS s.137(2) (definition in s.137(1), gender-neutral age 18 for child)."
+    punishment_delta: "Imprisonment up to 7 years and fine."
+    procedural_delta: "Cognizable, bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 7 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "364A"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "140(2)"
+    new_base_ref: "140"
+    mapping_type: "many_to_one"
+    substantive_delta: "Kidnapping for ransom, etc. moved from IPC s.364A to BNS s.140(2)."
+    punishment_delta: "Death or imprisonment for life, and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Death, or imprisonment for life, and fine"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "366"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "87"
+    new_base_ref: "87"
+    mapping_type: "one_to_one"
+    substantive_delta: "Kidnapping, abducting or inducing woman to compel her marriage, etc. moved from IPC s.366 to BNS s.87."
+    punishment_delta: "Imprisonment up to 10 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 10 years and fine"
+      triable_by: "Court of Session"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -246,6 +936,32 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Rigorous imprisonment not less than 10 years up to life imprisonment and fine"
+      triable_by: "Court of Session"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "376D"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "70(1)"
+    new_base_ref: "70"
+    mapping_type: "one_to_many"
+    substantive_delta: "Gang rape moved from IPC s.376D to BNS s.70(1); s.70(2) covers gang rape of woman under 18 years (replacing IPC ss.376DA/376DB)."
+    punishment_delta: "Rigorous imprisonment not less than 20 years up to life imprisonment (remainder of natural life) and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Rigorous imprisonment not less than 20 years up to life imprisonment (natural life) and fine"
+      triable_by: "Court of Session"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -288,6 +1004,92 @@ mappings:
     procedural_delta: "Cognizable, triable by any Magistrate."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years, or fine, or both (community service for first-time theft < Rs. 5,000)"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "380"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "305"
+    new_base_ref: "305"
+    mapping_type: "one_to_one"
+    substantive_delta: "Theft in a dwelling house, or means of transportation, or place of worship, etc. moved from IPC s.380 to BNS s.305 (expanded to vehicles, idols/places of worship, and Government property)."
+    punishment_delta: "Imprisonment up to 7 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 7 years and fine"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "384"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "308(2)"
+    new_base_ref: "308"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for extortion moved from IPC s.384 to BNS s.308(2) (consolidated with definition in s.308(1))."
+    punishment_delta: "Imprisonment up to 7 years (enhanced from 3 years), or fine, or both."
+    procedural_delta: "Cognizable, non-bailable, triable by any Magistrate."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 7 years, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "392"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "309(4)"
+    new_base_ref: "309"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for robbery moved from IPC s.392 to BNS s.309(4) (consolidated with definitions in s.309(1)-(3))."
+    punishment_delta: "Rigorous imprisonment up to 10 years and fine (up to 14 years if on highway between sunset and sunrise)."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Rigorous imprisonment up to 10 years and fine (up to 14 years on highway at night)"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "395"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "310(2)"
+    new_base_ref: "310"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for dacoity moved from IPC s.395 to BNS s.310(2)."
+    punishment_delta: "Imprisonment for life, or rigorous imprisonment up to 10 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Court of Session."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment for life, or rigorous imprisonment up to 10 years and fine"
+      triable_by: "Court of Session"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -302,6 +1104,86 @@ mappings:
     procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 5 years, or fine, or both"
+      triable_by: "Magistrate of First Class"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "409"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "316(5)"
+    new_base_ref: "316"
+    mapping_type: "many_to_one"
+    substantive_delta: "Criminal breach of trust by public servant, banker, merchant, factor, broker, attorney or agent moved from IPC s.409 to BNS s.316(5)."
+    punishment_delta: "Imprisonment for life, or imprisonment up to 10 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment for life, or imprisonment up to 10 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "411"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "317(2)"
+    new_base_ref: "317"
+    mapping_type: "many_to_one"
+    substantive_delta: "Dishonestly receiving stolen property moved from IPC s.411 to BNS s.317(2) (consolidated with stolen property definition in s.317(1))."
+    punishment_delta: "Imprisonment up to 3 years, or fine, or both."
+    procedural_delta: "Cognizable, non-bailable, triable by any Magistrate; compoundable by owner of property."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "415"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "318(1)"
+    new_base_ref: "318"
+    mapping_type: "many_to_one"
+    substantive_delta: "Definition of cheating moved from IPC s.415 to BNS s.318(1)."
+    punishment_delta: "Definitional; punished under BNS s.318(2)-(4)."
+    procedural_delta: "Non-cognizable for simple cheating u/s 318(2); cognizable for s.318(4)."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "417"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "318(2)"
+    new_base_ref: "318"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for simple cheating moved from IPC s.417 to BNS s.318(2)."
+    punishment_delta: "Imprisonment up to 3 years (enhanced from 1 year), or fine, or both."
+    procedural_delta: "Non-cognizable, bailable, triable by any Magistrate; compoundable by person cheated."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 3 years, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -315,6 +1197,166 @@ mappings:
     punishment_delta: "Imprisonment up to 7 years and fine unchanged."
     procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class; compoundable by person cheated with court permission."
     savings_note: "BNSS s.531 savings applies to pre-2024-07-01 FIRs."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 7 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "427"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "324(4)"
+    new_base_ref: "324"
+    mapping_type: "many_to_one"
+    substantive_delta: "Mischief causing damage to property moved from IPC s.427 to BNS s.324(4)-(5) with updated monetary thresholds (Rs. 20,000 / Rs. 1,00,000)."
+    punishment_delta: "Up to 2 years and/or fine (Rs. 20,000 to < Rs. 1,00,000); up to 5 years and/or fine (>= Rs. 1,00,000)."
+    procedural_delta: "Non-cognizable, bailable, triable by any Magistrate; compoundable."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 2 years, or fine, or both (Rs. 20,000 to < Rs. 1,00,000 loss)"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "447"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "329(3)"
+    new_base_ref: "329"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for criminal trespass moved from IPC s.447 to BNS s.329(3)."
+    punishment_delta: "Imprisonment up to 3 months, or fine up to Rs. 5,000, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; compoundable by person in possession."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 3 months, or fine up to Rs. 5,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "448"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "329(4)"
+    new_base_ref: "329"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for house-trespass moved from IPC s.448 to BNS s.329(4)."
+    punishment_delta: "Imprisonment up to 1 year, or fine up to Rs. 5,000, or both."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; compoundable by person in possession."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Imprisonment up to 1 year, or fine up to Rs. 5,000, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "465"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "336(2)"
+    new_base_ref: "336"
+    mapping_type: "many_to_one"
+    substantive_delta: "Punishment for forgery moved from IPC s.465 to BNS s.336(2) (consolidated with definition in s.336(1))."
+    punishment_delta: "Imprisonment up to 2 years, or fine, or both."
+    procedural_delta: "Non-cognizable, bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 2 years, or fine, or both"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "467"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "338"
+    new_base_ref: "338"
+    mapping_type: "one_to_one"
+    substantive_delta: "Forgery of valuable security, will, etc. moved from IPC s.467 to BNS s.338."
+    punishment_delta: "Imprisonment for life, or imprisonment up to 10 years and fine."
+    procedural_delta: "Non-cognizable, non-bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: false
+      punishment: "Imprisonment for life, or imprisonment up to 10 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "468"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "336(3)"
+    new_base_ref: "336"
+    mapping_type: "many_to_one"
+    substantive_delta: "Forgery for purpose of cheating moved from IPC s.468 to BNS s.336(3)."
+    punishment_delta: "Imprisonment up to 7 years and fine."
+    procedural_delta: "Cognizable, non-bailable, triable by Magistrate of First Class."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 7 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "471"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "340(2)"
+    new_base_ref: "340"
+    mapping_type: "many_to_one"
+    substantive_delta: "Using as genuine a forged document or electronic record moved from IPC s.471 to BNS s.340(2)."
+    punishment_delta: "Punished in the same manner as if forged."
+    procedural_delta: "Cognizable, bailable, triable by Court by which forgery is triable."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Same punishment as for forging such document or electronic record"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "497"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "NONE"
+    new_base_ref: "NONE"
+    mapping_type: "omitted"
+    substantive_delta: "IPC s.497 ('Adultery', struck down as unconstitutional in Joseph Shine v. Union of India, (2019) 3 SCC 39) is completely omitted from BNS."
+    punishment_delta: "Omitted in full."
+    procedural_delta: "Not applicable (omitted)."
+    savings_note: "Struck down prior to BNS commencement."
     verified_by: "bprd_official_table_v1"
 
   - old_act: "IPC"
@@ -330,6 +1372,12 @@ mappings:
     procedural_delta: "Cognizable if information given by victim or specified relatives, non-bailable, triable by Magistrate of First Class."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: false
+      punishment: "Imprisonment up to 3 years and fine"
+      triable_by: "Magistrate of First Class"
+      compoundable: false
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -358,6 +1406,32 @@ mappings:
     procedural_delta: "Non-cognizable, bailable, compoundable."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Simple imprisonment up to 2 years, or fine, or both, or community service"
+      triable_by: "Magistrate of First Class"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "504"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "352"
+    new_base_ref: "352"
+    mapping_type: "one_to_one"
+    substantive_delta: "Intentional insult with intent to provoke breach of peace moved from IPC s.504 to BNS s.352."
+    punishment_delta: "Imprisonment up to 2 years, or fine, or both."
+    procedural_delta: "Non-cognizable, bailable, triable by any Magistrate; compoundable by person insulted."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 2 years, or fine, or both"
+      triable_by: "Any Magistrate"
+      compoundable: true
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -372,6 +1446,32 @@ mappings:
     procedural_delta: "Non-cognizable, bailable, triable by any Magistrate."
     savings_note: "BNS s.358 savings applies."
     verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: false
+      bailable: true
+      punishment: "Imprisonment up to 2 years, or fine, or both (up to 7 years if threat to cause death or grievous hurt)"
+      triable_by: "Any Magistrate"
+      compoundable: true
+
+  - old_act: "IPC"
+    old_act_id: "ipc-1860"
+    old_ref: "509"
+    new_act: "BNS"
+    new_act_id: "bns-2023"
+    new_ref: "79"
+    new_base_ref: "79"
+    mapping_type: "one_to_one"
+    substantive_delta: "Word, gesture or act intended to insult the modesty of a woman moved from IPC s.509 to BNS s.79."
+    punishment_delta: "Simple imprisonment up to 3 years and fine."
+    procedural_delta: "Cognizable, bailable, triable by any Magistrate; compoundable by the woman insulted with court permission."
+    savings_note: "BNS s.358 savings applies."
+    verified_by: "bprd_official_table_v1"
+    offence_classification:
+      cognizable: true
+      bailable: true
+      punishment: "Simple imprisonment up to 3 years and fine"
+      triable_by: "Any Magistrate"
+      compoundable: true
 
   - old_act: "IPC"
     old_act_id: "ipc-1860"
@@ -420,6 +1520,20 @@ mappings:
 
   - old_act: "CrPC"
     old_act_id: "crpc-1973"
+    old_ref: "107"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "126"
+    new_base_ref: "126"
+    mapping_type: "one_to_one"
+    substantive_delta: "Security for keeping the peace in other cases moved from CrPC s.107 to BNSS s.126 (note: BNSS s.107 is a new provision for attachment/forfeiture of proceeds of crime)."
+    punishment_delta: "N/A"
+    procedural_delta: "Executive Magistrate preventive bond proceeding."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
     old_ref: "125"
     new_act: "BNSS"
     new_act_id: "bnss-2023"
@@ -429,6 +1543,34 @@ mappings:
     substantive_delta: "Order for maintenance of wives, children and parents relocated from CrPC s.125 to BNSS s.144."
     punishment_delta: "N/A"
     procedural_delta: "60-day disposition target for interim maintenance retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "133"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "152"
+    new_base_ref: "152"
+    mapping_type: "one_to_one"
+    substantive_delta: "Conditional order for removal of public nuisance moved from CrPC s.133 to BNSS s.152."
+    punishment_delta: "N/A"
+    procedural_delta: "Executive Magistrate jurisdiction retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "144"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "163"
+    new_base_ref: "163"
+    mapping_type: "one_to_one"
+    substantive_delta: "Power to issue order in urgent cases of nuisance or apprehended danger moved from CrPC s.144 to BNSS s.163."
+    punishment_delta: "N/A"
+    procedural_delta: "2-month order ceiling (extendable up to 6 months by State Govt) retained."
     savings_note: "BNSS s.531 savings applies."
     verified_by: "bprd_official_table_v1"
 
@@ -444,6 +1586,20 @@ mappings:
     punishment_delta: "N/A"
     procedural_delta: "BNSS s.173(3) permits a 14-day preliminary enquiry with DSP permission for offences punishable with 3 to 7 years imprisonment."
     savings_note: "BNSS s.531: FIRs registered prior to 2024-07-01 continue under CrPC."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "156"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "175"
+    new_base_ref: "175"
+    mapping_type: "one_to_one"
+    substantive_delta: "Police officer's power to investigate cognizable case and Magistrate's direction to investigate (CrPC s.156(3)) moved to BNSS s.175(1)-(4)."
+    punishment_delta: "N/A"
+    procedural_delta: "BNSS s.175(3) requires sworn affidavit (codifying Priyanka Srivastava) and prior SP representation under s.173(4); s.175(4) requires superior officer report before ordering probe against public servant."
+    savings_note: "BNSS s.531 savings applies."
     verified_by: "bprd_official_table_v1"
 
   - old_act: "CrPC"
@@ -504,6 +1660,286 @@ mappings:
 
   - old_act: "CrPC"
     old_act_id: "crpc-1973"
+    old_ref: "177"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "200"
+    new_base_ref: "200"
+    mapping_type: "one_to_one"
+    substantive_delta: "Ordinary place of inquiry and trial moved from CrPC s.177 to BNSS s.200."
+    punishment_delta: "N/A"
+    procedural_delta: "Territorial jurisdiction rules preserved."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "190"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "210"
+    new_base_ref: "210"
+    mapping_type: "one_to_one"
+    substantive_delta: "Cognizance of offences by Magistrates moved from CrPC s.190 to BNSS s.210."
+    punishment_delta: "N/A"
+    procedural_delta: "Cognizance upon complaint (including complaints by public servants under special laws), police report, or information."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "197"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "218"
+    new_base_ref: "218"
+    mapping_type: "one_to_one"
+    substantive_delta: "Prosecution of Judges and public servants (prior sanction) moved from CrPC s.197 to BNSS s.218."
+    punishment_delta: "N/A"
+    procedural_delta: "Introduces 120-day deemed sanction if appropriate Government fails to decide within 120 days of receipt of sanction request."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "200"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "223"
+    new_base_ref: "223"
+    mapping_type: "one_to_one"
+    substantive_delta: "Examination of complainant on private complaint moved from CrPC s.200 to BNSS s.223."
+    punishment_delta: "N/A"
+    procedural_delta: "Proviso to BNSS s.223(1) mandates giving accused an opportunity of being heard BEFORE Magistrate takes cognizance on a complaint."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "202"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "225"
+    new_base_ref: "225"
+    mapping_type: "one_to_one"
+    substantive_delta: "Postponement of issue of process moved from CrPC s.202 to BNSS s.225."
+    punishment_delta: "N/A"
+    procedural_delta: "Mandatory inquiry/investigation where accused resides outside territorial jurisdiction retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "227"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "250"
+    new_base_ref: "250"
+    mapping_type: "one_to_one"
+    substantive_delta: "Discharge in Sessions trials moved from CrPC s.227 to BNSS s.250."
+    punishment_delta: "N/A"
+    procedural_delta: "BNSS s.250(1) prescribes 60-day window from committal to prefer discharge application."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "239"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "262"
+    new_base_ref: "262"
+    mapping_type: "one_to_one"
+    substantive_delta: "When accused shall be discharged in warrant cases instituted on police report moved from CrPC s.239 to BNSS s.262."
+    punishment_delta: "N/A"
+    procedural_delta: "60-day window from supply of documents u/s 230 BNSS to prefer discharge application; electronic examination allowed."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "245"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "272"
+    new_base_ref: "272"
+    mapping_type: "one_to_one"
+    substantive_delta: "When accused shall be discharged in warrant cases instituted otherwise than on police report moved from CrPC s.245 to BNSS s.272."
+    punishment_delta: "N/A"
+    procedural_delta: "Preserves pre-charge evidence discharge standard."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "313"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "351"
+    new_base_ref: "351"
+    mapping_type: "one_to_one"
+    substantive_delta: "Power to examine the accused moved from CrPC s.313 to BNSS s.351."
+    punishment_delta: "N/A"
+    procedural_delta: "Permits examination through audio-video electronic means."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "319"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "352"
+    new_base_ref: "352"
+    mapping_type: "one_to_one"
+    substantive_delta: "Power to proceed against other persons appearing to be guilty of offence moved from CrPC s.319 to BNSS s.352."
+    punishment_delta: "N/A"
+    procedural_delta: "Hardeep Singh v. State of Punjab standard continues."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "320"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "359"
+    new_base_ref: "359"
+    mapping_type: "one_to_one"
+    substantive_delta: "Compounding of offences table moved from CrPC s.320 to BNSS s.359 (re-indexed to BNS sections)."
+    punishment_delta: "N/A"
+    procedural_delta: "Maintains Table 1 (without court permission) and Table 2 (with court permission)."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "357"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "395"
+    new_base_ref: "395"
+    mapping_type: "one_to_one"
+    substantive_delta: "Order to pay compensation out of fine or separately moved from CrPC s.357 to BNSS s.395."
+    punishment_delta: "N/A"
+    procedural_delta: "Victim compensation scheme (CrPC s.357A) moves to BNSS s.396."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "372"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "413"
+    new_base_ref: "413"
+    mapping_type: "one_to_one"
+    substantive_delta: "No appeal to lie unless otherwise provided & victim's proviso right to appeal moved from CrPC s.372 to BNSS s.413."
+    punishment_delta: "N/A"
+    procedural_delta: "Victim right to appeal acquittal, lesser offence conviction, or inadequate compensation preserved."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "374"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "415"
+    new_base_ref: "415"
+    mapping_type: "one_to_one"
+    substantive_delta: "Appeals from convictions moved from CrPC s.374 to BNSS s.415."
+    punishment_delta: "N/A"
+    procedural_delta: "6-month statutory disposal mandate for appeals against sexual offence convictions retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "378"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "419"
+    new_base_ref: "419"
+    mapping_type: "one_to_one"
+    substantive_delta: "Appeal in case of acquittal moved from CrPC s.378 to BNSS s.419."
+    punishment_delta: "N/A"
+    procedural_delta: "Leave of High Court requirement for acquittal appeals retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "389"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "430"
+    new_base_ref: "430"
+    mapping_type: "one_to_one"
+    substantive_delta: "Suspension of sentence pending appeal and release of appellant on bail moved from CrPC s.389 to BNSS s.430."
+    punishment_delta: "N/A"
+    procedural_delta: "Public Prosecutor notice before releasing life/10-year convicts on appellate bail retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "397"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "438"
+    new_base_ref: "438"
+    mapping_type: "one_to_one"
+    substantive_delta: "Calling for records to exercise powers of revision moved from CrPC s.397 to BNSS s.438."
+    punishment_delta: "N/A"
+    procedural_delta: "Bar on revision against interlocutory orders retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "401"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "442"
+    new_base_ref: "442"
+    mapping_type: "one_to_one"
+    substantive_delta: "High Court's powers of revision moved from CrPC s.401 to BNSS s.442."
+    punishment_delta: "N/A"
+    procedural_delta: "Prohibition on converting acquittal into conviction in revision retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "436"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "478"
+    new_base_ref: "478"
+    mapping_type: "one_to_one"
+    substantive_delta: "In what cases bail to be taken (bailable offences as of right) moved from CrPC s.436 to BNSS s.478."
+    punishment_delta: "N/A"
+    procedural_delta: "Mandatory bail on bond/bail bond; 1-week indigence presumption retained."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "437"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "480"
+    new_base_ref: "480"
+    mapping_type: "one_to_one"
+    substantive_delta: "When bail may be taken in case of non-bailable offence before Magistrate moved from CrPC s.437 to BNSS s.480."
+    punishment_delta: "N/A"
+    procedural_delta: "Woman/child/infirm proviso extended to child under 18 (from 16); includes mandatory notice for serious offences."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
     old_ref: "438"
     new_act: "BNSS"
     new_act_id: "bnss-2023"
@@ -527,6 +1963,20 @@ mappings:
     substantive_delta: "Special powers of High Court or Court of Session regarding regular bail moved from CrPC s.439 to BNSS s.483."
     punishment_delta: "N/A"
     procedural_delta: "Retains concurrent regular bail and bail-cancellation jurisdiction of High Court and Court of Session."
+    savings_note: "BNSS s.531 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "CrPC"
+    old_act_id: "crpc-1973"
+    old_ref: "468"
+    new_act: "BNSS"
+    new_act_id: "bnss-2023"
+    new_ref: "512"
+    new_base_ref: "512"
+    mapping_type: "one_to_one"
+    substantive_delta: "Bar to taking cognizance after lapse of the period of limitation moved from CrPC s.468 to BNSS s.512."
+    punishment_delta: "N/A"
+    procedural_delta: "6-month / 1-year / 3-year limitation tiers preserved; Sarah Mathew rule continues."
     savings_note: "BNSS s.531 savings applies."
     verified_by: "bprd_official_table_v1"
 
@@ -559,6 +2009,104 @@ mappings:
     punishment_delta: "N/A"
     procedural_delta: "Electronic/digital statements treated on par with oral and documentary evidence."
     savings_note: "BSA s.170 savings applies to pending trials initiated prior to 2024-07-01."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "5"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "3"
+    new_base_ref: "3"
+    mapping_type: "one_to_one"
+    substantive_delta: "Evidence may be given of facts in issue and relevant facts moved from IEA s.5 to BSA s.3."
+    punishment_delta: "N/A"
+    procedural_delta: "Foundational relevancy rule unchanged."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "6"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "4"
+    new_base_ref: "4"
+    mapping_type: "one_to_one"
+    substantive_delta: "Relevancy of facts forming part of same transaction (res gestae) moved from IEA s.6 to BSA s.4."
+    punishment_delta: "N/A"
+    procedural_delta: "Res gestae doctrine preserved."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "8"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "6"
+    new_base_ref: "6"
+    mapping_type: "one_to_one"
+    substantive_delta: "Motive, preparation and previous or subsequent conduct moved from IEA s.8 to BSA s.6."
+    punishment_delta: "N/A"
+    procedural_delta: "Relevancy of conduct preserved."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "9"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "7"
+    new_base_ref: "7"
+    mapping_type: "one_to_one"
+    substantive_delta: "Facts necessary to explain or introduce relevant facts (including Test Identification Parade) moved from IEA s.9 to BSA s.7."
+    punishment_delta: "N/A"
+    procedural_delta: "TIP relevancy preserved."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "17"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "15"
+    new_base_ref: "15"
+    mapping_type: "one_to_one"
+    substantive_delta: "Admission defined (oral, documentary, or electronic statement suggesting inference) moved from IEA s.17 to BSA s.15."
+    punishment_delta: "N/A"
+    procedural_delta: "Expressly encompasses electronic statements."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "24"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "22"
+    new_base_ref: "22"
+    mapping_type: "one_to_one"
+    substantive_delta: "Confession caused by inducement, threat, coercion or promise irrelevant moved from IEA s.24 to BSA s.22, explicitly adding 'coercion'."
+    punishment_delta: "N/A"
+    procedural_delta: "Voluntariness safeguard broadened to include coercion."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "25"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "23(1)"
+    new_base_ref: "23"
+    mapping_type: "many_to_one"
+    substantive_delta: "Confession to police officer not to be proved moved from IEA s.25 to BSA s.23(1) (consolidated with ss.26-27 into s.23)."
+    punishment_delta: "N/A"
+    procedural_delta: "Absolute inadmissibility of custodial/police confessions retained."
+    savings_note: "BSA s.170 savings applies."
     verified_by: "bprd_official_table_v1"
 
   - old_act: "IEA"
@@ -605,6 +2153,48 @@ mappings:
 
   - old_act: "IEA"
     old_act_id: "iea-1872"
+    old_ref: "57"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "52"
+    new_base_ref: "52"
+    mapping_type: "one_to_one"
+    substantive_delta: "Facts of which Court must take judicial notice moved from IEA s.57 to BSA s.52 (updated to Indian constitutional & international bodies)."
+    punishment_delta: "N/A"
+    procedural_delta: "Mandatory judicial notice rules retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "58"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "53"
+    new_base_ref: "53"
+    mapping_type: "one_to_one"
+    substantive_delta: "Facts admitted need not be proved moved from IEA s.58 to BSA s.53."
+    punishment_delta: "N/A"
+    procedural_delta: "Admission dispensation rule retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "60"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "55"
+    new_base_ref: "55"
+    mapping_type: "one_to_one"
+    substantive_delta: "Oral evidence must be direct (hearsay exclusion) moved from IEA s.60 to BSA s.55."
+    punishment_delta: "N/A"
+    procedural_delta: "Direct oral testimony rule retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
     old_ref: "65A"
     new_act: "BSA"
     new_act_id: "bsa-2023"
@@ -633,6 +2223,132 @@ mappings:
 
   - old_act: "IEA"
     old_act_id: "iea-1872"
+    old_ref: "73"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "72"
+    new_base_ref: "72"
+    mapping_type: "one_to_one"
+    substantive_delta: "Comparison of signature, writing or seal with others admitted or proved moved from IEA s.73 to BSA s.72."
+    punishment_delta: "N/A"
+    procedural_delta: "Digital signature verification follows in BSA s.73."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "79"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "78"
+    new_base_ref: "78"
+    mapping_type: "one_to_one"
+    substantive_delta: "Presumption as to genuineness of certified copies moved from IEA s.79 to BSA s.78."
+    punishment_delta: "N/A"
+    procedural_delta: "Shall-presume rule for certified copies retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "90"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "92"
+    new_base_ref: "92"
+    mapping_type: "one_to_one"
+    substantive_delta: "Presumption as to documents thirty years old moved from IEA s.90 to BSA s.92 (5-year electronic record presumption in BSA s.93)."
+    punishment_delta: "N/A"
+    procedural_delta: "May-presume rule for 30-year-old documents from proper custody retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "91"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "94"
+    new_base_ref: "94"
+    mapping_type: "one_to_one"
+    substantive_delta: "Evidence of terms of contracts, grants and other dispositions of property reduced to form of document moved from IEA s.91 to BSA s.94."
+    punishment_delta: "N/A"
+    procedural_delta: "Best-evidence rule for written instruments retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "92"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "95"
+    new_base_ref: "95"
+    mapping_type: "one_to_one"
+    substantive_delta: "Exclusion of evidence of oral agreement (parol evidence rule) moved from IEA s.92 to BSA s.95."
+    punishment_delta: "N/A"
+    procedural_delta: "Six statutory provisos preserved."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "101"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "104"
+    new_base_ref: "104"
+    mapping_type: "one_to_one"
+    substantive_delta: "Burden of proof (on person asserting legal right/liability) moved from IEA s.101 to BSA s.104."
+    punishment_delta: "N/A"
+    procedural_delta: "Legal burden rule unchanged."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "105"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "108"
+    new_base_ref: "108"
+    mapping_type: "one_to_one"
+    substantive_delta: "Burden of proving that case of accused comes within exceptions moved from IEA s.105 to BSA s.108."
+    punishment_delta: "N/A"
+    procedural_delta: "Court shall presume absence of general/special exception circumstances."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "106"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "109"
+    new_base_ref: "109"
+    mapping_type: "one_to_one"
+    substantive_delta: "Burden of proving fact especially within knowledge moved from IEA s.106 to BSA s.109."
+    punishment_delta: "N/A"
+    procedural_delta: "Special-knowledge burden rule preserved."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "112"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "116"
+    new_base_ref: "116"
+    mapping_type: "one_to_one"
+    substantive_delta: "Birth during marriage, conclusive proof of legitimacy moved from IEA s.112 to BSA s.116 (gender-neutral 'child' replaces 'son')."
+    punishment_delta: "N/A"
+    procedural_delta: "280-day non-access exception retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
     old_ref: "113B"
     new_act: "BSA"
     new_act_id: "bsa-2023"
@@ -647,6 +2363,20 @@ mappings:
 
   - old_act: "IEA"
     old_act_id: "iea-1872"
+    old_ref: "114"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "119"
+    new_base_ref: "119"
+    mapping_type: "one_to_one"
+    substantive_delta: "Court may presume existence of certain facts (illustrations (a)-(i)) moved from IEA s.114 to BSA s.119."
+    punishment_delta: "N/A"
+    procedural_delta: "Discretionary factual presumptions preserved."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
     old_ref: "114A"
     new_act: "BSA"
     new_act_id: "bsa-2023"
@@ -656,5 +2386,75 @@ mappings:
     substantive_delta: "Presumption as to absence of consent in certain prosecutions for rape moved from IEA s.114A to BSA s.120 (cross-referencing BNS s.64(2))."
     punishment_delta: "N/A"
     procedural_delta: "Mandatory presumption where woman states in evidence before Court that she did not consent."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "115"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "121"
+    new_base_ref: "121"
+    mapping_type: "one_to_one"
+    substantive_delta: "Estoppel moved from IEA s.115 to BSA s.121."
+    punishment_delta: "N/A"
+    procedural_delta: "Promissory and equitable estoppel principles unchanged."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "118"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "124"
+    new_base_ref: "124"
+    mapping_type: "one_to_one"
+    substantive_delta: "Who may testify (competency of witnesses) moved from IEA s.118 to BSA s.124."
+    punishment_delta: "N/A"
+    procedural_delta: "Child/infirm witness competency test retained."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "133"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "138"
+    new_base_ref: "138"
+    mapping_type: "one_to_one"
+    substantive_delta: "Accomplice competency and corroboration rule moved from IEA s.133 to BSA s.138."
+    punishment_delta: "N/A"
+    procedural_delta: "Read with BSA s.119 Illustration (b)."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "137"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "142"
+    new_base_ref: "142"
+    mapping_type: "one_to_one"
+    substantive_delta: "Examination-in-chief, cross-examination, and re-examination definitions moved from IEA s.137 to BSA s.142."
+    punishment_delta: "N/A"
+    procedural_delta: "Three-stage witness examination order unchanged."
+    savings_note: "BSA s.170 savings applies."
+    verified_by: "bprd_official_table_v1"
+
+  - old_act: "IEA"
+    old_act_id: "iea-1872"
+    old_ref: "145"
+    new_act: "BSA"
+    new_act_id: "bsa-2023"
+    new_ref: "148"
+    new_base_ref: "148"
+    mapping_type: "one_to_one"
+    substantive_delta: "Cross-examination as to previous statements in writing or reduced into writing moved from IEA s.145 to BSA s.148."
+    punishment_delta: "N/A"
+    procedural_delta: "Mandatory confrontation requirement for contradiction preserved."
     savings_note: "BSA s.170 savings applies."
     verified_by: "bprd_official_table_v1"
