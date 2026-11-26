@@ -7,18 +7,27 @@ allowed_domains:
   - github.com
   - raw.githubusercontent.com
   - prsindia.org
+  - www.prsindia.org
   - legislative.gov.in
+  - www.legislative.gov.in
   - indiacode.nic.in
+  - www.indiacode.nic.in
   - digiscr.sci.gov.in
   - justicehub.in
+  - www.justicehub.in
   - eparlib.sansad.in
+  - devdatalab.org
   - www.devdatalab.org
   - dataverse.harvard.edu
   - huggingface.co
   - ncdrc.nic.in
+  - www.ncdrc.nic.in
   - nclat.nic.in
+  - www.nclat.nic.in
   - egazette.gov.in
+  - www.egazette.gov.in
   - sci.gov.in
+  - www.sci.gov.in
 
 sources:
   - id: dattam_sc_judgments

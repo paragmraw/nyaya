@@ -28,7 +28,7 @@ from .fetchers.s3_dattam import DattamS3Fetcher
 from .fetchers.vaquill import VaquillFetcher
 from .gate import run_quality_gate
 from .loader import load_staged_ingest_bundle
-from .lockfile import DEFAULT_LOCKFILE_PATH, load_and_validate_lockfile
+from .lockfile import _BANNED_URI_SUBSTRINGS, DEFAULT_LOCKFILE_PATH, load_and_validate_lockfile
 from .publish import (
     Boto3BucketUploadClient,
     GitHubReleaseUploadClient,
@@ -203,8 +203,15 @@ def _sync_auxiliary_source(
             source_id,
             exc,
         )
-    except SecurityError:
-        raise
+    except SecurityError as exc:
+        exc_lower = str(exc).lower()
+        if not bulk_sync or any(banned in exc_lower for banned in _BANNED_URI_SUBSTRINGS):
+            raise
+        log.warning(
+            "Skipping auxiliary source %s during bulk sync (redirect/domain blocked): %s",
+            source_id,
+            exc,
+        )
     except (httpx.HTTPError, RuntimeError, ValueError, OSError) as exc:
         if not bulk_sync:
             raise

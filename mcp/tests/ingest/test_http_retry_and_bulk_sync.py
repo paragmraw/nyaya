@@ -290,3 +290,137 @@ def test_cmd_sync_hc_uses_parquet_case_details_prefix_and_bulk_sync_warns_on_aux
             hc_year_to=2024,
             http_fetcher=evil_fetcher,
         )
+
+
+def test_cmd_sync_auxiliary_non_banned_security_error_skipped_in_bulk_but_raised_for_single_source(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    lock_raw: dict[str, Any] = yaml.safe_load(DEFAULT_LOCKFILE_PATH.read_text(encoding="utf-8"))
+    allowed = list(lock_raw["allowed_domains"])
+    central_bytes = b"PAR1-central"
+    central_sha = hashlib.sha256(central_bytes).hexdigest()
+
+    def redirect_handler(req: httpx.Request) -> httpx.Response:
+        host = req.url.host
+        if host == "oss-data-in.vaquill.ai":
+            if req.url.path.endswith("SHA256SUMS.json"):
+                return httpx.Response(
+                    200,
+                    content=json.dumps({"in_central_legislation.parquet": central_sha}).encode("utf-8"),
+                )
+            if req.url.path.endswith("in_central_legislation.parquet"):
+                return httpx.Response(200, content=central_bytes)
+            return httpx.Response(404)
+        if host in (
+            "indian-supreme-court-judgments.s3.ap-south-1.amazonaws.com",
+            "indian-high-court-judgments.s3.ap-south-1.amazonaws.com",
+        ):
+            return httpx.Response(200, text=_EMPTY_S3_XML)
+        if host == "indiacode.nic.in":
+            return httpx.Response(
+                301,
+                headers={"Location": "https://www.indiacode.nic.in/handle/123456789/1362"},
+            )
+        if host == "legislative.gov.in":
+            return httpx.Response(
+                302,
+                headers={"Location": "https://cdn.example-govt.in/COI_2026.pdf"},
+            )
+        return httpx.Response(404)
+
+    http_fetcher = SafeHttpFetcher(
+        allowed_domains=allowed,
+        max_retries=1,
+        retry_backoff_s=0.0,
+        transport=httpx.MockTransport(redirect_handler),
+    )
+
+    caplog.set_level(logging.WARNING, logger="nyaya.ingest.cli")
+    rc = _cmd_sync(
+        lockfile=DEFAULT_LOCKFILE_PATH,
+        work_dir=tmp_path / "bulk_redirect_work",
+        tier="all",
+        sources="all",
+        hc_year_from=2024,
+        hc_year_to=2024,
+        http_fetcher=http_fetcher,
+    )
+    assert rc == 0
+    assert (
+        "Skipping auxiliary source indiacode_central_acts during bulk sync (redirect/domain blocked)"
+        in caplog.text
+    )
+    assert (
+        "Skipping auxiliary source legislative_constitution during bulk sync (redirect/domain blocked)"
+        in caplog.text
+    )
+
+    # Explicit single-source sync must STILL raise SecurityError
+    with pytest.raises(SecurityError, match="Cross-domain"):
+        _cmd_sync(
+            lockfile=DEFAULT_LOCKFILE_PATH,
+            work_dir=tmp_path / "single_indiacode",
+            tier="all",
+            sources="indiacode_central_acts",
+            http_fetcher=http_fetcher,
+        )
+
+    # Banned host redirect on indiacode must STILL raise SecurityError even in bulk sync
+    def banned_redirect_handler(req: httpx.Request) -> httpx.Response:
+        if req.url.host == "indiacode.nic.in":
+            return httpx.Response(302, headers={"Location": "https://indiankanoon.org/doc/42"})
+        return redirect_handler(req)
+
+    banned_fetcher = SafeHttpFetcher(
+        allowed_domains=allowed,
+        max_retries=1,
+        retry_backoff_s=0.0,
+        transport=httpx.MockTransport(banned_redirect_handler),
+    )
+    with pytest.raises(SecurityError, match="Disallowed"):
+        _cmd_sync(
+            lockfile=DEFAULT_LOCKFILE_PATH,
+            work_dir=tmp_path / "bulk_banned_work",
+            tier="all",
+            sources="all",
+            hc_year_from=2024,
+            hc_year_to=2024,
+            http_fetcher=banned_fetcher,
+        )
+
+
+def test_loader_matches_parquet_case_details_without_double_counting(tmp_path: Path) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from nyaya.ingest.loader import load_staged_ingest_bundle
+
+    work_dir = tmp_path / "loader_work"
+    hc_case_details_dir = (
+        work_dir
+        / "raw"
+        / "indian-high-court-judgments"
+        / "metadata"
+        / "parquet_case_details"
+        / "year=2024"
+        / "court=7_26"
+    )
+    hc_case_details_dir.mkdir(parents=True)
+    pq.write_table(
+        pa.Table.from_pylist(
+            [
+                {
+                    "cnr": "DLHC010999992024",
+                    "filing_date": "2024-02-01",
+                    "disposal_nature": "Disposed",
+                }
+            ]
+        ),
+        hc_case_details_dir / "case_details.parquet",
+    )
+
+    bundle = load_staged_ingest_bundle(work_dir)
+    assert len(bundle.hc_mobile_rows) == 1
+    assert bundle.hc_mobile_rows[0]["cnr"] == "DLHC010999992024"
+    assert bundle.hc_web_rows == []
