@@ -7,6 +7,7 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,11 @@ from ..fetchers.tribunals_regulators import (
 from ..lockfile import DEFAULT_LOCKFILE_PATH, load_and_validate_lockfile
 from ..state import dedupe_and_merge_hc_rows
 from .citation_graph import build_citation_edges_for_corpus
+
+
+def _default_as_of() -> str:
+    """Return current UTC date (YYYY-MM-DD) for default ``as_of`` metadata."""
+    return datetime.now(UTC).strftime("%Y-%m-%d")
 
 
 def _sha256_text(text: str) -> str:
@@ -113,7 +119,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "legislative_constitution",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "bns-2023",
@@ -130,7 +136,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "prs_2026_delta",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "ipc-1860",
@@ -147,7 +153,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "bnss-2023",
@@ -164,7 +170,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "prs_2026_delta",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "crpc-1973",
@@ -181,7 +187,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "bsa-2023",
@@ -198,7 +204,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "prs_2026_delta",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "iea-1872",
@@ -215,7 +221,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "cpc-1908",
@@ -232,7 +238,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "it-act-2000",
@@ -249,7 +255,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "aadhaar-2016",
@@ -266,7 +272,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "rpa-1951",
@@ -283,7 +289,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "mh-mofa-1963",
@@ -300,7 +306,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "lance_bucket",
             "source_id": "vaquill_state_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "sebi-lodr-2015",
@@ -317,7 +323,7 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "storage_tier": "lance_bucket",
             "source_id": "vaquill_regulators",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "it-act-2025",

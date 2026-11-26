@@ -1,5 +1,5 @@
 schema_version: 2
-updated_at: "2026-11-22"
+updated_at: "2026-11-27"
 allowed_domains:
   - indian-supreme-court-judgments.s3.ap-south-1.amazonaws.com
   - indian-high-court-judgments.s3.ap-south-1.amazonaws.com
@@ -28,6 +28,7 @@ allowed_domains:
   - www.egazette.gov.in
   - sci.gov.in
   - www.sci.gov.in
+  - cdnbbsr.s3waas.gov.in
 
 sources:
   - id: dattam_sc_judgments
@@ -174,8 +175,8 @@ sources:
     name: "Constitution of India & Amendments 1–106 (Legislative Department, Ministry of Law and Justice)"
     domain: constitution
     access_method: https_pdf
-    uri: "https://legislative.gov.in/sites/default/files/COI_2026.pdf"
-    sha256: "8f22f0603ea18052214792143303638631781a4f3211aef723946124180f1705"
+    uri: "https://cdnbbsr.s3waas.gov.in/s380537a945c7aaa788ccfcdf1b99b5d8f/uploads/2024/07/20240716890312078.pdf"
+    sha256: "819ba7adc5e5ae4063f26c82472283ba682ddb662e5a7f864cf26984d99b26ed"
     license_spdx: "CC0-1.0"
     commercial_safe: true
     terms_status: "cleared"
