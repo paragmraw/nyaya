@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.paragmraw/nyaya-mcp",
+  "title": "Nyaya Indian Law MCP",
+  "description": "Database-free Indian law MCP: Constitution, Central/State Acts, SC/HC judgments & cause lists.",
+  "version": "2.0.0",
+  "repository": {
+    "url": "https://github.com/paragmraw/nyaya",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "nyaya-mcp",
+      "version": "2.0.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://nyaya.parag.tech/mcp"
+    }
+  ]
+}
