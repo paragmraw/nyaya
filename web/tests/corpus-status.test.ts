@@ -1,4 +1,4 @@
-// Unit tests for Nyaya v2.0 CorpusStatusResponse, CURATED metadata,
+// Unit tests for Nyaya v2.1 CorpusStatusResponse, CURATED metadata,
 // category/commercial-safe filtering, and API client endpoints.
 // Run with:  npm test
 
@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { api, formatCompactCount, type CorpusSourceStatus } from "../src/lib/api";
 import { indexSourcesByName, resolveSourceMetadata } from "../src/components/CorpusTable";
-import { CURATED, MCP_TOOLS_FALLBACK, MCP_RESOURCES, MCP_PROMPTS } from "../src/lib/data";
+import { BASELINE_COUNTS, CURATED, MCP_TOOLS_FALLBACK, MCP_RESOURCES, MCP_PROMPTS } from "../src/lib/data";
 import { API_VERSION } from "../src/lib/site";
 import { filterCorpusRows } from "../src/lib/url-query";
 
@@ -84,11 +84,13 @@ test("API client exposes all v2 REST fetchers", () => {
   assert.equal(typeof api.healthSummary, "function");
 });
 
-test("v2 MCP tools, resources, and prompts metadata match 15 / 8 / 4 counts", () => {
+test("v2.1 MCP tools, resources, prompts, and baseline counts match backend", () => {
   assert.equal(MCP_TOOLS_FALLBACK.total, 15);
   assert.equal(MCP_TOOLS_FALLBACK.items.length, 15);
   assert.equal(MCP_RESOURCES.length, 8);
   assert.equal(MCP_PROMPTS.length, 4);
+  assert.equal(BASELINE_COUNTS.tribunals, 24);
+  assert.equal(BASELINE_COUNTS.concordance_mappings, 181);
 });
 
 test("formatCompactCount formats large Indian corpus counts legibly", () => {

@@ -15,7 +15,7 @@ import { useChat } from "@/lib";
 // Streams SSE tokens, tool events, and grounded citation chips verified
 // against shared nyaya.citations.
 const GREETING =
-  "Hello. I'm Nyaya v2.0. I verify statutes, BNS/BNSS/BSA transitions, 12 regulators, 15 tribunals, and Supreme Court / High Court precedents. Ask in plain English or legalese; I'll cite exact provisions and neutral citations.";
+  "Hello. I'm Nyaya v2.1. I verify statutes, BNS/BNSS/BSA and Income-tax 1961/2025 transitions, 12 regulators, 24 tribunals & Consumer Commissions, and Supreme Court / High Court precedents. Ask in plain English or legalese; I'll cite exact provisions and neutral citations.";
 
 // Fallback model display info (used before /chat/health responds)
 const FALLBACK_MODEL_ID = "nvidia/nemotron-3.5-lightning-30b-a3b";
@@ -123,7 +123,7 @@ export default function ChatPanel({ disabled = false }: ChatPanelProps) {
             <div className="bubble">
               {GREETING}
               <span className="cite">
-                <strong>Coverage:</strong> Constitution (106 Amds) · BNS/BNSS/BSA ↔ IPC/CrPC/IEA · 37 Legislatures · 12 Regulators · 15 Tribunals · SC &amp; 25 HCs
+                <strong>Coverage:</strong> Constitution (106 Amds) · BNS/BNSS/BSA ↔ IPC/CrPC/IEA · IT Act 1961↔2025 · 37 Legislatures · 12 Regulators · 24 Tribunals · SC &amp; 25 HCs
               </span>
               {!disabled && (
                 <div

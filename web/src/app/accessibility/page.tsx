@@ -103,10 +103,11 @@ export default function AccessibilityPage() {
               inconsistent with the rest of the interface.
             </p>
             <p>
-              <strong>Scanned, image-only court PDFs are not
-              transcribed.</strong> Documents that are effectively images are
-              rejected by the extractor rather than run through OCR, so their
-              content is not text-accessible at all, an
+              <strong>Scanned, image-only court PDFs are not transcribed by
+              default.</strong> Documents that are effectively images are
+              rejected by the extractor unless opt-in Apache-2.0 OCR
+              (<code>NYAYA_ENABLE_OCR=1</code>) is enabled, so on the hosted
+              service their content is not text-accessible at all, an
               accuracy-versus-availability trade-off, documented on the{" "}
               <a href="/disclaimer/">Disclaimer page</a>.
             </p>

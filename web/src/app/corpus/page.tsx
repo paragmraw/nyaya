@@ -9,11 +9,11 @@ import { API_VERSION, pageOpenGraph } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Corpus",
   description:
-    "Explore Nyaya's v2.0 Open-India-Law corpus: Constitution & Amendments 1–106, 37 Central & State/UT legislatures, 12 regulators, 15 tribunals, 38k+ SC judgments, and 20.7M+ HC orders.",
+    "Explore Nyaya's v2.1 Open-India-Law corpus: Constitution & Amendments 1–106, CAD debates, 37 Central & State/UT legislatures, 58 CPC Orders, 12 regulators, 24 tribunals & Consumer Commissions, 38k+ SC judgments, and 20.7M+ HC orders.",
   openGraph: pageOpenGraph({
     title: "Nyaya Corpus - Open-India-Law Pack & Licensing",
     description:
-      "37 legislatures, 12 regulators, 15 tribunals, 38k+ SC, and 20.7M+ HC records with explicit SPDX provenance and commercial-safe filtering.",
+      "19 trusted sources across 37 legislatures, 12 regulators, 24 tribunals & Consumer Commissions, 38k+ SC, and 20.7M+ HC records with explicit SPDX provenance.",
   }),
 };
 
@@ -34,7 +34,7 @@ export default function CorpusPage() {
             <p className="eyebrow">Corpus · v{API_VERSION}</p>
             <h1>Open-India-Law Pack</h1>
             <p className="lead lead-wide">
-              Three judicial tiers, 37 legislative jurisdictions, 12 financial and sectoral regulators, and 15 tribunals; stored across baked SQLite FTS5, LanceDB native BM25, DuckDB ZSTD Parquet, and on-demand AWS Open Data PDFs.
+              Three judicial tiers, 37 legislative jurisdictions, 58 CPC Orders, 12 financial and sectoral regulators, and 24 tribunals &amp; Consumer Commissions across 19 sources in <code>sources.lock.yaml</code>; stored in baked SQLite FTS5, 5 LanceDB BM25 tables (incl. <code>tribunal_chunks</code>, <code>cad_debates</code>, and <code>hot_hc_limit=500,000</code>), DuckDB ZSTD Parquet, and on-demand AWS Open Data PDFs.
             </p>
           </section>
 
@@ -84,19 +84,19 @@ export default function CorpusPage() {
               <div className="cadence-row">
                 <span className="cad-when">Daily (--tier daily)</span>
                 <span className="cad-what">
-                  Scheduled GitHub Actions workflow polls AWS Open Data SC &amp; HC S3 ETags (<code>s3://indian-supreme-court-judgments</code>, <code>s3://indian-high-court-judgments</code>), inspects <code>data.index.json</code> <code>superseded_files</code>, pulls PRS CC-BY-4.0 statutory deltas, runs <code>nyaya-ingest verify-gate</code>, and atomically swaps <code>current/manifest.json</code> on the Railway Storage Bucket and GitHub Releases.
+                  Scheduled GitHub Actions workflow polls AWS Open Data SC &amp; HC S3 ETags (<code>s3://indian-supreme-court-judgments</code>, <code>s3://indian-high-court-judgments</code>), inspects <code>data.index.json</code> <code>superseded_files</code>, pulls PRS CC-BY-4.0 statutory deltas, NCDRC/NCLAT orders, e-Gazette rules, and SCI cause lists, runs <code>nyaya-ingest verify-gate</code>, and atomically swaps <code>current/manifest.json</code> on the Railway Storage Bucket and GitHub Releases.
                 </span>
               </div>
               <div className="cadence-row">
                 <span className="cad-when">Static (--tier static)</span>
                 <span className="cad-what">
-                  Vaquill Open India Law <code>v2026.08.1</code> (Central, 36 States/UTs, 12 Regulators, 15 Tribunals), Legislative Dept. Constitution + Amendments 1–106, Constituent Assembly Debates, DDL 81M (2010–2018), and ILDC research packs verified against pinned SHA-256 manifests in <code>sources.lock.yaml</code>.
+                  19 sources in <code>sources.lock.yaml</code>: Vaquill Open India Law <code>v2026.08.1</code> (Central, 36 States/UTs, 12 Regulators, appellate tribunals) plus Consumer Commissions (<code>NCDRC</code>/<code>SCDRC</code>/<code>DCDRC</code>), <code>DRAT</code>, <code>AFT</code>, <code>GSTAT</code>, <code>RCT</code>, <code>CIC</code>, <code>SEBI_ADJ</code> (24 total tribunals), 58 CPC Orders, 148 criminal &amp; 33 Income-tax 1961↔2025 concordances, Constitution + Amendments 1–106, Constituent Assembly Debates (<code>cad_debates</code>), DDL 81M (2010–2018), and ILDC verified against pinned SHA-256 manifests.
                 </span>
               </div>
               <div className="cadence-row">
                 <span className="cad-when">On-demand PDFs</span>
                 <span className="cad-what">
-                  Full judgment text for uncached SC/HC decisions streams directly over anonymous HTTPS from AWS Open Data (<code>ap-south-1</code>) via <code>pypdfium2</code> with <code>%PDF-</code> validation, 15 MB / 500-page caps, and a 256 MB disk zstd LRU cache.
+                  Full judgment text for uncached SC/HC decisions streams directly over anonymous HTTPS from AWS Open Data (<code>ap-south-1</code>) via <code>pypdfium2</code> with <code>%PDF-</code> validation, 15 MB / 500-page caps, a 256 MB disk zstd LRU cache, and opt-in Apache-2.0 OCR (<code>NYAYA_ENABLE_OCR=1</code>).
                 </span>
               </div>
             </div>
@@ -105,19 +105,19 @@ export default function CorpusPage() {
           {/* roadmap */}
           <section className="section">
             <div className="section-head">
-              <h2>Roadmap</h2>
-              <p className="sec-desc">Post-v2.0 additions under evaluation once lexical and citation baselines stabilize.</p>
+              <h2>Capabilities &amp; Roadmap</h2>
+              <p className="sec-desc">Opt-in retrieval upgrades live in v2.1 alongside post-v2.1 historical and curation additions.</p>
             </div>
             <div className="roadmap">
               <div className="roadmap-item">
-                <div className="ri-name">Optional hybrid dense retrieval</div>
-                <div className="ri-desc">Pluggable <code>RetrievalEngine</code> support for optional vector search and cross-encoder reranking alongside FTS5 / BM25.</div>
-                <div className="ri-eta">Planned</div>
+                <div className="ri-name">Opt-in hybrid BM25 + vector RRF</div>
+                <div className="ri-desc">Pluggable <code>RetrievalEngine</code> supporting hashed legal n-gram or OpenAI-compatible dense embeddings fused via RRF when <code>NYAYA_HYBRID_SEARCH=1</code>.</div>
+                <div className="ri-eta">Opt-in (v2.1)</div>
               </div>
               <div className="roadmap-item">
-                <div className="ri-name">Pre-2010 scanned PDF OCR</div>
-                <div className="ri-desc">Apache-2.0 compatible OCR pipeline for legacy High Court image-only PDFs currently flagged as <code>scanned_image_only</code>.</div>
-                <div className="ri-eta">Planned</div>
+                <div className="ri-name">Opt-in Apache-2.0 scanned PDF OCR</div>
+                <div className="ri-desc">Tesseract &amp; RapidOCR adapters for legacy High Court image-only PDFs when <code>NYAYA_ENABLE_OCR=1</code> (flagged as <code>scanned_image_only</code> by default).</div>
+                <div className="ri-eta">Opt-in (v2.1)</div>
               </div>
               <div className="roadmap-item">
                 <div className="ri-name">Pre-1950 Privy Council &amp; Federal Court</div>

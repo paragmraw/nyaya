@@ -1,4 +1,4 @@
-// Capabilities table: static v2.0 overview on the home page left pane.
+// Capabilities table: static v2.1 overview on the home page left pane.
 
 import { CAPS } from "@/lib";
 
