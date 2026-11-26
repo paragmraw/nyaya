@@ -1,4 +1,4 @@
-"""Rate-limiting and streaming body-size-cap middleware for the Nyaya v2.0 ASGI app.
+"""Rate-limiting and streaming body-size-cap middleware for the Nyaya v2.1 ASGI app.
 
 Hardened against:
 1. Spoofed left-most ``X-Forwarded-For`` headers (parses right-to-left using
@@ -182,8 +182,7 @@ class RateLimitMiddleware:
         self,
         app: ASGIApp,
         read_per_min: int = 120,
-        mcp_per_min: int | None = None,
-        embedding_per_min: int = 30,
+        mcp_per_min: int = 30,
         analytics_per_min: int = 20,
         chat_per_min: int = 15,
         trusted_proxy_hops: int | None = None,
@@ -191,8 +190,7 @@ class RateLimitMiddleware:
     ) -> None:
         self.app = app
         self.read_per_min = read_per_min
-        self.mcp_per_min = mcp_per_min if mcp_per_min is not None else embedding_per_min
-        self.embedding_per_min = self.mcp_per_min
+        self.mcp_per_min = mcp_per_min
         self.analytics_per_min = analytics_per_min
         self.chat_per_min = chat_per_min
         self.trusted_proxy_hops = trusted_proxy_hops

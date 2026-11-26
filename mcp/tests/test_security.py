@@ -264,7 +264,7 @@ def test_health_endpoint_not_rate_limited():
 
 def test_rate_limit_blocks_after_threshold():
     backend = InMemoryBackend()
-    app = _make_app(RateLimitMiddleware, read_per_min=3, embedding_per_min=3, backend=backend)
+    app = _make_app(RateLimitMiddleware, read_per_min=3, mcp_per_min=3, backend=backend)
     with TestClient(app) as client:
         for _ in range(3):
             r = client.post("/echo", json={"x": 1})
@@ -277,7 +277,7 @@ def test_rate_limit_blocks_after_threshold():
 
 def test_rate_limit_returns_json_error():
     backend = InMemoryBackend()
-    app = _make_app(RateLimitMiddleware, read_per_min=1, embedding_per_min=1, backend=backend)
+    app = _make_app(RateLimitMiddleware, read_per_min=1, mcp_per_min=1, backend=backend)
     with TestClient(app) as client:
         client.post("/echo", json={})
         r = client.post("/echo", json={})
@@ -365,7 +365,7 @@ def test_buckets_independent_mcp_vs_chat():
     app = _make_app(
         RateLimitMiddleware,
         read_per_min=100,
-        embedding_per_min=3,
+        mcp_per_min=3,
         chat_per_min=3,
         backend=backend,
     )

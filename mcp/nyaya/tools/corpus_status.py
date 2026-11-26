@@ -30,8 +30,8 @@ def register(mcp: Any) -> None:
     @mcp.tool(
         name="corpus_status",
         description=(
-            "Return the Nyaya v2.0 corpus coverage matrix (37 Central+State/UT legislation jurisdictions, "
-            "12 regulators, 15 tribunals, Supreme Court, High Courts, DDL District Courts, concordance "
+            "Return the Nyaya v2.1 corpus coverage matrix (37 Central+State/UT legislation packs, "
+            "12 regulators, 24 tribunals & Consumer Commissions, Supreme Court, High Courts, DDL District Courts, concordance "
             "mappings, judicial invalidations, and citation edges), per-source SPDX license and "
             "commercial_safe metadata, and active storage tier health."
         ),

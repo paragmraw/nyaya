@@ -7,17 +7,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
+
+import httpx
 
 from .builders.lance_fts import build_lance_fts_tables
 from .builders.parquet_compact import build_compacted_parquets
 from .builders.sqlite_core import build_sqlite_core, create_mini_ingest_input
 from .extract.pdf import extract_pdf_file
-from .fetchers.http import SafeHttpFetcher
+from .fetchers.http import ChecksumMismatchError, SafeHttpFetcher, SecurityError
 from .fetchers.official_statutes import OFFICIAL_SOURCE_IDS, OfficialStatutesFetcher
 from .fetchers.research_packs import RESEARCH_SOURCE_IDS, ResearchPacksFetcher
 from .fetchers.s3_dattam import DattamS3Fetcher
@@ -34,6 +38,20 @@ from .publish import (
     publish_release,
 )
 from .state import IngestState
+
+log = logging.getLogger("nyaya.ingest.cli")
+
+
+class _SyncSourceFetcher(Protocol):
+    def sync_source(
+        self,
+        source_id: str,
+        *,
+        work_dir: Path | str,
+        dry_run: bool = False,
+        fixture: bool = False,
+        verify_sha256: bool = True,
+    ) -> object: ...
 
 _SAMPLE_FIXTURE_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -52,7 +70,7 @@ _SAMPLE_FIXTURE_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nyaya-ingest",
-        description="Nyaya v2.0 OpenJustice Ingestion Pipeline, Curated Legal Data & Quality Gate CLI.",
+        description="Nyaya v2.1 OpenJustice Ingestion Pipeline, Curated Legal Data & Quality Gate CLI.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -161,6 +179,42 @@ _SAMPLE_FIXTURE_HC_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+def _sync_auxiliary_source(
+    fetcher: _SyncSourceFetcher,
+    source_id: str,
+    *,
+    work_dir: Path,
+    dry_run: bool,
+    fixture: bool,
+    bulk_sync: bool,
+) -> None:
+    try:
+        fetcher.sync_source(
+            source_id,
+            work_dir=work_dir,
+            dry_run=dry_run,
+            fixture=fixture,
+        )
+    except ChecksumMismatchError as exc:
+        if not bulk_sync:
+            raise
+        log.warning(
+            "Skipping auxiliary source %s during bulk sync (checksum mismatch): %s",
+            source_id,
+            exc,
+        )
+    except SecurityError:
+        raise
+    except (httpx.HTTPError, RuntimeError, ValueError, OSError) as exc:
+        if not bulk_sync:
+            raise
+        log.warning(
+            "Skipping auxiliary source %s during bulk sync due to upstream error: %s",
+            source_id,
+            exc,
+        )
+
+
 def _cmd_sync(
     *,
     lockfile: Path,
@@ -180,7 +234,8 @@ def _cmd_sync(
     state = IngestState(work_dir / "ingest_state.sqlite")
     try:
         tier_filter = None if tier == "all" else tier
-        src_filter = None if sources == "all" else [s.strip() for s in sources.split(",") if s.strip()]
+        bulk_sync = sources.strip() == "all"
+        src_filter = None if bulk_sync else [s.strip() for s in sources.split(",") if s.strip()]
         selected = lock.filter_sources(
             tier=tier_filter,  # type: ignore[arg-type]
             source_ids=src_filter,
@@ -260,7 +315,7 @@ def _cmd_sync(
                 s3_fetcher.sync_bucket(
                     "indian-high-court-judgments",
                     work_dir,
-                    prefixes=["metadata/parquet/", "case_details-mobile/"],
+                    prefixes=["metadata/parquet/", "metadata/parquet_case_details/"],
                     year_from=hc_year_from,
                     year_to=hc_year_to,
                     dry_run=dry_run,
@@ -268,20 +323,24 @@ def _cmd_sync(
 
         for sid in OFFICIAL_SOURCE_IDS:
             if sid in selected_ids:
-                official_fetcher.sync_source(
+                _sync_auxiliary_source(
+                    official_fetcher,
                     sid,
                     work_dir=work_dir,
                     dry_run=dry_run,
                     fixture=fixture,
+                    bulk_sync=bulk_sync,
                 )
 
         for sid in RESEARCH_SOURCE_IDS:
             if sid in selected_ids:
-                research_fetcher.sync_source(
+                _sync_auxiliary_source(
+                    research_fetcher,
                     sid,
                     work_dir=work_dir,
                     dry_run=dry_run,
                     fixture=fixture,
+                    bulk_sync=bulk_sync,
                 )
     finally:
         state.close()

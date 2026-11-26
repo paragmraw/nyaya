@@ -467,7 +467,7 @@ async def test_corpus_status_returns_v2_counts():
     storage.set_backend(_build_rich_memory_backend())
     tools = await _tool_map(_fresh_mcp())
     res = await tools["corpus_status"].fn()
-    assert res.service_version == "2.0.0"
+    assert res.service_version == "2.1.0"
     assert res.retrieval_mode == "lexical_metadata_graph"
     assert res.counts.central_acts >= 2
 

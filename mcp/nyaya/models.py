@@ -1,4 +1,4 @@
-"""Canonical Pydantic v2 models, enums, query schemas, and tool responses for Nyaya MCP v2.0."""
+"""Canonical Pydantic v2 models, enums, query schemas, and tool responses for Nyaya MCP v2.1."""
 
 from __future__ import annotations
 
@@ -757,7 +757,7 @@ class SourceStatusEntry(BaseModel):
 
 
 class CorpusStatusResponse(BaseModel):
-    service_version: str = "2.0.0"
+    service_version: str = "2.1.0"
     as_of: Date | None = None
     retrieval_mode: Literal["lexical_metadata_graph"] = "lexical_metadata_graph"
     commercial_safe_locked: bool = False

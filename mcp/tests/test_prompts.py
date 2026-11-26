@@ -111,7 +111,7 @@ async def test_resources_resolve_and_frame_corpus_text():
     storage.set_pdf_fetcher(_FakePdf())
 
     status_json = json.loads(resources_pkg.read_corpus_status())
-    assert status_json["service_version"] == "2.0.0"
+    assert status_json["service_version"] == "2.1.0"
 
     statutes_json = json.loads(resources_pkg.read_statutes())
     assert len(statutes_json["acts"]) >= 2
