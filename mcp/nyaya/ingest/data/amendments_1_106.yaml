@@ -397,7 +397,7 @@ amendments:
     title: "The Constitution (Forty-fourth Amendment) Act, 1978"
     status: "in_force"
     action: "amended"
-    articles_affected: ["19", "22", "30", "31", "71", "74", "83", "132", "133", "134", "134A", "226", "300A", "352", "356", "358", "359", "361A"]
+    articles_affected: ["19", "20", "21", "22", "30", "31", "71", "74", "83", "132", "133", "134", "134A", "226", "300A", "352", "356", "358", "359", "361A"]
     summary: "Omitted the Right to Property from Fundamental Rights (Articles 19(1)(f) and 31) and re-enacted it as Article 300A; replaced 'internal disturbance' with 'armed rebellion' in Article 352; and ensured Articles 20 and 21 cannot be suspended during an Emergency."
   - number: 45
     year: 1980

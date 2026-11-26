@@ -242,3 +242,49 @@ def test_normalize_jurisdiction_all_states_uts_and_short_codes() -> None:
     assert normalize_jurisdiction("MH") == "MH"
     assert normalize_jurisdiction("SEBI") == "SEBI"
     assert normalize_jurisdiction("RBI") == "RBI"
+
+
+def test_parse_bare_statutory_citations_and_year_exclusions() -> None:
+    bare_cases = [
+        ("BNS 103", "BNS", "103", None),
+        ("BNS 103(2)", "BNS", "103", "(2)"),
+        ("BNSS 482", "BNSS", "482", None),
+        ("IPC 302", "IPC", "302", None),
+        ("CrPC 438", "CrPC", "438", None),
+        ("ITAct1961 139", "IncomeTax1961", "139", None),
+        ("ITAct1961 139(1)", "IncomeTax1961", "139", "(1)"),
+        ("ITAct2025 263", "IncomeTax2025", "263", None),
+    ]
+    for raw, exp_act, exp_base, exp_sub in bare_cases:
+        parsed = parse_citations(raw)
+        assert len(parsed) == 1, f"{raw} -> {parsed}"
+        c = parsed[0]
+        assert c.kind == "statute_section", raw
+        assert c.act_or_court == exp_act, raw
+        assert c.base_ref == exp_base, raw
+        assert c.sub_ref == exp_sub, raw
+        assert c.canonical_key == f"statute::{exp_act}::{exp_base}", raw
+
+    # Years and excluded Constitution / regulator bare forms must NEVER match
+    for non_cit in (
+        "BNS 2023",
+        "IPC 1860",
+        "Companies Act 2013",
+        "IT Act 2000",
+        "CrPC 1973",
+        "Constitution 21",
+        "SEBI 30",
+        "RBI 45",
+    ):
+        assert parse_citations(non_cit) == [], f"Unexpected match for {non_cit!r}"
+
+    # Combined sentence: BNSS 482 must not split into BNS + s.482, and BNS 2023 must not match
+    mixed = parse_citations(
+        "Bail under BNSS 482 and murder under BNS 103 (formerly IPC s. 302), enacted in BNS 2023, see 2024 INSC 123."
+    )
+    assert [c.canonical_key for c in mixed] == [
+        "statute::BNSS::482",
+        "statute::BNS::103",
+        "statute::IPC::302",
+        "judgment::INSC::2024:123",
+    ]
