@@ -125,7 +125,7 @@ export const FLOW: FlowStep[] = [
 ];
 
 export const TODAY: OpennessItem[] = [
-  { on: true, text: "Apache-2.0 MCP server (12 tools, 8 resources, 4 prompts)", meta: "live" },
+  { on: true, text: "Apache-2.0 MCP server (15 tools, 8 resources, 4 prompts)", meta: "live" },
   { on: true, text: "Local stdio mode via uvx nyaya-mcp (zero API keys)", meta: "live" },
   { on: true, text: "Remote Streamable HTTP (/mcp) + REST (/api/*)", meta: "live" },
   { on: true, text: "Statutory validity & IPC/CrPC/IEA ↔ BNS/BNSS/BSA diffs", meta: "live" },
@@ -154,8 +154,13 @@ export const MCP_TOOLS_FALLBACK: {
     },
     {
       name: "get_provision",
-      description: "Verbatim section, article, schedule, or regulation text framed in <corpus_text> with StatutoryValidity envelope and top cross-links.",
+      description: "Verbatim section, article, schedule, or regulation text framed in <corpus_text> with StatutoryValidity envelope, optional point-in-time as_of reconstruction, and top cross-links.",
       open_world: true,
+    },
+    {
+      name: "get_provisions_batch",
+      description: "Batch fetch up to 50 statutory provisions in one partial-success call with optional point-in-time as_of reconstruction.",
+      open_world: false,
     },
     {
       name: "browse_statute",
@@ -188,6 +193,11 @@ export const MCP_TOOLS_FALLBACK: {
       open_world: true,
     },
     {
+      name: "get_judgments_batch",
+      description: "Batch fetch up to 20 judgments in one partial-success call with publication-ban enforcement and OWASP framing.",
+      open_world: true,
+    },
+    {
       name: "trace_precedent",
       description: "Traverse citation graph edges with bench-strength comparisons and quoting excerpts (precedent_status=\"unverified_automated\").",
       open_world: false,
@@ -203,12 +213,17 @@ export const MCP_TOOLS_FALLBACK: {
       open_world: true,
     },
     {
+      name: "get_cause_list",
+      description: "Search daily Supreme Court and High Court cause lists by court, date, bench, judge, party, advocate, case number, or CNR (with optional live BYO docket).",
+      open_world: true,
+    },
+    {
       name: "corpus_status",
       description: "Inspect active corpus coverage counts, per-source SPDX provenance, freshness as_of, and retrieval tier status.",
       open_world: false,
     },
   ],
-  total: 12,
+  total: 15,
   resources_count: 8,
   prompts_count: 4,
 };

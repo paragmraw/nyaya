@@ -12,27 +12,11 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-from pydantic import BaseModel, Field
 
 from ..citations import canonicalize_court
 from ..exceptions import StorageUnavailable
 from ..ingest.lockfile import _BANNED_URI_SUBSTRINGS
-
-
-class CauseListEntry(BaseModel):
-    """Structured daily cause-list item from an official Supreme Court or High Court feed."""
-
-    court: str
-    cause_list_date: str
-    bench: str | None = None
-    judge: str | None = None
-    item_number: str | None = None
-    case_number: str | None = None
-    cnr: str | None = None
-    parties: str | None = None
-    advocates: list[str] = Field(default_factory=list)
-    purpose: str | None = None
-    source_url: str = ""
+from ..models import CauseListEntry
 
 
 def _validate_feed_url(url: str) -> None:

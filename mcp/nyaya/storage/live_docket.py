@@ -157,7 +157,11 @@ def get_live_docket_adapter() -> LiveDocketAdapter:
         if _live_adapter is not None:
             return _live_adapter
         return ByoLiveDocketAdapter(
-            api_url=os.environ.get("NYAYA_LIVE_DOCKET_URL") or None,
+            api_url=(
+                os.environ.get("NYAYA_LIVE_DOCKET_API_URL")
+                or os.environ.get("NYAYA_LIVE_DOCKET_URL")
+                or None
+            ),
             api_key=os.environ.get("NYAYA_LIVE_DOCKET_API_KEY") or None,
         )
 

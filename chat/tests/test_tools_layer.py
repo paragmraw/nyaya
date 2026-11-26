@@ -98,7 +98,7 @@ def test_spec_table_is_single_source_of_truth():
         "get_judgment",
         "trace_precedent",
     }
-    assert len(TOOL_SCHEMAS) == 12
+    assert len(TOOL_SCHEMAS) == 15
     for spec in TOOL_SPECS:
         assert spec.description
         assert isinstance(spec.args_model, type) and issubclass(spec.args_model, BaseModel)

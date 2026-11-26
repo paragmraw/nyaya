@@ -18,7 +18,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
-# Args schemas (Pydantic models for all 12 MCP v2 tools)
+# Args schemas (Pydantic models for all 15 MCP v2.1 tools)
 # ---------------------------------------------------------------------------
 
 
@@ -40,6 +40,7 @@ class GetProvisionInput(BaseModel):
     ref: str = Field(default="", description="Section, article, schedule, or order/rule number (e.g. '302', '21A', 'Order 7 Rule 11', 'Schedule 7').")
     citation: str | None = Field(default=None, description="Combined citation string (e.g. 'IPC s.302', 'Art. 21A', 'CPC O.7 R.11', 'IEA s.65B(4)').")
     jurisdiction: str | None = Field(default=None, description="Optional jurisdiction disambiguator for State/UT acts or regulators.")
+    as_of: str | None = Field(default=None, description="Optional ISO date (YYYY-MM-DD) for point-in-time statutory reconstruction.")
     include_links: bool = Field(default=True, description="Include up to 15 compact incoming/outgoing statutory cross-links.")
     commercial_safe_only: bool = Field(default=False, description="When True, block non-commercial records.")
 
@@ -167,18 +168,48 @@ class CorpusStatusInput(BaseModel):
     commercial_safe_only: bool = Field(default=False, description="When True, report only commercial-safe datasets.")
 
 
+class GetProvisionsBatchInput(BaseModel):
+    citations: list[str] | None = Field(default=None, description="List of up to 50 statutory citations to fetch in batch.")
+    requests: list[dict[str, Any]] | None = Field(default=None, description="Optional structured {act, ref, jurisdiction} requests (up to 50 total).")
+    as_of: str | None = Field(default=None, description="Optional ISO date (YYYY-MM-DD) for point-in-time reconstruction.")
+    include_links: bool = Field(default=True, description="Include cross-links for each returned provision.")
+    commercial_safe_only: bool = Field(default=False, description="When True, block non-commercial records.")
+
+
+class GetJudgmentsBatchInput(BaseModel):
+    identifiers: list[str] = Field(description="Up to 20 judgment CNRs, neutral citations, AIR/SCC/SCR citations, or case IDs.")
+    view: str = Field(default="overview", description="View mode: 'overview', 'paragraphs', 'pages', 'search_within', or 'docket'.")
+    commercial_safe_only: bool = Field(default=False, description="When True, block non-commercial records.")
+
+
+class GetCauseListInput(BaseModel):
+    court: str | None = Field(default=None, description="Court name or code (e.g. 'Supreme Court of India', 'High Court of Delhi', 'SCI').")
+    date: str | None = Field(default=None, description="Cause list date (YYYY-MM-DD).")
+    bench: str | None = Field(default=None, description="Bench filter.")
+    judge: str | None = Field(default=None, description="Judge name filter.")
+    party: str | None = Field(default=None, description="Party name substring filter.")
+    advocate: str | None = Field(default=None, description="Advocate name substring filter.")
+    case_number: str | None = Field(default=None, description="Case number substring filter.")
+    cnr: str | None = Field(default=None, description="Exact CNR filter.")
+    live: bool = Field(default=False, description="Query BYO live docket endpoint when True.")
+    limit: int = Field(default=25, description="Max entries to return (1-100).")
+
+
 TOOL_SCHEMAS: dict[str, type[BaseModel]] = {
     "search_statutes": SearchStatutesInput,
     "get_provision": GetProvisionInput,
+    "get_provisions_batch": GetProvisionsBatchInput,
     "compare_provisions": CompareProvisionsInput,
     "browse_statute": BrowseStatuteInput,
     "get_provision_history": GetProvisionHistoryInput,
     "cross_reference": CrossReferenceInput,
     "search_judgments": SearchJudgmentsInput,
     "get_judgment": GetJudgmentInput,
+    "get_judgments_batch": GetJudgmentsBatchInput,
     "trace_precedent": TracePrecedentInput,
     "verify_citations": VerifyCitationsInput,
     "judgment_analytics": JudgmentAnalyticsInput,
+    "get_cause_list": GetCauseListInput,
     "corpus_status": CorpusStatusInput,
 }
 

@@ -4,28 +4,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
-
 from ..exceptions import AmbiguousReference, InvalidFilter, NotFound, NyayaError
-from ..models import JudgmentViewResponse
+from ..models import BatchJudgmentsResponse, JudgmentViewResponse
 from ._error import structured_errors
 from ._util import effective_commercial_safe
 from .get_judgment import ViewMode, get_judgment
 
 MAX_BATCH_JUDGMENTS = 20
 _ALLOWED_VIEWS = frozenset({"overview", "paragraphs", "pages", "search_within", "docket"})
-
-
-class BatchJudgmentsResponse(BaseModel):
-    """Partial-success response for ``get_judgments_batch``."""
-
-    total_requested: int
-    returned: int
-    view: str
-    results: list[JudgmentViewResponse] = Field(default_factory=list)
-    not_found: list[str] = Field(default_factory=list)
-    ambiguous: list[dict[str, Any]] = Field(default_factory=list)
-    errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 async def get_judgments_batch(

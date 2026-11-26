@@ -28,6 +28,13 @@ _ALL_NYAYA_ENV_VARS = (
     "NYAYA_DUCKDB_EXT_DIR",
     "NYAYA_LOG_LEVEL",
     "NYAYA_TRUSTED_PROXY_HOPS",
+    "NYAYA_ENABLE_OCR",
+    "NYAYA_HYBRID_SEARCH",
+    "NYAYA_EMBEDDING_ENDPOINT",
+    "NYAYA_EMBEDDING_MODEL",
+    "NYAYA_LIVE_DOCKET_API_URL",
+    "NYAYA_LIVE_DOCKET_URL",
+    "NYAYA_LIVE_DOCKET_API_KEY",
     "PORT",
     "REDIS_URL",
 )
@@ -53,6 +60,12 @@ def test_settings_zero_env_vars_succeeds(monkeypatch: pytest.MonkeyPatch) -> Non
     assert isinstance(s.cache_dir, Path)
     assert not hasattr(s, "database_url")
     assert not hasattr(s, "nvidia_api_key")
+    assert s.enable_ocr is False
+    assert s.hybrid_search is False
+    assert s.embedding_endpoint is None
+    assert s.embedding_model is None
+    assert s.live_docket_api_url is None
+    assert s.live_docket_api_key is None
 
 
 def test_bucket_and_flag_env_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -189,3 +202,30 @@ def test_dotenv_missing_package_is_a_no_op(monkeypatch: pytest.MonkeyPatch, _dot
     s = config.get_settings()
     assert _dotenv_env == []
     assert s.port == config.PORT_DEFAULT
+
+
+def test_pillar_settings_env_and_redaction(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("NYAYA_ENABLE_OCR", "true")
+    monkeypatch.setenv("NYAYA_HYBRID_SEARCH", "1")
+    monkeypatch.setenv("NYAYA_EMBEDDING_ENDPOINT", "https://embed.example.com/v1")
+    monkeypatch.setenv("NYAYA_EMBEDDING_MODEL", "bge-m3")
+    monkeypatch.setenv("NYAYA_LIVE_DOCKET_API_URL", "https://docket.example.com/api")
+    monkeypatch.setenv("NYAYA_LIVE_DOCKET_API_KEY", "secret-docket-token")
+
+    s = config.get_settings()
+    assert s.enable_ocr is True
+    assert s.hybrid_search is True
+    assert s.embedding_endpoint == "https://embed.example.com/v1"
+    assert s.embedding_model == "bge-m3"
+    assert s.live_docket_api_url == "https://docket.example.com/api"
+    assert s.live_docket_api_key == "secret-docket-token"
+
+    d = s.as_dict()
+    assert d["enable_ocr"] is True
+    assert d["hybrid_search"] is True
+    assert d["embedding_endpoint"] == "https://embed.example.com/v1"
+    assert d["embedding_model"] == "bge-m3"
+    assert d["live_docket_api_url"] == "https://docket.example.com/api"
+    assert d["live_docket_api_key"] == "***"
+    assert "secret-docket-token" not in str(d)

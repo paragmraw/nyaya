@@ -10,12 +10,14 @@ from ..models import (
     ActInfo,
     AmendmentRecord,
     BrowseResult,
+    CauseListEntry,
     CitationEdgeRecord,
     ConcordanceEntry,
     CorpusCounts,
     CorpusStatusResponse,
     CourtInfo,
     CrossRefDirection,
+    InvalidatingJudgment,
     JudgmentCard,
     JudgmentMeta,
     PrecedentTrace,
@@ -49,6 +51,7 @@ class InMemoryCorpusBackend:
         edges: list[CitationEdgeRecord] | None = None,
         courts: list[CourtInfo] | None = None,
         aliases: dict[str, str] | None = None,
+        cause_lists: list[CauseListEntry] | None = None,
         default_commercial_safe_only: bool = False,
     ) -> None:
         self.acts: dict[str, ActInfo] = {a.act_id: a for a in (acts or [])}
@@ -58,6 +61,7 @@ class InMemoryCorpusBackend:
         self.judgments: dict[str, JudgmentMeta] = {j.case_id: j for j in (judgments or [])}
         self.edges: list[CitationEdgeRecord] = list(edges or [])
         self.courts: list[CourtInfo] = list(courts or [])
+        self.cause_lists: list[CauseListEntry] = list(cause_lists or [])
         self.aliases: dict[str, str] = {k.lower(): v for k, v in (aliases or {}).items()}
         for a in self.acts.values():
             self.aliases.setdefault(a.short_name.lower(), a.short_name)
@@ -202,7 +206,50 @@ class InMemoryCorpusBackend:
             and (ref is None or ref in am.provisions_affected)
         ]
         sliced = matched[offset : offset + limit]
-        return ProvisionHistory(act=canon_act, ref=ref, amendments=sliced, total=len(matched))
+        inval_events: list[InvalidatingJudgment] = []
+        if ref is not None:
+            ref_lower = ref.strip().lower()
+            for p in self.provisions.values():
+                if (
+                    p.act.lower() == canon_act.lower()
+                    and p.ref_norm.lower() == ref_lower
+                    and p.validity.invalidating_judgment is not None
+                ):
+                    inval_events.append(p.validity.invalidating_judgment)
+        return ProvisionHistory(
+            act=canon_act,
+            ref=ref,
+            amendments=sliced,
+            judicial_validity_events=inval_events,
+            total=len(matched),
+        )
+
+    def search_cause_lists(
+        self,
+        *,
+        court: str | None = None,
+        date: Date | str | None = None,
+        bench: str | None = None,
+        judge: str | None = None,
+        party: str | None = None,
+        advocate: str | None = None,
+        case_number: str | None = None,
+        cnr: str | None = None,
+        limit: int = 25,
+    ) -> list[CauseListEntry]:
+        from .cause_list_store import CauseListStore
+
+        return CauseListStore(entries=self.cause_lists).search_cause_lists(
+            court=court,
+            date=date,
+            bench=bench,
+            judge=judge,
+            party=party,
+            advocate=advocate,
+            case_number=case_number,
+            cnr=cnr,
+            limit=limit,
+        )
 
     def get_cross_refs(
         self,

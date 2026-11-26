@@ -113,7 +113,7 @@ def register(mcp: Any) -> None:
         "nyaya://statutes",
         name="All indexed statutes & regulators",
         description=(
-            "Compact index of all 37 Central+State/UT Acts & 12 Regulators "
+            "Compact index of all 37 Central+State/UT jurisdictions & 12 Regulators "
             "(short_name, full_name, jurisdiction, year, status, provision_count, provenance)."
         ),
         mime_type="application/json",

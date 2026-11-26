@@ -134,7 +134,7 @@ def __getattr__(name: str):  # noqa: ANN202 - PEP 562 signature
     """Resolve ``DEFAULT_TOOLS`` from the tool spec at access time.
 
     The curated default tool set (the 8 allowlisted tools of the MCP
-    server's 12 v2 tools for grounded Q&A; the remaining 4 MCP tools are
+    server's 15 v2.1 tools for grounded Q&A; the remaining 7 MCP tools are
     not on the chat allowlist) is defined ONCE in ``tools_layer/spec.py``
     (``DEFAULT_TOOLS``, derived from ``TOOL_SPECS``); it cannot be imported
     at module level here because the ``tools_layer`` package imports this

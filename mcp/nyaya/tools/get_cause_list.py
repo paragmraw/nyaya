@@ -6,10 +6,8 @@ import threading
 from datetime import date as Date
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
-
 from ..config import get_settings
-from ..models import SourceProvenance
+from ..models import CauseListResponse, SourceProvenance
 from ..storage import get_backend
 from ..storage.cause_list_store import CauseListEntry, CauseListStore
 from ..storage.live_docket import get_live_docket_adapter
@@ -31,15 +29,6 @@ def get_cause_list_store() -> CauseListStore | None:
     """Return any explicitly configured CauseListStore override."""
     with _store_lock:
         return _cause_list_store
-
-
-class CauseListResponse(BaseModel):
-    """Structured response for ``get_cause_list``."""
-
-    total: int
-    returned: int
-    source: Literal["local", "live"]
-    entries: list[CauseListEntry] = Field(default_factory=list)
 
 
 def _entry_provenance(entry: CauseListEntry, *, source_mode: str, fallback_date: Date | None) -> SourceProvenance:

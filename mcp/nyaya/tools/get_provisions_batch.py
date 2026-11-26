@@ -6,14 +6,12 @@ from collections.abc import Mapping, Sequence
 from datetime import date as Date
 from typing import Any
 
-from pydantic import BaseModel, Field
-
-from ..exceptions import InvalidFilter, NotFound, NyayaError, StorageUnavailable
-from ..models import InvalidatingJudgment, ProvisionResponse, SourceProvenance, StatutoryLink
+from ..exceptions import InvalidFilter, NyayaError
+from ..models import BatchProvisionsResponse, ProvisionResponse, StatutoryLink
 from ..storage import get_backend
-from ..storage.point_in_time import reconstruct_provision_as_of
 from ._error import structured_errors
 from ._util import (
+    apply_point_in_time,
     effective_commercial_safe,
     ensure_framed,
     parse_optional_date,
@@ -22,31 +20,6 @@ from ._util import (
 )
 
 MAX_BATCH_PROVISIONS = 50
-
-_STATUTE_STATUS_VALUES = frozenset(
-    {
-        "in_force",
-        "repealed",
-        "omitted",
-        "struck_down",
-        "read_down",
-        "partially_struck_down",
-        "kept_in_abeyance",
-        "substituted",
-        "unverified",
-    }
-)
-
-
-class BatchProvisionsResponse(BaseModel):
-    """Partial-success response for ``get_provisions_batch``."""
-
-    total_requested: int
-    returned: int
-    as_of: Date | None = None
-    results: list[dict[str, Any]] = Field(default_factory=list)
-    not_found: list[Any] = Field(default_factory=list)
-    errors: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def _normalize_batch_items(
@@ -66,37 +39,6 @@ def _normalize_batch_items(
             )
         items.append(entry)
     return items
-
-
-def _frame_point_in_time(
-    pit_dict: dict[str, Any],
-    *,
-    doc_id: str,
-    provenance: SourceProvenance,
-) -> dict[str, Any]:
-    framed_amends: list[dict[str, Any]] = []
-    for idx, am in enumerate(pit_dict.get("applied_amendments") or []):
-        am_copy = dict(am)
-        if am_copy.get("summary"):
-            am_id = str(am_copy.get("amendment_id") or f"{doc_id}:am{idx}")
-            am_copy["summary"] = ensure_framed(
-                str(am_copy["summary"]),
-                doc_id=am_id,
-                provenance=provenance,
-            )
-        framed_amends.append(am_copy)
-    pit_dict["applied_amendments"] = framed_amends
-
-    inval = pit_dict.get("active_invalidation")
-    if isinstance(inval, dict) and inval.get("holding_summary"):
-        inval_copy = dict(inval)
-        inval_copy["holding_summary"] = ensure_framed(
-            str(inval_copy["holding_summary"]),
-            doc_id=str(inval_copy.get("case_id") or f"{doc_id}:inval"),
-            provenance=provenance,
-        )
-        pit_dict["active_invalidation"] = inval_copy
-    return pit_dict
 
 
 def get_provisions_batch(
@@ -184,47 +126,11 @@ def get_provisions_batch(
         pit_payload: dict[str, Any] | None = None
 
         if as_of_date is not None:
-            amends = []
-            invals = []
-            try:
-                hist = backend.get_provision_history(
-                    rec.act,
-                    rec.ref,
-                    limit=106,
-                    commercial_safe_only=cs_only,
-                )
-                amends = hist.amendments
-                invals = hist.judicial_validity_events
-            except (NotFound, StorageUnavailable):
-                pass
-
-            pit = reconstruct_provision_as_of(rec, amends, invals, as_of_date)
-            raw_text = pit.text
-            validity_updates: dict[str, Any] = {"verified_as_of": pit.as_of}
-            if pit.effective_status in _STATUTE_STATUS_VALUES:
-                validity_updates["status"] = pit.effective_status
-            if isinstance(pit.active_invalidation, InvalidatingJudgment):
-                validity_updates["invalidating_judgment"] = pit.active_invalidation
-            elif pit.active_invalidation is None:
-                validity_updates["invalidating_judgment"] = None
-            validity = validity.model_copy(update=validity_updates)
-
-            active_inval_dict: dict[str, Any] | None = None
-            if isinstance(pit.active_invalidation, InvalidatingJudgment):
-                active_inval_dict = pit.active_invalidation.model_dump(mode="json")
-            elif isinstance(pit.active_invalidation, Mapping):
-                active_inval_dict = dict(pit.active_invalidation)
-
-            pit_payload = _frame_point_in_time(
-                {
-                    "effective_status": pit.effective_status,
-                    "as_of": pit.as_of.isoformat(),
-                    "applied_amendments": pit.applied_amendments,
-                    "active_invalidation": active_inval_dict,
-                    "reconstruction_basis": pit.reconstruction_basis,
-                },
-                doc_id=rec.doc_id,
-                provenance=rec.provenance,
+            raw_text, validity, pit_payload = apply_point_in_time(
+                rec,
+                backend,
+                as_of_date,
+                commercial_safe_only=cs_only,
             )
 
         framed_links: list[StatutoryLink] = []

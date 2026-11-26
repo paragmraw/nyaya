@@ -24,6 +24,7 @@ from ..models import (
     ActInfo,
     AmendmentRecord,
     BrowseResult,
+    CauseListEntry,
     CitationEdgeRecord,
     ConcordanceEntry,
     CorpusCounts,
@@ -33,6 +34,7 @@ from ..models import (
     InvalidatingJudgment,
     JudgmentCard,
     JudgmentMeta,
+    OffenceClassification,
     PrecedentTrace,
     ProvisionHistory,
     ProvisionIndexEntry,
@@ -149,16 +151,17 @@ CREATE INDEX IF NOT EXISTS idx_amend_target ON provision_amendments(target_act_i
 CREATE INDEX IF NOT EXISTS idx_amend_year ON provision_amendments(target_act_id, enacted_date);
 
 CREATE TABLE IF NOT EXISTS concordance (
-    id                INTEGER PRIMARY KEY,
-    old_doc_id        TEXT NOT NULL REFERENCES provisions(doc_id),
-    new_doc_id        TEXT REFERENCES provisions(doc_id),
-    mapping_type      TEXT NOT NULL CHECK (mapping_type IN ('one_to_one','one_to_many','many_to_one','omitted','newly_inserted')),
-    substantive_delta TEXT NOT NULL,
-    punishment_delta  TEXT,
-    procedural_delta  TEXT,
-    savings_note      TEXT,
-    verified_by       TEXT NOT NULL,
-    source_id         TEXT NOT NULL REFERENCES sources(source_id)
+    id                          INTEGER PRIMARY KEY,
+    old_doc_id                  TEXT NOT NULL REFERENCES provisions(doc_id),
+    new_doc_id                  TEXT REFERENCES provisions(doc_id),
+    mapping_type                TEXT NOT NULL CHECK (mapping_type IN ('one_to_one','one_to_many','many_to_one','omitted','newly_inserted')),
+    substantive_delta           TEXT NOT NULL,
+    punishment_delta            TEXT,
+    procedural_delta            TEXT,
+    savings_note                TEXT,
+    verified_by                 TEXT NOT NULL,
+    source_id                   TEXT NOT NULL REFERENCES sources(source_id),
+    offence_classification_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_conc_old ON concordance(old_doc_id);
 CREATE INDEX IF NOT EXISTS idx_conc_new ON concordance(new_doc_id);
@@ -259,6 +262,22 @@ CREATE TABLE IF NOT EXISTS courts (
     seat_city       TEXT,
     hc_jurisdiction TEXT
 );
+
+CREATE TABLE IF NOT EXISTS cause_lists (
+    id              INTEGER PRIMARY KEY,
+    court           TEXT NOT NULL,
+    cause_list_date TEXT NOT NULL,
+    bench           TEXT,
+    judge           TEXT,
+    item_number     TEXT,
+    case_number     TEXT,
+    cnr             TEXT,
+    parties         TEXT,
+    advocates_json  TEXT NOT NULL DEFAULT '[]',
+    purpose         TEXT,
+    source_url      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_cl_court_date ON cause_lists(court, cause_list_date);
 """
 
 _REF_PREFIX_RE = re.compile(
@@ -942,6 +961,20 @@ class SqliteStore:
         ).fetchall()
         entries: list[ConcordanceEntry] = []
         for r in rows:
+            row_keys = set(r.keys())
+            raw_oc = (
+                r["offence_classification_json"]
+                if "offence_classification_json" in row_keys
+                else None
+            )
+            offence_cls: OffenceClassification | None = None
+            if raw_oc:
+                try:
+                    parsed_oc = json.loads(str(raw_oc))
+                    if isinstance(parsed_oc, dict):
+                        offence_cls = OffenceClassification(**parsed_oc)
+                except Exception:
+                    offence_cls = None
             new_ref_obj = (
                 ProvisionRef(
                     act=str(r["new_act"]),
@@ -980,6 +1013,7 @@ class SqliteStore:
                         terms_status=r["src_terms_status"],
                         as_of=_parse_date(r["src_as_of"]) or Date(2026, 11, 22),
                     ),
+                    offence_classification=offence_cls,
                 )
             )
         return entries
@@ -1888,4 +1922,39 @@ class SqliteStore:
                 "nc_datasets": ["ddl_district_courts", "ildc_research"],
             },
             court_detail=court_detail,
+        )
+
+    def search_cause_lists(
+        self,
+        *,
+        court: str | None = None,
+        date: Date | str | None = None,
+        bench: str | None = None,
+        judge: str | None = None,
+        party: str | None = None,
+        advocate: str | None = None,
+        case_number: str | None = None,
+        cnr: str | None = None,
+        limit: int = 25,
+    ) -> list[CauseListEntry]:
+        """Search ``cause_lists`` in SQLite, returning ``[]`` if an older artifact lacks the table."""
+        from .cause_list_store import CauseListStore
+
+        con = self._conn()
+        tbl = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cause_lists'"
+        ).fetchone()
+        if tbl is None:
+            return []
+        store = CauseListStore(db_path=self.db_path)
+        return store.search_cause_lists(
+            court=court,
+            date=date,
+            bench=bench,
+            judge=judge,
+            party=party,
+            advocate=advocate,
+            case_number=case_number,
+            cnr=cnr,
+            limit=limit,
         )

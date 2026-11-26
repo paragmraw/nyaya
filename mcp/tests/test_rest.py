@@ -14,7 +14,7 @@ from nyaya.models import AnalyticsBucket, AnalyticsResult, AnalyticsTier, Source
 from nyaya.server import create_http_app
 from nyaya.storage.duckdb_store import DuckDBStore
 from nyaya.storage.manifest import CorpusManifest, DatasetManifest, PartitionEntry
-from tests.test_tools_contract import EXPECTED_12_TOOLS, _build_rich_memory_backend
+from tests.test_tools_contract import EXPECTED_15_TOOLS, _build_rich_memory_backend
 
 pytestmark = pytest.mark.integration
 
@@ -170,18 +170,18 @@ def test_internal_error_is_500_without_leaked_details(monkeypatch):
         assert "SECRET" not in r.text
 
 
-def test_tools_endpoint_lists_12_tools_8_resources_4_prompts():
-    """GET /api/tools introspects the MCP v2.0 surface (12 tools, 8 resources, 4 prompts)."""
+def test_tools_endpoint_lists_15_tools_8_resources_4_prompts():
+    """GET /api/tools introspects the MCP v2.1 surface (15 tools, 8 resources, 4 prompts)."""
     app = _setup_test_app()
     with TestClient(app) as client:
         r = client.get("/api/tools")
         assert r.status_code == 200
         body = r.json()
-        assert body["total"] == 12
+        assert body["total"] == 15
         assert body["resources_count"] == 8
         assert body["prompts_count"] == 4
         names = {item["name"] for item in body["items"]}
-        assert names == EXPECTED_12_TOOLS
+        assert names == EXPECTED_15_TOOLS
         assert all(item["description"] for item in body["items"])
         assert all(isinstance(item["open_world"], bool) for item in body["items"])
 

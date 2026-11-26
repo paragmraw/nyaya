@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import lancedb
 
 from ..citations import normalize_jurisdiction
 from ..exceptions import StorageUnavailable
-from ..retrieval.hybrid import EmbeddingProvider, fuse_lexical_and_vector_rrf
+
+if TYPE_CHECKING:
+    from ..retrieval.hybrid import EmbeddingProvider
 
 SC_CHUNKS_TABLE = "sc_chunks"
 HC_HOT_CHUNKS_TABLE = "hc_hot_chunks"
@@ -316,6 +318,8 @@ class LanceStore:
             vec_hits = self._vector_query(table_name, q_vec, filters=eff_filters, limit=candidate_limit)
         except Exception:
             return lex_hits[:eff_limit]
+
+        from ..retrieval.hybrid import fuse_lexical_and_vector_rrf
 
         id_key = "doc_id" if table_name == STATE_ACTS_REGULATORS_TABLE else "chunk_id"
         return fuse_lexical_and_vector_rrf(

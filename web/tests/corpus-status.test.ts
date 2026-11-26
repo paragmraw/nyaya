@@ -84,9 +84,9 @@ test("API client exposes all v2 REST fetchers", () => {
   assert.equal(typeof api.healthSummary, "function");
 });
 
-test("v2 MCP tools, resources, and prompts metadata match 12 / 8 / 4 counts", () => {
-  assert.equal(MCP_TOOLS_FALLBACK.total, 12);
-  assert.equal(MCP_TOOLS_FALLBACK.items.length, 12);
+test("v2 MCP tools, resources, and prompts metadata match 15 / 8 / 4 counts", () => {
+  assert.equal(MCP_TOOLS_FALLBACK.total, 15);
+  assert.equal(MCP_TOOLS_FALLBACK.items.length, 15);
   assert.equal(MCP_RESOURCES.length, 8);
   assert.equal(MCP_PROMPTS.length, 4);
 });

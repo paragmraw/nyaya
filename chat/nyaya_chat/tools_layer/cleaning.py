@@ -94,21 +94,24 @@ def clean_for_ui_summary(content: Any, tool_name: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Human-readable summarizers for all 12 MCP v2 tools
+# Human-readable summarizers for all 15 MCP v2.1 tools
 # ---------------------------------------------------------------------------
 
 TOOL_SUMMARIZERS: dict[str, Callable[[dict[str, Any]], str]] = {
     "search_statutes": lambda d: f"Found {d.get('returned', len(d.get('results', [])))} of {d.get('total', 0)} statutory provisions",
     "get_provision": lambda d: f"{d.get('act', '')} {d.get('ref', '')}: {d.get('title') or 'provision'} ({(d.get('validity') or {}).get('status', 'in_force')})".strip(),
+    "get_provisions_batch": lambda d: f"Batch provisions: {d.get('returned', len(d.get('results', [])))} of {d.get('total_requested', 0)} returned",
     "browse_statute": lambda d: f"Browse ({d.get('mode', 'catalog')}): {d.get('returned', 0)} of {d.get('total', 0)} entries",
     "compare_provisions": lambda d: f"Comparison ({d.get('mapping_type', 'one_to_one')}): {(d.get('source_provision') or {}).get('act', '')} {(d.get('source_provision') or {}).get('ref', '')}",
     "get_provision_history": lambda d: f"History for {d.get('act', 'Constitution')} {d.get('ref') or ''}: {len(d.get('amendments', []))} amendments, {len(d.get('judicial_validity_events', []))} judicial events".strip(),
     "cross_reference": lambda d: f"Cross-references for {(d.get('source') or {}).get('act', '')} {(d.get('source') or {}).get('ref', '')}: {d.get('returned', len(d.get('links', [])))} links",
     "search_judgments": lambda d: f"Found {d.get('returned', len(d.get('results', [])))} of {d.get('total', 0)} judgments",
     "get_judgment": lambda d: f"{(d.get('card') or {}).get('title', 'Judgment')} ({d.get('view', 'overview')})",
+    "get_judgments_batch": lambda d: f"Batch judgments ({d.get('view', 'overview')}): {d.get('returned', len(d.get('results', [])))} of {d.get('total_requested', 0)} returned",
     "trace_precedent": lambda d: f"Precedent trace for {(d.get('target') or {}).get('title', '')}: {len(d.get('edges', []))} edges ({d.get('precedent_status', 'unverified_automated')})",
     "verify_citations": lambda d: f"Verified {len(d.get('findings', []))} citations",
     "judgment_analytics": lambda d: f"Analytics ({d.get('court_tier', 'all')} by {d.get('group_by', '')}): {d.get('total_matched', 0)} matched cases",
+    "get_cause_list": lambda d: f"Cause list ({d.get('source', 'local')}): {d.get('returned', len(d.get('entries', [])))} of {d.get('total', 0)} entries",
     "corpus_status": lambda d: f"Corpus status v{d.get('service_version', '2.0.0')} ({d.get('retrieval_mode', 'lexical_metadata_graph')})",
 }
 

@@ -363,7 +363,7 @@ async def analytics_endpoint(request: Request) -> JSONResponse:
 
 
 async def tools_endpoint(request: Request) -> JSONResponse:
-    """GET /api/tools -> introspected 12 tools, 8 resources_count, 4 prompts_count."""
+    """GET /api/tools -> introspected 15 tools, 8 resources_count, 4 prompts_count."""
     mcp = getattr(request.app.state, "mcp", None)
     if mcp is None:
         return JSONResponse(
