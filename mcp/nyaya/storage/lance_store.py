@@ -353,6 +353,47 @@ class LanceStore:
                 continue
         return []
 
+    def lookup_judgment_by_id(
+        self,
+        identifier: str,
+        *,
+        commercial_safe_only: bool | None = None,
+    ) -> tuple[str | None, list[dict[str, Any]]]:
+        """Look up HC or Tribunal judgment chunks by case_id, CNR, or neutral citation."""
+        ident = (identifier or "").strip()
+        if not ident:
+            return None, []
+        cs = self._effective_cs(commercial_safe_only)
+        lit = _sql_str(ident)
+        if "~" in ident:
+            norm_lit = _sql_str(ident.replace("~", "_"))
+            case_match = f"(case_id = {lit} OR case_id = {norm_lit})"
+        else:
+            case_match = f"case_id = {lit}"
+        targets: tuple[tuple[str, str], ...] = (
+            (
+                HC_HOT_CHUNKS_TABLE,
+                f"({case_match} OR upper(cnr) = upper({lit}) OR lower(neutral_citation) = lower({lit}))",
+            ),
+            (
+                TRIBUNAL_CHUNKS_TABLE,
+                f"({case_match} OR lower(neutral_citation) = lower({lit}))",
+            ),
+        )
+        for table_name, id_clause in targets:
+            where_sql = f"{id_clause} AND commercial_safe = true" if cs else id_clause
+            try:
+                tbl = self._open_table(table_name)
+                rows: list[dict[str, Any]] = tbl.search().where(where_sql).limit(500).to_list()
+                if rows:
+                    rows.sort(key=lambda r: int(r.get("para_start") or 0))
+                    return table_name, rows
+            except StorageUnavailable:
+                continue
+            except Exception:
+                continue
+        return None, []
+
     def close(self) -> None:
         self._tables.clear()
         self._db = None

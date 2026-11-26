@@ -291,3 +291,110 @@ def test_alias_map_includes_acts_table_and_jurisdiction_normalization(
         assert store.search_statutes_fts("Martian space mining treaty") == []
     finally:
         store.close()
+
+
+def test_amendment_count_matches_provision_history_and_amendment_44(
+    sqlite_store: SqliteStore,
+    tmp_path: Path,
+) -> None:
+    import sqlite3
+
+    import yaml
+
+    from tests.fixtures.mini_corpus.builder import MINI_SQLITE_DDL
+
+    # 1. Parity across mini-corpus Constitution articles
+    for ref in ("14", "19", "21", "21A", "32"):
+        prov = sqlite_store.get_provision("Constitution", ref)
+        assert prov is not None
+        hist = sqlite_store.get_provision_history("Constitution", ref)
+        assert prov.validity.amendment_count == hist.total
+
+    hist_art21 = sqlite_store.get_provision_history("Constitution", "Art. 21")
+    hist_21 = sqlite_store.get_provision_history("Constitution", "21")
+    assert hist_art21.total == hist_21.total
+
+    # 2. Verify Amendment #44 in amendments_1_106.yaml includes Articles 20 and 21
+    yaml_path = (
+        Path(__file__).resolve().parents[1]
+        / "nyaya"
+        / "ingest"
+        / "data"
+        / "amendments_1_106.yaml"
+    )
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    amend_44 = next(a for a in data["amendments"] if a["number"] == 44)
+    assert "20" in amend_44["articles_affected"]
+    assert "21" in amend_44["articles_affected"]
+
+    db_path = tmp_path / "amend44_parity.sqlite"
+    con = sqlite3.connect(db_path)
+    try:
+        con.executescript(MINI_SQLITE_DDL)
+        con.execute(
+            "INSERT INTO sources VALUES ('s1','Src','https://example.invalid','CC-BY-4.0',1,'cleared','v1','2026-01-01',?,'10',NULL)",
+            ("a" * 64,),
+        )
+        con.execute(
+            "INSERT INTO acts VALUES ('constitution','Constitution','The Constitution of India',1950,NULL,'Central','constitution','in_force','1950-01-26',NULL,NULL,'sqlite_core','s1',1,'2026-01-01')"
+        )
+        for art in ("14", "20", "21"):
+            con.execute(
+                "INSERT INTO provisions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    f"constitution:art:{art}",
+                    "constitution",
+                    "Constitution",
+                    "article",
+                    art,
+                    art,
+                    int(art),
+                    None,
+                    None,
+                    "Part III",
+                    f"Article {art}",
+                    f"Text of Article {art}.",
+                    "in_force",
+                    "1950-01-26",
+                    None,
+                    "{}",
+                    "s1",
+                    "https://example.invalid",
+                    f"h{art}",
+                    1,
+                ),
+            )
+        arts_csv = ",".join(str(a) for a in amend_44["articles_affected"])
+        con.execute(
+            "INSERT INTO provision_amendments VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "const-amend-44",
+                "constitution",
+                None,
+                str(amend_44["title"]),
+                44,
+                str(amend_44["enacted_date"]),
+                str(amend_44["effective_date"]),
+                str(amend_44["action"]),
+                str(amend_44["summary"]),
+                arts_csv,
+                "s1",
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    store = SqliteStore(db_path)
+    try:
+        for art in ("14", "20", "21"):
+            p = store.get_provision("Constitution", art)
+            assert p is not None
+            h_plain = store.get_provision_history("Constitution", art)
+            h_prefixed = store.get_provision_history("Constitution", f"Art. {art}")
+            assert p.validity.amendment_count == h_plain.total == h_prefixed.total
+        assert store.get_provision("Constitution", "14").validity.amendment_count == 0
+        assert store.get_provision("Constitution", "20").validity.amendment_count == 1
+        assert store.get_provision("Constitution", "21").validity.amendment_count == 1
+    finally:
+        store.close()

@@ -237,3 +237,81 @@ def test_corpus_status_and_health_summary_enrich_three_tiers_and_manifest_counts
     finally:
         storage.close_all()
         get_settings.cache_clear()
+
+
+def test_analytics_accepts_limit_alias():
+    """GET /api/analytics?limit=5 forwards top_n=5 and returns both rows and buckets."""
+    app = _setup_test_app()
+    seen: list[int] = []
+
+    class _SpyAnalytics:
+        def aggregate(
+            self,
+            dataset: AnalyticsTier,
+            group_by: str,
+            *,
+            filters: dict,
+            top_n: int = 25,
+            sample_cases: int = 0,
+            commercial_safe_only: bool | None = None,
+        ) -> AnalyticsResult:
+            seen.append(top_n)
+            return AnalyticsResult(
+                dataset=dataset,
+                group_by=group_by,
+                total_matched=10,
+                buckets=[AnalyticsBucket(key="2024", count=10, share_pct=100.0)],
+                completeness_caveat="Test caveat",
+                provenances=[],
+            )
+
+        def close(self) -> None:
+            return None
+
+    storage.set_analytics(_SpyAnalytics())
+    try:
+        with TestClient(app) as client:
+            r = client.get("/api/analytics?dataset=hc&group_by=year&limit=5")
+            assert r.status_code == 200
+            body = r.json()
+            assert seen == [5]
+            assert body["rows"] == [{"key": "2024", "count": 10, "share_pct": 100.0}]
+            assert len(body["buckets"]) == 1
+
+            r_bad = client.get("/api/analytics?limit=abc")
+            assert r_bad.status_code == 400
+            assert r_bad.json()["error"] == "bad_request"
+    finally:
+        storage.close_all()
+
+
+def test_openapi_json_and_self_contained_docs():
+    """GET /openapi.json returns OpenAPI 3.1.0 and GET /docs serves CSP-safe HTML."""
+    app = _setup_test_app()
+    with TestClient(app) as client:
+        r_spec = client.get("/openapi.json")
+        assert r_spec.status_code == 200
+        spec = r_spec.json()
+        assert spec["openapi"] == "3.1.0"
+        assert spec["info"]["version"] == "2.1.0"
+        paths = spec["paths"]
+        for required_path in (
+            "/health",
+            "/mcp",
+            "/api/corpus-status",
+            "/api/corpus-stats",
+            "/api/acts",
+            "/api/judgments",
+            "/api/analytics",
+            "/api/tools",
+            "/api/health-summary",
+        ):
+            assert required_path in paths, f"Missing {required_path} in OpenAPI paths"
+
+        r_docs = client.get("/docs")
+        assert r_docs.status_code == 200
+        assert "text/html" in r_docs.headers.get("content-type", "")
+        html = r_docs.text
+        assert "/openapi.json" in html
+        assert "2.1.0" in html
+        assert "https://" not in html and "http://" not in html

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from bisect import bisect_right
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,7 @@ from urllib.parse import urlsplit
 import duckdb
 import yaml  # type: ignore[import-untyped]
 
+from ...sanitize import escape_corpus_delimiters, strip_control_chars
 from ..extract.pdf import extract_pdf_file
 from ..lockfile import (
     DATA_DIR,
@@ -44,7 +46,23 @@ OFFICIAL_SOURCE_IDS: tuple[str, ...] = (
 )
 
 _CONSTITUTION_ARTICLE_RE = re.compile(
-    r"(?m)^\s*(?:Article\s+)?(\d+[A-Z]?)\.\s+([^\n.—]+?)(?:\.—|\.\s*—|\.\s+|\n)",
+    r"(?m)^\s*(?:Article\s+)?(\d{1,3}(?:-[A-Z]|[A-Z]{0,2}))\.\s+([^\n.—]+?)(?:\.—|\.\s*—|\.\s+|\n)",
+)
+_CONSTITUTION_BODY_ARTICLE_RE = re.compile(
+    r"(?:(?m:^)[ \t]*|(?<=[\.\]])[ \t]+)\*?\[?(?:Article\s+)?(\d{1,3}(?:-[A-Z]|[A-Z]{0,2}))\.\s*"
+    r"(?:\d+\s*\n\s*\[)?([A-Z\[].{2,450}?)(?:(?:\.\s*\]?|\])\s*(?:—|–{1,2}|-)|(?:\.\s*—))",
+    re.DOTALL,
+)
+_CONSTITUTION_PART_RE = re.compile(
+    r"(?m)^[ \t]*\[?\s*(?:PART\s+([IVX]+[A-Z]?)\b(?!\s+of\b)[^\n]*|Part\s+([IVX]+[A-Z]?)[ \t]*)$"
+)
+_CONSTITUTION_TOC_RE = re.compile(r"(?im)^[ \t]*(?:CONTENTS|TABLE\s+OF\s+CONTENTS)\b")
+_CONSTITUTION_PREAMBLE_BODY_RE = re.compile(
+    r"(?im)^[ \t]*PREAMBLE[ \t]*\n+[ \t]*WE,\s+THE\s+PEOPLE\s+OF\s+INDIA"
+)
+_CONSTITUTION_PART_I_RE = re.compile(r"(?m)^[ \t]*\[?\s*PART\s+I\b(?![IVX])[^\n]*$")
+_CONSTITUTION_FIRST_SCHEDULE_RE = re.compile(
+    r"(?m)^[ \t]*\[?\s*(?:THE\s+)?FIRST\s+SCHEDULE\b"
 )
 
 
@@ -285,24 +303,98 @@ def _build_single_provision(
         "metadata": dict(row.get("metadata") or {}) if isinstance(row.get("metadata"), Mapping) else {},
         "source_id": default_source_id,
         "source_url": str(row.get("source_url") or default_source_url),
+        "as_of": row.get("as_of"),
         "commercial_safe": True,
     }
 
 
+def _clean_constitution_text(text: str) -> str:
+    """Normalize line endings/hyphens and strip control/BiDi/Tag chars and `</corpus_text>`."""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("\ufffe", "-")
+    cleaned = strip_control_chars(normalized)
+    return escape_corpus_delimiters(cleaned)
+
+
+def _slice_constitution_body(text: str) -> str:
+    """Slice from Constitution body start (skipping TOC when present) up to FIRST SCHEDULE."""
+    body = text
+    m_preamble = _CONSTITUTION_PREAMBLE_BODY_RE.search(body)
+    if m_preamble is not None:
+        body = body[m_preamble.start() :]
+    elif _CONSTITUTION_TOC_RE.search(body) is not None:
+        part_i_matches = list(_CONSTITUTION_PART_I_RE.finditer(body))
+        if len(part_i_matches) >= 2:
+            chosen_start: int | None = None
+            for pm in part_i_matches:
+                tail = body[pm.start() :]
+                if _CONSTITUTION_BODY_ARTICLE_RE.search(tail[:4000]) is not None:
+                    chosen_start = pm.start()
+                    break
+            body = body[chosen_start if chosen_start is not None else part_i_matches[-1].start() :]
+        elif part_i_matches:
+            body = body[part_i_matches[0].start() :]
+
+    m_sched = _CONSTITUTION_FIRST_SCHEDULE_RE.search(body)
+    if m_sched is not None:
+        body = body[: m_sched.start()]
+
+    body = re.sub(r"_{10,}.*?(?=\n\n|\Z)", "", body, flags=re.DOTALL)
+    body = re.sub(r"(?m)^THE CONSTITUTION OF INDIA\s*\n\([^\n]+\)\s*\n\d+\s*$", "", body)
+    if len(body) > 10_000:
+        body = re.sub(r"(?m)^[ \t]*\d{1,3}[ \t]*$", "", body)
+    return body
+
+
 def _parse_constitution_pdf_text(full_text: str, *, source_url: str) -> list[dict[str, Any]]:
-    matches = list(_CONSTITUTION_ARTICLE_RE.finditer(full_text))
+    sanitized = _clean_constitution_text(full_text or "")
+    body_text = _slice_constitution_body(sanitized)
+    if not body_text.strip():
+        return []
+
+    part_positions: list[int] = []
+    part_names: list[str] = []
+    for pm in _CONSTITUTION_PART_RE.finditer(body_text):
+        roman = (pm.group(1) or pm.group(2) or "").strip().upper()
+        if roman:
+            part_positions.append(pm.start())
+            part_names.append(f"Part {roman}")
+
+    matches = list(_CONSTITUTION_BODY_ARTICLE_RE.finditer(body_text))
+    if not matches:
+        matches = list(_CONSTITUTION_ARTICLE_RE.finditer(body_text))
+
     rows: list[dict[str, Any]] = []
+    seen_doc_ids: set[str] = set()
     if matches:
         for idx, m in enumerate(matches):
-            ref = m.group(1).strip()
-            title = m.group(2).strip(" .—-")
+            ref = m.group(1).strip().replace("-", "")
+            num_m = re.match(r"^(\d+)", ref)
+            if num_m is None:
+                continue
+            art_num = int(num_m.group(1))
+            if not (1 <= art_num <= 395):
+                continue
+
+            doc_id = f"constitution:art:{ref}"
+            if doc_id in seen_doc_ids:
+                continue
+
+            raw_title = re.sub(r"\s+", " ", m.group(2)).strip(" .—–-[]")
+            title = raw_title or f"Article {ref}"
             body_start = m.end()
-            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(full_text)
-            body = full_text[body_start:body_end].strip() or title
+            body_end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body_text)
+            body = body_text[body_start:body_end].strip() or title
+            if not body:
+                continue
+
+            part_idx = bisect_right(part_positions, m.start()) - 1
+            current_part = part_names[part_idx] if part_idx >= 0 else None
+
+            seen_doc_ids.add(doc_id)
             ref_norm = ref.upper()
             rows.append(
                 {
-                    "doc_id": f"constitution:art:{ref}",
+                    "doc_id": doc_id,
                     "act_id": "constitution",
                     "act_short": "Constitution",
                     "act_full_name": "The Constitution of India",
@@ -310,7 +402,7 @@ def _parse_constitution_pdf_text(full_text: str, *, source_url: str) -> list[dic
                     "kind": "article",
                     "ref": ref,
                     "ref_norm": ref_norm,
-                    "part": None,
+                    "part": current_part,
                     "title": title,
                     "text": body,
                     "status": "in_force",
@@ -320,7 +412,7 @@ def _parse_constitution_pdf_text(full_text: str, *, source_url: str) -> list[dic
                     "commercial_safe": True,
                 }
             )
-    elif full_text.strip():
+    elif body_text.strip():
         rows.append(
             {
                 "doc_id": "constitution:preamble",
@@ -333,7 +425,7 @@ def _parse_constitution_pdf_text(full_text: str, *, source_url: str) -> list[dic
                 "ref_norm": "PREAMBLE",
                 "part": None,
                 "title": "Preamble",
-                "text": full_text.strip(),
+                "text": body_text.strip(),
                 "status": "in_force",
                 "commencement_date": "1950-01-26",
                 "source_id": "legislative_constitution",
@@ -649,12 +741,13 @@ class OfficialStatutesFetcher:
                         "repeal_date": item.get("repeal_date"),
                         "source_id": "legislative_constitution",
                         "source_url": str(item.get("source_url") or entry.uri),
+                        "as_of": item.get("as_of"),
                         "commercial_safe": True,
                     }
                 )
 
         for pdf_path in sorted(sdir.rglob("*.pdf")):
-            pdf_res = extract_pdf_file(pdf_path)
+            pdf_res = extract_pdf_file(pdf_path, max_bytes=50 * 1024 * 1024, max_pages=1200)
             out.extend(_parse_constitution_pdf_text(pdf_res.full_text, source_url=entry.uri))
 
         return out

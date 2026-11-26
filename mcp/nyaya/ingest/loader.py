@@ -17,6 +17,7 @@ import duckdb
 from .builders.sqlite_core import (
     VAQUILL_CENTRAL_LEGISLATION_URL,
     IngestInputBundle,
+    _default_as_of,
     create_mini_ingest_input,
 )
 from .extract.normalize import normalize_legal_record
@@ -800,7 +801,7 @@ def load_staged_ingest_bundle(
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "contract-act-1872",
@@ -817,7 +818,7 @@ def load_staged_ingest_bundle(
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "companies-act-2013",
@@ -834,7 +835,7 @@ def load_staged_ingest_bundle(
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "arbitration-act-1996",
@@ -851,7 +852,7 @@ def load_staged_ingest_bundle(
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
         {
             "act_id": "ibc-2016",
@@ -868,7 +869,7 @@ def load_staged_ingest_bundle(
             "storage_tier": "sqlite_core",
             "source_id": "vaquill_central_legislation",
             "commercial_safe": 1,
-            "as_of": "2026-11-22",
+            "as_of": _default_as_of(),
         },
     ]
     for act in extra_core_acts:
@@ -988,7 +989,7 @@ def load_staged_ingest_bundle(
                         "storage_tier": "sqlite_core",
                         "source_id": "vaquill_central_legislation",
                         "commercial_safe": 1,
-                        "as_of": "2026-11-22",
+                        "as_of": _default_as_of(),
                     }
                     used_short_names.add(short_name.lower())
             else:
@@ -1011,7 +1012,7 @@ def load_staged_ingest_bundle(
                         "storage_tier": "sqlite_core",
                         "source_id": "vaquill_central_legislation",
                         "commercial_safe": 1,
-                        "as_of": "2026-11-22",
+                        "as_of": _default_as_of(),
                     }
                     aliases.setdefault(act_title.lower(), canon_aid)
                     no_the = re.sub(r"^the\s+", "", act_title.lower()).strip()
@@ -1194,7 +1195,7 @@ def load_staged_ingest_bundle(
                     "storage_tier": "sqlite_core",
                     "source_id": str(p.get("source_id") or "indiacode_central_acts"),
                     "commercial_safe": 1,
-                    "as_of": "2026-11-22",
+                    "as_of": str(p.get("as_of") or _default_as_of()),
                 }
                 aliases.setdefault(short_name.lower(), aid)
                 aliases.setdefault(act_full.lower(), aid)
@@ -1279,7 +1280,7 @@ def load_staged_ingest_bundle(
                 "storage_tier": "sqlite_core",
                 "source_id": str(cp.get("source_id") or "vaquill_central_legislation"),
                 "commercial_safe": 1,
-                "as_of": "2026-11-22",
+                "as_of": str(cp.get("as_of") or _default_as_of()),
             }
         provisions_by_key[(aid, kind, ref_norm)] = dict(cp)
 
@@ -1340,7 +1341,7 @@ def load_staged_ingest_bundle(
                     "storage_tier": "lance_bucket",
                     "source_id": "vaquill_state_legislation",
                     "commercial_safe": 1,
-                    "as_of": "2026-11-22",
+                    "as_of": _default_as_of(),
                 }
                 seen_state_acts.add(canon_aid)
             else:
@@ -1436,7 +1437,7 @@ def load_staged_ingest_bundle(
                     "storage_tier": "lance_bucket",
                     "source_id": "vaquill_regulators",
                     "commercial_safe": 1,
-                    "as_of": "2026-11-22",
+                    "as_of": _default_as_of(),
                 }
             else:
                 short_name = str(acts_by_id[canon_aid]["short_name"])
@@ -1524,7 +1525,7 @@ def load_staged_ingest_bundle(
                     "storage_tier": "lance_bucket",
                     "source_id": "cad_debates",
                     "commercial_safe": 1,
-                    "as_of": "2026-11-22",
+                    "as_of": str(cad_row.get("as_of") or _default_as_of()),
                 }
             else:
                 short_name = str(acts_by_id[cad_aid]["short_name"])

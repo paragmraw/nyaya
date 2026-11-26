@@ -72,7 +72,26 @@ def test_mcp_endpoint_reachable_and_initialize_handshake():
                 },
             },
         )
-        assert r.status_code in (200, 202, 400), f"unexpected status {r.status_code}: {r.text}"
+        assert r.status_code == 200, f"unexpected status {r.status_code}: {r.text}"
+        # FastMCP Streamable HTTP returns SSE (`event: message\ndata: {...}`) or JSON
+        payload_text = r.text
+        if "data:" in payload_text:
+            data_lines = [
+                line[len("data:") :].strip()
+                for line in payload_text.splitlines()
+                if line.startswith("data:")
+            ]
+            msg = __import__("json").loads(data_lines[-1])
+        else:
+            msg = r.json()
+        assert msg["result"]["serverInfo"]["name"] == "nyaya"
+        assert msg["result"]["serverInfo"]["version"] == nyaya.__version__
+
+
+def test_mcp_instructions_mentions_24_tribunals_and_14_order_datasets():
+    from nyaya.mcp_app import MCP_INSTRUCTIONS
+
+    assert "24 tribunals & Consumer Commissions (14 order datasets indexed)" in MCP_INSTRUCTIONS
 
 
 def test_cors_headers():
