@@ -9,10 +9,13 @@ import lancedb
 
 from ..citations import normalize_jurisdiction
 from ..exceptions import StorageUnavailable
+from ..retrieval.hybrid import EmbeddingProvider, fuse_lexical_and_vector_rrf
 
 SC_CHUNKS_TABLE = "sc_chunks"
 HC_HOT_CHUNKS_TABLE = "hc_hot_chunks"
 STATE_ACTS_REGULATORS_TABLE = "state_acts_regulators"
+TRIBUNAL_CHUNKS_TABLE = "tribunal_chunks"
+CAD_DEBATES_TABLE = "cad_debates"
 
 
 def _sql_str(value: str) -> str:
@@ -30,12 +33,14 @@ class LanceStore:
         storage_options: dict[str, str] | None = None,
         offline_only: bool = False,
         default_commercial_safe_only: bool = False,
+        embedding_provider: EmbeddingProvider | None = None,
     ) -> None:
         self.local_dir = Path(local_dir) if local_dir else None
         self.bucket_uri = bucket_uri
         self.storage_options = dict(storage_options or {})
         self.offline_only = offline_only
         self.default_commercial_safe_only = default_commercial_safe_only
+        self.embedding_provider = embedding_provider
         self._db: Any = None
         self._tables: dict[str, Any] = {}
 
@@ -206,6 +211,122 @@ class LanceStore:
             clauses.append(f"status = {_sql_str(status.strip())}")
         return self._fts_query(STATE_ACTS_REGULATORS_TABLE, query, filters=clauses, limit=limit)
 
+    def search_tribunals(
+        self,
+        query: str,
+        *,
+        forum_code: str | None = None,
+        court_code: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
+        disposal_nature: str | None = None,
+        commercial_safe_only: bool | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        if self._effective_cs(commercial_safe_only):
+            clauses.append("commercial_safe = true")
+        if forum_code:
+            clauses.append(f"forum_code = {_sql_str(forum_code.strip())}")
+        if court_code:
+            clauses.append(f"court_code = {_sql_str(court_code.strip())}")
+        if year_from is not None:
+            clauses.append(f"year >= {int(year_from)}")
+        if year_to is not None:
+            clauses.append(f"year <= {int(year_to)}")
+        if disposal_nature:
+            clauses.append(f"disposal_nature = {_sql_str(disposal_nature.strip())}")
+        return self._fts_query(TRIBUNAL_CHUNKS_TABLE, query, filters=clauses, limit=limit)
+
+    def search_cad_debates(
+        self,
+        query: str,
+        *,
+        article_ref: str | None = None,
+        speaker: str | None = None,
+        volume: str | None = None,
+        year_from: int | None = None,
+        year_to: int | None = None,
+        commercial_safe_only: bool | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        if self._effective_cs(commercial_safe_only):
+            clauses.append("commercial_safe = true")
+        if article_ref:
+            clauses.append(f"article_ref = {_sql_str(article_ref.strip())}")
+        if speaker:
+            clauses.append(f"speaker = {_sql_str(speaker.strip())}")
+        if volume:
+            clauses.append(f"volume = {_sql_str(volume.strip())}")
+        if year_from is not None:
+            clauses.append(f"year >= {int(year_from)}")
+        if year_to is not None:
+            clauses.append(f"year <= {int(year_to)}")
+        return self._fts_query(CAD_DEBATES_TABLE, query, filters=clauses, limit=limit)
+
+    def _vector_query(
+        self,
+        table_name: str,
+        query_vector: list[float],
+        *,
+        filters: list[str],
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        tbl = self._open_table(table_name)
+        search = tbl.search(query_vector, vector_column_name="vector", query_type="vector")
+        if filters:
+            search = search.where(" AND ".join(filters))
+        rows: list[dict[str, Any]] = search.limit(max(1, int(limit))).to_list()
+        return rows
+
+    def hybrid_search(
+        self,
+        table_name: str,
+        query: str,
+        *,
+        filters: list[str] | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        commercial_safe_only: bool | None = None,
+        k: int = 60,
+        alpha: float = 0.5,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Run lexical FTS + vector RRF hybrid search, degrading cleanly to pure FTS."""
+        if not query or not query.strip():
+            return []
+        eff_limit = max(1, int(limit))
+        eff_filters = list(filters or [])
+        if self._effective_cs(commercial_safe_only) and "commercial_safe = true" not in eff_filters:
+            eff_filters.append("commercial_safe = true")
+
+        candidate_limit = max(eff_limit * 3, 20)
+        lex_hits = self._fts_query(table_name, query, filters=eff_filters, limit=candidate_limit)
+
+        provider = embedding_provider if embedding_provider is not None else self.embedding_provider
+        if provider is None:
+            return lex_hits[:eff_limit]
+
+        tbl = self._open_table(table_name)
+        if "vector" not in tbl.schema.names:
+            return lex_hits[:eff_limit]
+
+        try:
+            q_vec = provider.embed_query(query.strip())
+            vec_hits = self._vector_query(table_name, q_vec, filters=eff_filters, limit=candidate_limit)
+        except Exception:
+            return lex_hits[:eff_limit]
+
+        id_key = "doc_id" if table_name == STATE_ACTS_REGULATORS_TABLE else "chunk_id"
+        return fuse_lexical_and_vector_rrf(
+            lex_hits,
+            vec_hits,
+            id_key=id_key,
+            k=k,
+            alpha=alpha,
+            limit=eff_limit,
+        )
+
     def get_judgment_chunks(
         self,
         case_id: str,
@@ -217,7 +338,7 @@ class LanceStore:
         if cs:
             clauses.append("commercial_safe = true")
         where_sql = " AND ".join(clauses)
-        for table_name in (SC_CHUNKS_TABLE, HC_HOT_CHUNKS_TABLE):
+        for table_name in (SC_CHUNKS_TABLE, HC_HOT_CHUNKS_TABLE, TRIBUNAL_CHUNKS_TABLE):
             try:
                 tbl = self._open_table(table_name)
                 rows: list[dict[str, Any]] = tbl.search().where(where_sql).limit(500).to_list()
