@@ -8,11 +8,11 @@ import { pageOpenGraph } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Citations",
   description:
-    "How Nyaya v2.0 parses, resolves, and audits Indian legal citations: 2017 INSC 801, 2024:DHC:1234, 16-char CNR, CPC O.7 R.11, IEA s.65B(4), statutory validity, and honest limits.",
+    "How Nyaya v2.1 parses, resolves, and audits Indian legal citations: 2017 INSC 801, 25 High Court neutral codes (e.g. 2024:DHC:1234), 16-char CNR, 58 CPC Orders, IEA s.65B(4), ITAct2025, statutory validity, and honest limits.",
   openGraph: pageOpenGraph({
     title: "Nyaya Citations - Deterministic Legal Verification",
     description:
-      "Supported Indian legal citation formats (INSC, HC Neutral, CNR, AIR, SCC, O.7 R.11, s.65B(4)), StatutoryValidity audits, and unverified_automated transparency.",
+      "Supported Indian legal citation formats (INSC, 25 HC Neutral codes, CNR, AIR, SCC, 58 CPC Orders, s.65B(4)), StatutoryValidity audits, and unverified_automated transparency.",
   }),
 };
 
@@ -51,7 +51,7 @@ export default function CitationsPage() {
             <div className="section-head">
               <h2>Supported citation formats</h2>
               <p className="sec-desc">
-                Priority-ordered recognition across Supreme Court, 25 High Courts, District CNRs, statutes, and 12 regulators.
+                Priority-ordered recognition across Supreme Court, 25 High Courts, District CNRs, statutes (incl. 58 CPC Orders), 12 regulators, and 24 tribunals.
               </p>
             </div>
             <div className="format-grid">

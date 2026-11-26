@@ -12,11 +12,11 @@ export default function McpToolsList() {
     <div className="mcp-tools-wrap" style={{ marginTop: "var(--gap-lg)" }}>
       <div className="mcp-tools-header">
         <h3 className="mcp-tools-head">
-          MCP v2.0 surface ({tools.length} tools · {resourcesCount} resources · {promptsCount} prompts)
+          MCP v2.1 surface ({tools.length} tools · {resourcesCount} resources · {promptsCount} prompts)
         </h3>
         {isLoading && <span className="meta">Checking live /api/tools…</span>}
         {error && !isLoading && (
-          <span className="meta">Showing canonical v2.0 specification (live /api/tools offline).</span>
+          <span className="meta">Showing canonical v2.1 specification (live /api/tools offline).</span>
         )}
       </div>
 

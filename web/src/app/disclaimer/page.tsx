@@ -85,11 +85,13 @@ export default function DisclaimerPage() {
           </div>
           <div className="stack">
             <p>
-              <strong>Scanned, image-only PDFs are rejected, not
+              <strong>Scanned, image-only PDFs are rejected by default, not
               OCR-guessed.</strong> Court documents that yield fewer than 50
               characters per page (common in pre-2010 scanned High Court
-              orders) are returned as unavailable-for-extraction rather than
-              garbled machine text. That protects accuracy and creates gaps.
+              orders) are returned as unavailable-for-extraction by default
+              rather than garbled machine text (self-hosted instances can
+              opt into Apache-2.0 OCR via <code>NYAYA_ENABLE_OCR=1</code>).
+              That protects accuracy and creates gaps.
             </p>
             <p>
               <strong>Post-cutoff and unreported decisions return

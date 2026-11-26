@@ -12,11 +12,11 @@ const CHAT_ENABLED = process.env.NEXT_PUBLIC_CHAT_ENABLED === "true";
 export const metadata: Metadata = {
   title: "Home",
   description:
-    "Database-free Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 15 tribunals, 38k+ Supreme Court judgments, and 20.7M+ High Court orders.",
+    "Database-free Indian law MCP server & assistant. Search 37 legislatures, 12 regulators, 24 tribunals & Consumer Commissions, 38k+ Supreme Court judgments, and 20.7M+ High Court orders.",
   openGraph: pageOpenGraph({
-    title: "Nyaya v2.0 - Indian Law MCP & Legal Research Assistant",
+    title: "Nyaya v2.1 - Indian Law MCP & Legal Research Assistant",
     description:
-      "Pure-lexical & citation-graph legal MCP server covering Constitution, BNS/BNSS/BSA, Central & State Acts, Regulators, Tribunals, SC, and High Courts.",
+      "Pure-lexical & citation-graph legal MCP server covering Constitution, BNS/BNSS/BSA, IT Act 1961/2025, 58 CPC Orders, Regulators, 24 Tribunals, SC, and 25 High Courts.",
   }),
 };
 
@@ -37,7 +37,7 @@ function HomePageContent() {
         <div className="cap-wrap">
           <div className="cap-title">
             <h2>Capabilities</h2>
-            <span className="tag">12 MCP tools</span>
+            <span className="tag">15 MCP tools</span>
           </div>
           <CapTable />
 
@@ -45,9 +45,10 @@ function HomePageContent() {
             <span className="tag">Constitution · 106 Amds</span>
             <span className="tag">BNS / BNSS / BSA 2023</span>
             <span className="tag">IPC / CrPC / IEA (Legacy)</span>
+            <span className="tag">IT Act 1961 ↔ 2025</span>
             <span className="tag">36 State/UT Acts</span>
             <span className="tag">12 Regulators</span>
-            <span className="tag">15 Tribunals</span>
+            <span className="tag">24 Tribunals</span>
             <span className="tag">SC &amp; 25 High Courts</span>
           </div>
         </div>

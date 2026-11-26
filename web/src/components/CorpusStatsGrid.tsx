@@ -22,8 +22,8 @@ export default function CorpusStatsGrid() {
       />
       <StatCard
         num={counts?.tribunal_orders}
-        label={`Tribunal Matters (${counts?.tribunals ?? 15} Forums)`}
-        source="ITAT, NCLT, NGT, SAT, CAT, CESTAT… (CC-BY-4.0)"
+        label={`Tribunal Matters (${counts?.tribunals ?? 24} Forums)`}
+        source="NCDRC/SCDRC/DCDRC, ITAT, NCLT, NGT, SAT, GSTAT… (CC-BY-4.0 / s.52(1)(q))"
       />
       {counts?.district_court_records && counts.district_court_records > 0 ? (
         <StatCard
@@ -64,7 +64,7 @@ export default function CorpusStatsGrid() {
       <StatCard
         num={counts?.citation_edges}
         label="Citation Graph Edges"
-        source={`${formatNumber(counts?.concordance_mappings)} IPC↔BNS maps · ${formatNumber(counts?.judicial_invalidations)} invalidations`}
+        source={`${formatNumber(counts?.concordance_mappings)} Criminal & Tax maps · ${formatNumber(counts?.judicial_invalidations)} invalidations`}
       />
     </div>
   );

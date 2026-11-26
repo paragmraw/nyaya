@@ -171,8 +171,8 @@ test("the phantom /og-default.svg and bare /logo.svg OG refs are gone from layou
   assert.ok(!layout.includes('"/logo.svg"'), "OG images must not be the 30px logo");
 });
 
-test("API_VERSION is 2.0.0 and single-sourced into architectureSchema", () => {
-  assert.equal(API_VERSION, "2.0.0");
+test("API_VERSION is 2.1.0 and single-sourced into architectureSchema", () => {
+  assert.equal(API_VERSION, "2.1.0");
   assert.equal((architectureSchema as { softwareVersion: string }).softwareVersion, API_VERSION);
 });
 
@@ -194,12 +194,13 @@ test("corpusSchema DataCatalog exposes SPDX licenses and NC datasets accurately"
   assert.equal(ildc!.license, "CC-BY-NC-4.0");
 });
 
-test("zero stale v0.2 strings exist in web/src/ or JSON-LD schemas", () => {
-  const banned = /0\.2\.0|\bSupabase\b|\bpgvector\b|Postgres FTS|\btsvector\b|hydrate\.ipynb|Supervisor LLM|nemotron-3-embed-1b|llama-nemotron-rerank-vl-1b-v2|indiankanoon\.org|5 curated judgments|\bsemantic_query\b|\bget_section\b|\bget_article\b/i;
+test("zero stale v0.2/v2.0 strings and zero em dashes exist in web/src/ or JSON-LD schemas", () => {
+  const banned = /0\.2\.0|\bSupabase\b|\bpgvector\b|Postgres FTS|\btsvector\b|hydrate\.ipynb|Supervisor LLM|nemotron-3-embed-1b|llama-nemotron-rerank-vl-1b-v2|indiankanoon\.org|5 curated judgments|\bsemantic_query\b|\bget_section\b|\bget_article\b|12 MCP tools|12 read-only MCP tools|\b15 tribunals\b/i;
 
   for (const [name, schema] of Object.entries(SCHEMAS)) {
     for (const [, s] of pairs(schema)) {
-      assert.ok(!banned.test(s), `stale v0.2 string in ${name}: ${s}`);
+      assert.ok(!banned.test(s), `stale string in ${name}: ${s}`);
+      assert.ok(!s.includes("\u2014"), `em dash found in ${name}: ${s}`);
     }
   }
 
@@ -216,6 +217,7 @@ test("zero stale v0.2 strings exist in web/src/ or JSON-LD schemas", () => {
   for (const file of walkFiles(SRC)) {
     const content = readFileSync(file, "utf8");
     const match = banned.exec(content);
-    assert.ok(!match, `stale v0.2 reference "${match?.[0]}" found in ${file}`);
+    assert.ok(!match, `stale reference "${match?.[0]}" found in ${file}`);
+    assert.ok(!content.includes("\u2014"), `em dash found in ${file}`);
   }
 });

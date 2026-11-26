@@ -27,7 +27,7 @@ export default function CitationAnatomy() {
         <div className="answer-bubble">
           <div className="ab-head">
             <span className="avatar" aria-hidden="true"><BalanceIcon /></span>
-            <span className="ab-title">Nyaya v2.0 · Citation Audit Example</span>
+            <span className="ab-title">Nyaya v2.1 · Citation Audit Example</span>
           </div>
           <p>
             The Supreme Court in{" "}
