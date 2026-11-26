@@ -322,7 +322,7 @@ def test_cmd_sync_auxiliary_non_banned_security_error_skipped_in_bulk_but_raised
                 301,
                 headers={"Location": "https://prsindia.org/handle/123456789/1362"},
             )
-        if host == "legislative.gov.in":
+        if host == "cdnbbsr.s3waas.gov.in":
             return httpx.Response(
                 302,
                 headers={"Location": "https://cdn.example-govt.in/COI_2026.pdf"},

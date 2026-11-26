@@ -50,7 +50,7 @@ def test_official_statutes_fetcher_remote_allowlist_and_sha256(tmp_path: Path) -
         ("prsindia.org", "/files/bills_acts/acts_parliament/2026/prs_2026_delta.json"): json.dumps(
             [{"act_id": "bns-2023", "short_name": "BNS", "full_name": "Bharatiya Nyaya Sanhita, 2023", "ref": "106", "title": "Causing death by negligence", "text": "Whoever causes death of any person by doing any rash or negligent act not amounting to culpable homicide."}]
         ).encode("utf-8"),
-        ("legislative.gov.in", "/sites/default/files/COI_2026.pdf"): make_minimal_pdf(
+        ("cdnbbsr.s3waas.gov.in", "/s380537a945c7aaa788ccfcdf1b99b5d8f/uploads/2024/07/20240716890312078.pdf"): make_minimal_pdf(
             ["Article 300A. Persons not to be deprived of property save by authority of law. No person shall be deprived of his property save by authority of law."]
         ),
         ("eparlib.sansad.in", "/bitstream/123456789/cad_debates_v1_12.json"): json.dumps(
