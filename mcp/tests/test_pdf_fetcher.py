@@ -9,12 +9,24 @@ import httpx
 import pytest
 
 from nyaya.exceptions import PdfFetchError
+from nyaya.ingest.extract.pdf import (
+    MAX_PDF_BYTES as EXTRACT_MAX_PDF_BYTES,
+)
+from nyaya.ingest.extract.pdf import (
+    MAX_PDF_PAGES as EXTRACT_MAX_PDF_PAGES,
+)
+from nyaya.ingest.extract.pdf import (
+    PdfExtractionError,
+    extract_pdf_bytes,
+)
 from nyaya.models import JudgmentMeta, SourceProvenance
 from nyaya.retrieval.paragraph_bm25 import ParagraphBM25
 from nyaya.storage.pdf_fetcher import (
     MAX_PDF_BYTES,
+    MAX_PDF_PAGES,
     DirectS3PdfFetcher,
     _clean_pdf_text,
+    _extract_pdf_sync,
     _repair_ligature_splits,
     _split_paragraphs,
     validate_s3_pdf_target,
@@ -118,7 +130,7 @@ async def test_pdf_fetcher_rejects_html_404_and_oversized_and_scanned(tmp_path: 
     finally:
         await fetcher_html.aclose()
 
-    # 2. >15 MiB stream cap rejected
+    # 2. >50 MiB stream cap rejected
     big_client = httpx.AsyncClient(
         transport=httpx.MockTransport(
             lambda req: httpx.Response(
@@ -134,6 +146,7 @@ async def test_pdf_fetcher_rejects_html_404_and_oversized_and_scanned(tmp_path: 
         with pytest.raises(PdfFetchError) as exc_info2:
             await fetcher_big.fetch_and_read(_meta(), mode="overview")
         assert exc_info2.value.reason == "size_limit"
+        assert "50 MiB" in str(exc_info2.value)
     finally:
         await fetcher_big.aclose()
 
@@ -184,7 +197,7 @@ async def test_pdf_fetcher_default_client_instantiation_and_offline_error(tmp_pa
     fetcher = DirectS3PdfFetcher(cache_dir=tmp_path / "default_client", offline_only=True)
     try:
         assert fetcher._owns_client is True
-        assert fetcher._client.timeout == httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0)
+        assert fetcher._client.timeout == httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0)
         with pytest.raises(PdfFetchError) as exc_info:
             await fetcher.fetch_and_read(_meta(), mode="overview")
         assert exc_info.value.reason == "http_error"
@@ -405,3 +418,37 @@ def test_paragraph_bm25_downweights_counsel_and_skips_counsel_neighbors() -> Non
     assert 0 not in hit_indices
     assert 1 not in hit_indices
     assert 3 not in hit_indices
+
+
+def test_pdf_caps_raised_to_50mib_and_1200_pages() -> None:
+    assert MAX_PDF_BYTES == 50 * 1024 * 1024
+    assert MAX_PDF_PAGES == 1200
+    assert EXTRACT_MAX_PDF_BYTES == 50 * 1024 * 1024
+    assert EXTRACT_MAX_PDF_PAGES == 1200
+
+    # A 501-page PDF (above the old 500-page cap) now extracts cleanly under enforce_page_cap=True
+    pages_501 = [
+        f"{i}. Constitutional judgment page {i} with sufficient text to pass the per-page character threshold cleanly."
+        for i in range(1, 502)
+    ]
+    pdf_501 = make_minimal_pdf(pages_501)
+    res_sync = _extract_pdf_sync(pdf_501, enforce_page_cap=True)
+    assert res_sync["total_pages"] == 501
+    assert res_sync["extraction_quality"] == "verified"
+
+    res_ext = extract_pdf_bytes(pdf_501)
+    assert res_ext.page_count == 501
+    assert res_ext.extraction_quality == "verified"
+
+    # >1200 pages still rejected when page cap is enforced
+    pdf_1201 = make_minimal_pdf([""] * 1201)
+    with pytest.raises(PdfFetchError) as exc_fetch:
+        _extract_pdf_sync(pdf_1201, enforce_page_cap=True)
+    assert exc_fetch.value.reason == "size_limit"
+    assert "1200" in str(exc_fetch.value)
+
+    with pytest.raises(PdfExtractionError, match="1200"):
+        extract_pdf_bytes(pdf_1201)
+
+    with pytest.raises(PdfExtractionError, match="50 MiB"):
+        extract_pdf_bytes(b"%PDF-1.4\n" + b"0" * 100, max_bytes=50)

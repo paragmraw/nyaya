@@ -51,8 +51,8 @@ PDF_KEY_RE = re.compile(
     r"[A-Za-z0-9_.-]+\.pdf$"
 )
 
-MAX_PDF_BYTES = 15 * 1024 * 1024  # 15 MiB
-MAX_PDF_PAGES = 500
+MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MiB
+MAX_PDF_PAGES = 1200
 DEFAULT_LRU_MAX_BYTES = 256 * 1024 * 1024  # 256 MiB
 MIN_CHARS_PER_PAGE = 50.0
 MIN_PRINTABLE_RATIO = 0.70
@@ -752,7 +752,7 @@ class DirectS3PdfFetcher:
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
             follow_redirects=False,
-            timeout=httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0),
+            timeout=httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0),
         )
         self.offline_only = offline_only
         self.enable_ocr = enable_ocr
@@ -777,7 +777,7 @@ class DirectS3PdfFetcher:
                     try:
                         if int(cl_raw) > MAX_PDF_BYTES:
                             raise PdfFetchError(
-                                f"PDF Content-Length {cl_raw} exceeds 15 MiB cap.",
+                                f"PDF Content-Length {cl_raw} exceeds 50 MiB cap.",
                                 reason="size_limit",
                             )
                     except ValueError:
@@ -795,7 +795,7 @@ class DirectS3PdfFetcher:
                         checked_magic = True
                     if len(buf) > MAX_PDF_BYTES:
                         raise PdfFetchError(
-                            "Streamed PDF exceeds 15 MiB size limit.",
+                            "Streamed PDF exceeds 50 MiB size limit.",
                             reason="size_limit",
                         )
                 if len(buf) < 5 or bytes(buf[:5]) != b"%PDF-":

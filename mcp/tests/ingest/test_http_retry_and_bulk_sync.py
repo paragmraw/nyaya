@@ -320,7 +320,7 @@ def test_cmd_sync_auxiliary_non_banned_security_error_skipped_in_bulk_but_raised
         if host == "indiacode.nic.in":
             return httpx.Response(
                 301,
-                headers={"Location": "https://www.indiacode.nic.in/handle/123456789/1362"},
+                headers={"Location": "https://prsindia.org/handle/123456789/1362"},
             )
         if host == "legislative.gov.in":
             return httpx.Response(
@@ -424,3 +424,48 @@ def test_loader_matches_parquet_case_details_without_double_counting(tmp_path: P
     assert len(bundle.hc_mobile_rows) == 1
     assert bundle.hc_mobile_rows[0]["cnr"] == "DLHC010999992024"
     assert bundle.hc_web_rows == []
+
+
+def test_http_fetcher_allows_allowlisted_www_apex_redirects_and_blocks_cross_domain() -> None:
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.host == "legislative.gov.in" and req.url.path == "/to-www":
+            return httpx.Response(302, headers={"Location": "https://www.legislative.gov.in/final"})
+        if req.url.host == "www.legislative.gov.in" and req.url.path == "/to-apex":
+            return httpx.Response(301, headers={"Location": "https://legislative.gov.in/final"})
+        if req.url.host == "legislative.gov.in" and req.url.path == "/to-other-www":
+            return httpx.Response(302, headers={"Location": "https://www.indiacode.nic.in/doc"})
+        if req.url.host == "legislative.gov.in" and req.url.path == "/to-sub":
+            return httpx.Response(302, headers={"Location": "https://api.legislative.gov.in/doc"})
+        return httpx.Response(200, content=b"ok-payload")
+
+    # Both apex and www. are allowlisted -> apex <-> www. redirects succeed
+    fetcher = SafeHttpFetcher(
+        allowed_domains=[
+            "legislative.gov.in",
+            "www.legislative.gov.in",
+            "www.indiacode.nic.in",
+            "api.legislative.gov.in",
+        ],
+        max_retries=1,
+        retry_backoff_s=0.0,
+        transport=httpx.MockTransport(handler),
+    )
+    assert fetcher.fetch_bytes("https://legislative.gov.in/to-www") == b"ok-payload"
+    assert fetcher.fetch_bytes("https://www.legislative.gov.in/to-apex") == b"ok-payload"
+
+    # Cross-domain or other-subdomain redirects remain strictly blocked even if allowlisted
+    with pytest.raises(SecurityError, match="Cross-domain redirect blocked"):
+        fetcher.fetch_bytes("https://legislative.gov.in/to-other-www")
+
+    with pytest.raises(SecurityError, match="Cross-domain redirect blocked"):
+        fetcher.fetch_bytes("https://legislative.gov.in/to-sub")
+
+    # Redirect to www. is still blocked if www.host is NOT in allowed_domains
+    strict_fetcher = SafeHttpFetcher(
+        allowed_domains=["legislative.gov.in"],
+        max_retries=1,
+        retry_backoff_s=0.0,
+        transport=httpx.MockTransport(handler),
+    )
+    with pytest.raises(SecurityError, match="Disallowed domain"):
+        strict_fetcher.fetch_bytes("https://legislative.gov.in/to-www")

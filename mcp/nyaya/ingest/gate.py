@@ -6,14 +6,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import sqlite3
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
+
+import httpx
+import lancedb
 
 from ..sanitize import (
     BIDI_RE,
@@ -21,6 +26,8 @@ from ..sanitize import (
     check_publication_ban,
 )
 from ..storage.manifest import load_manifest, verify_partition_sha256
+from ..storage.pdf_fetcher import ALLOWED_PDF_BUCKETS
+from .extract.pdf import extract_pdf_bytes
 from .fetchers.official_statutes import (
     load_amendments_yaml,
     load_concordance_yaml,
@@ -46,6 +53,16 @@ _BANNED_LICENSE_RE = re.compile(
     r"^(?:GPL|AGPL|LGPL|CC-BY-ND|CC-BY-NC-ND|UNKNOWN|$)",
     re.IGNORECASE,
 )
+
+log = logging.getLogger("nyaya.ingest.gate")
+
+_LANDMARK_SPECS: tuple[tuple[str, str], ...] = (
+    ("AIR 1973 SC 1461", "sc:1973:kesavananda"),
+    ("(2017) 10 SCC 1", "sc:2017:puttaswamy"),
+)
+_LANDMARK_MIN_CHARS = 500_000
+_LANDMARK_MAX_PDF_BYTES = 50 * 1024 * 1024
+_LANDMARK_MAX_PDF_PAGES = 1200
 
 # 1. Golden Constitutional Amendments (1st through 106th historical pins)
 _GOLDEN_AMENDMENTS: dict[int, dict[str, Any]] = {
@@ -147,13 +164,14 @@ class GateReport:
     checked_at: str
     results: list[GateSuiteResult] = field(default_factory=list)
     artifact_sha256s: dict[str, str] = field(default_factory=dict)
+    landmark_char_lengths: dict[str, int] = field(default_factory=dict)
 
     @property
     def all_errors(self) -> list[str]:
         return [f"[{r.rule_id}] {err}" for r in self.results for err in r.errors]
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "passed": self.passed,
             "checked_at": self.checked_at,
             "artifact_sha256s": self.artifact_sha256s,
@@ -162,6 +180,9 @@ class GateReport:
                 for r in self.results
             ],
         }
+        if self.landmark_char_lengths:
+            payload["landmark_char_lengths"] = dict(self.landmark_char_lengths)
+        return payload
 
 
 def _sha256_file(path: Path) -> str:
@@ -305,9 +326,9 @@ def check_coverage_and_non_truncation(
 
     if landmark_char_lengths is not None or strict_landmarks:
         lengths = dict(landmark_char_lengths or {})
-        for cite in ("AIR 1973 SC 1461", "(2017) 10 SCC 1"):
+        for cite, _ in _LANDMARK_SPECS:
             char_len = lengths.get(cite, 0)
-            if char_len < 500_000:
+            if char_len < _LANDMARK_MIN_CHARS:
                 errors.append(
                     f"Landmark judgment {cite!r} text length ({char_len} chars) < 500,000-char non-truncation floor."
                 )
@@ -500,10 +521,230 @@ def collect_artifact_sha256s(data_dir: Path) -> dict[str, str]:
     return checksums
 
 
+def _sql_str(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _resolve_landmark_pdf_url(
+    pdf_s3_bucket: str | None,
+    pdf_s3_key: str | None,
+    source_url: str | None,
+) -> str | None:
+    bucket = (pdf_s3_bucket or "").strip()
+    key = (pdf_s3_key or "").strip()
+    if bucket and key:
+        if bucket not in ALLOWED_PDF_BUCKETS:
+            return None
+        if any(bad in key for bad in ("..", "%", "?", "#", "\\", "//")):
+            return None
+        clean_key = key.lstrip("/")
+        if not clean_key:
+            return None
+        return f"https://{bucket}.s3.ap-south-1.amazonaws.com/{clean_key}"
+
+    raw_url = (source_url or "").strip()
+    if not raw_url:
+        return None
+    parsed = urlsplit(raw_url)
+    if (
+        parsed.scheme.lower() != "https"
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.port not in (None, 443)
+    ):
+        return None
+    host = parsed.hostname.lower()
+    suffix = ".s3.ap-south-1.amazonaws.com"
+    if not host.endswith(suffix):
+        return None
+    host_bucket = host[: -len(suffix)]
+    if host_bucket not in ALLOWED_PDF_BUCKETS:
+        return None
+    if not parsed.path.lower().endswith(".pdf"):
+        return None
+    if any(bad in parsed.path for bad in ("..", "%", "\\", "//")):
+        return None
+    return raw_url
+
+
+def _fetch_s3_pdf_bytes(url: str) -> bytes:
+    with httpx.Client(follow_redirects=False, timeout=30.0) as client:
+        with client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            cl_raw = resp.headers.get("Content-Length")
+            if cl_raw is not None:
+                try:
+                    cl_int = int(cl_raw)
+                except ValueError:
+                    cl_int = -1
+                if cl_int > _LANDMARK_MAX_PDF_BYTES:
+                    raise ValueError(
+                        f"Landmark PDF Content-Length {cl_int} exceeds 50 MiB cap."
+                    )
+            buf = bytearray()
+            for chunk in resp.iter_bytes(65_536):
+                if not chunk:
+                    continue
+                buf.extend(chunk)
+                if len(buf) > _LANDMARK_MAX_PDF_BYTES:
+                    raise ValueError("Streamed landmark PDF exceeds 50 MiB size limit.")
+            return bytes(buf)
+
+
+def _measure_lancedb_landmark_lengths(lancedb_dir: Path) -> dict[str, int]:
+    lengths: dict[str, int] = {cite: 0 for cite, _ in _LANDMARK_SPECS}
+    if not lancedb_dir.is_dir():
+        return lengths
+    try:
+        db: Any = lancedb.connect(str(lancedb_dir))
+        if hasattr(db, "list_tables"):
+            res = db.list_tables()
+            table_names = set(getattr(res, "tables", res))
+        else:
+            table_names = set(db.table_names())
+        if "sc_chunks" not in table_names:
+            return lengths
+
+        tbl: Any = db.open_table("sc_chunks")
+        schema_cols = set(tbl.schema.names)
+        if "text" not in schema_cols:
+            return lengths
+
+        select_cols = [c for c in ("case_id", "air_citation", "scc_citation", "text") if c in schema_cols]
+        for cite, default_case_id in _LANDMARK_SPECS:
+            clauses: list[str] = []
+            if "case_id" in schema_cols:
+                clauses.append(f"case_id = {_sql_str(default_case_id)}")
+            if "air_citation" in schema_cols:
+                clauses.append(f"air_citation = {_sql_str(cite)}")
+            if "scc_citation" in schema_cols:
+                clauses.append(f"scc_citation = {_sql_str(cite)}")
+            if not clauses:
+                continue
+
+            rows: list[dict[str, Any]] = (
+                tbl.search()
+                .where(" OR ".join(clauses))
+                .select(select_cols)
+                .limit(1_000_000)
+                .to_list()
+            )
+            by_case: dict[str, int] = {}
+            for row in rows:
+                cid = str(row.get("case_id") or default_case_id)
+                by_case[cid] = by_case.get(cid, 0) + len(str(row.get("text") or ""))
+            if by_case:
+                lengths[cite] = max(lengths[cite], max(by_case.values()))
+    except Exception as exc:
+        log.warning("Failed to measure landmark lengths from LanceDB %s: %s", lancedb_dir, exc)
+    return lengths
+
+
+def collect_landmark_char_lengths(
+    data_dir: Path,
+    *,
+    fetch_s3_pdfs: bool = True,
+    pdf_bytes_loader: Callable[[str], bytes] | None = None,
+) -> dict[str, int]:
+    """Measure landmark judgment character lengths from local LanceDB/SQLite and S3 PDFs."""
+    root = Path(data_dir)
+    lengths = _measure_lancedb_landmark_lengths(root / "lancedb")
+
+    sqlite_path = root / "nyaya-core.sqlite"
+    if not sqlite_path.is_file():
+        return lengths
+
+    con = sqlite3.connect(sqlite_path)
+    con.row_factory = sqlite3.Row
+    try:
+        cols = {
+            str(r["name"])
+            for r in con.execute("PRAGMA table_info(judgments_meta)").fetchall()
+        }
+        if not cols:
+            return lengths
+
+        where_parts: list[str] = []
+        has_case_id = "case_id" in cols
+        has_air = "air_citation" in cols
+        has_scc = "scc_citation" in cols
+        if has_case_id:
+            where_parts.append("case_id = ?")
+        if has_air:
+            where_parts.append("lower(coalesce(air_citation, '')) = lower(?)")
+        if has_scc:
+            where_parts.append("lower(coalesce(scc_citation, '')) = lower(?)")
+        if not where_parts:
+            return lengths
+
+        select_fields: list[str] = []
+        if "snippet" in cols:
+            select_fields.append("snippet")
+        for col_name in ("pdf_s3_bucket", "pdf_s3_key", "source_url"):
+            if col_name in cols:
+                select_fields.append(col_name)
+        if not select_fields:
+            return lengths
+
+        query = f"SELECT {', '.join(select_fields)} FROM judgments_meta WHERE {' OR '.join(where_parts)}"
+        loader = pdf_bytes_loader or _fetch_s3_pdf_bytes
+
+        for cite, default_case_id in _LANDMARK_SPECS:
+            params: list[str] = []
+            if has_case_id:
+                params.append(default_case_id)
+            if has_air:
+                params.append(cite)
+            if has_scc:
+                params.append(cite)
+            rows = con.execute(query, params).fetchall()
+
+            if "snippet" in cols:
+                for row in rows:
+                    snip_len = len(str(row["snippet"] or ""))
+                    if snip_len > lengths[cite]:
+                        lengths[cite] = snip_len
+
+            if lengths[cite] >= _LANDMARK_MIN_CHARS or not fetch_s3_pdfs:
+                continue
+
+            for row in rows:
+                bucket = row["pdf_s3_bucket"] if "pdf_s3_bucket" in cols else None
+                key = row["pdf_s3_key"] if "pdf_s3_key" in cols else None
+                src_url = row["source_url"] if "source_url" in cols else None
+                pdf_url = _resolve_landmark_pdf_url(bucket, key, src_url)
+                if pdf_url is None:
+                    continue
+                try:
+                    pdf_bytes = loader(pdf_url)
+                    extracted = extract_pdf_bytes(
+                        pdf_bytes,
+                        max_bytes=_LANDMARK_MAX_PDF_BYTES,
+                        max_pages=_LANDMARK_MAX_PDF_PAGES,
+                    )
+                    lengths[cite] = max(lengths[cite], len(extracted.full_text))
+                except Exception as exc:
+                    log.warning(
+                        "Failed to fetch/extract landmark PDF for %s from %s: %s",
+                        cite,
+                        pdf_url,
+                        exc,
+                    )
+                if lengths[cite] >= _LANDMARK_MIN_CHARS:
+                    break
+    finally:
+        con.close()
+
+    return lengths
+
+
 def run_quality_gate(
     data_dir: Path | str | None = None,
     *,
     strict_landmarks: bool = False,
+    landmark_char_lengths: Mapping[str, int] | None = None,
+    fetch_s3_landmarks: bool = True,
     write_gate_pass: bool = True,
 ) -> GateReport:
     """Run all Legal Integrity Gate suites against `data_dir` (and checked-in YAML tables).
@@ -514,6 +755,15 @@ def run_quality_gate(
     root = Path(data_dir) if data_dir is not None else None
     sqlite_path = (root / "nyaya-core.sqlite") if root is not None else None
     manifest_path = (root / "manifest.json") if root is not None else None
+
+    resolved_landmark_lengths: dict[str, int] | None = (
+        dict(landmark_char_lengths) if landmark_char_lengths is not None else None
+    )
+    if strict_landmarks and resolved_landmark_lengths is None and root is not None:
+        resolved_landmark_lengths = collect_landmark_char_lengths(
+            root,
+            fetch_s3_pdfs=fetch_s3_landmarks,
+        )
 
     db_records: list[dict[str, Any]] = []
     db_amendments: list[dict[str, Any]] | None = None
@@ -629,6 +879,7 @@ def run_quality_gate(
         check_invalidations(db_invalidations),
         check_coverage_and_non_truncation(
             sqlite_path=sqlite_path,
+            landmark_char_lengths=resolved_landmark_lengths,
             strict_landmarks=strict_landmarks,
         ),
         check_extraction_quality(texts=db_records),
@@ -649,6 +900,7 @@ def run_quality_gate(
         checked_at=checked_at,
         results=suites,
         artifact_sha256s=artifact_shas,
+        landmark_char_lengths=resolved_landmark_lengths or {},
     )
 
     if all_passed and write_gate_pass and root is not None:
