@@ -1,4 +1,4 @@
-# Trusted Sources & Corpus Provenance: Nyaya v2.0
+# Trusted Sources & Corpus Provenance: Nyaya v2.1
 
 This document describes the legal provenance, copyright basis, licensing
 boundaries, automated integrity gates, and LLM security posture for data
@@ -70,26 +70,32 @@ Accordingly, Nyaya treats every retrieved statutory and judicial string as
   LLMs that `<corpus_text>` contents are untrusted legal data and never
   executable instructions.
 
-## Upstream Sources (`sources.lock.yaml`)
+## Upstream Sources (`sources.lock.yaml` — 19 Entries)
 
-All upstream sources are pinned in `mcp/nyaya/ingest/data/sources.lock.yaml`,
+All 19 upstream sources are pinned in `mcp/nyaya/ingest/data/sources.lock.yaml`,
 restricted to an explicit domain allowlist (cross-domain HTTP redirects blocked),
 verified by SHA-256 / S3 ETag / `SHA256SUMS.json`, and validated before any
 build or publish.
 
-| Source | URI / Bucket | Coverage | License (`SPDX`) | `commercial_safe` | Verification |
+| Source (`id`) | URI / Bucket | Coverage | License (`SPDX`) | `commercial_safe` | Verification |
 |---|---|---|---|---|---|
-| **Vaquill Open India Law (`v2026.08.1`)** | `https://oss-data-in.vaquill.ai/v2026.08.1/` | Central + 36 State/UT Acts, 12 Regulators, 15 Tribunals, SC/HC compilations | `CC-BY-4.0` (`coverage.yml` `red` rejected) | `true` | `SHA256SUMS.json` + domain allowlist |
-| **Dattam Labs: Supreme Court** | `s3://indian-supreme-court-judgments` | 38k+ SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
-| **Dattam Labs: High Courts** | `s3://indian-high-court-judgments` | 20.7M+ HC metadata across 25 HCs + `case_details-mobile` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
-| **PRS Legislative Research** | `https://prsindia.org` | BNS / BNSS / BSA 2023 & legislative act deltas | `CC-BY-4.0` | `true` | Pinned SHA-256 + domain allowlist |
-| **Legislative Department / India Code** | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
-| **India Code Digital Repository** | `https://indiacode.nic.in` | Central Acts official statutory repository | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + domain allowlist |
-| **Supreme Court e-SCR** | `https://digiscr.sci.gov.in` | Official SC neutral citations & judgment metadata | `CC-BY-4.0` (s. 52(1)(q)(iv)) | `true` | Pinned SHA-256 + domain allowlist |
-| **Sansad Digital Library (CAD)** | `https://eparlib.sansad.in` | Constituent Assembly Debates (12 volumes) | `CC0-1.0` (s. 52(1)(q) / s. 28) | `true` | Pinned SHA-256 |
-| **Justice Hub / KHOJ** | `https://justicehub.in` | High Court judge metadata (CC-BY-4.0 subset) | `CC-BY-4.0` | `true` | Pinned SHA-256 |
-| **Development Data Lab (DDL)** | `https://www.devdatalab.org/judicial-data` | 81M District Court metadata (2010–2018) | `CC-BY-NC-SA-4.0` | **`false`** | Pinned SHA-256; ML religion/caste cols dropped |
-| **ILDC Research Pack** | Hugging Face research pack | 35k SC outcome/explanation annotations | `CC-BY-NC-4.0` | **`false`** | Pinned SHA-256 |
+| **Dattam Labs: Supreme Court** (`dattam_sc_judgments`) | `s3://indian-supreme-court-judgments` | `38,292` (`38k+`) SC judgments metadata & direct AWS S3 PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag watermark + `%PDF-` magic check |
+| **Dattam Labs: High Courts** (`dattam_hc_judgments`) | `s3://indian-high-court-judgments` | `20,696,054` (`20.7M+`) HC metadata across 25 HCs + `metadata/parquet_case_details/` + direct PDFs | `CC-BY-4.0` (+ s. 52(1)(q)(iv)) | `true` | Full-year S3 ETag + `superseded_files` refetch |
+| **Vaquill Open India Law (`v2026.08.1`)** (`vaquill_open_india_law`, plus category packs `vaquill_central_legislation`, `vaquill_state_legislation`, `vaquill_regulators`, `vaquill_tribunals`) | `https://oss-data-in.vaquill.ai/v2026.08.1/` | Central + 36 State/UT Acts, 12 Regulators, 15 Appellate Tribunals (part of 24 total Tribunals & Consumer Commissions) | `CC-BY-4.0` (`coverage.yml` `red` rejected) | `true` | `SHA256SUMS.json` + domain allowlist |
+| **PRS Legislative Research** (`prs_2026_delta`) | `https://prsindia.org` | BNS / BNSS / BSA 2023 & legislative act deltas (**148** criminal concordance mappings) | `CC-BY-4.0` | `true` | Pinned SHA-256 + domain allowlist |
+| **Legislative Department / COI** (`legislative_constitution`) | `https://legislative.gov.in` | Constitution of India (Articles, Schedules, Amendments 1–106) | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + `verify-gate` |
+| **India Code Digital Repository** (`indiacode_central_acts`) | `https://indiacode.nic.in` | Central Acts, CPC First Schedule (58 Orders / 104 rules), ITAct1961↔ITAct2025 (**33** mappings) | `CC0-1.0` (s. 52(1)(q)(ii)) | `true` | Pinned SHA-256 + domain allowlist |
+| **Supreme Court e-SCR** (`escr_judgments`) | `https://digiscr.sci.gov.in` | Official SC neutral citations & judgment metadata | `CC-BY-4.0` (s. 52(1)(q)(iv)) | `true` | Pinned SHA-256 + domain allowlist |
+| **Sansad Digital Library (CAD)** (`cad_debates`) | `https://eparlib.sansad.in` | Constituent Assembly Debates (Volumes I–XII, `cad_debates` LanceDB table) | `CC0-1.0` (s. 52(1)(q) / s. 28) | `true` | Pinned SHA-256 |
+| **Justice Hub / KHOJ** (`justicehub_khoj`) | `https://justicehub.in` | High Court judge metadata (CC-BY-4.0 subset) | `CC-BY-4.0` | `true` | Pinned SHA-256 |
+| **Development Data Lab (DDL)** (`ddl_81m`) | `https://www.devdatalab.org/judicial-data` | 81M District Court metadata (2010–2018) | `CC-BY-NC-SA-4.0` | **`false`** | Pinned SHA-256; ML religion/caste cols dropped |
+| **ILDC Research Pack** (`ildc`) | `https://huggingface.co/datasets/Exploration-Lab/ILDC` | Supreme Court research outcome/explanation annotations | `CC-BY-NC-4.0` | **`false`** | Pinned SHA-256 |
+| **NCDRC & Consumer Commissions** (`ncdrc_jagriti`) | `https://ncdrc.nic.in` | `NCDRC`, `SCDRC`, and `DCDRC` Consumer Commission judicial orders (`tribunal_chunks`) | `IN-S52-1-q` | `true` | Domain allowlist + `verify-gate` |
+| **NCLAT Official Orders** (`nclat_orders`) | `https://nclat.nic.in` | National Company Law Appellate Tribunal official orders (`tribunal_chunks`) | `IN-S52-1-q` | `true` | Domain allowlist + `verify-gate` |
+| **The Gazette of India (e-Gazette)** (`egazette_rules`) | `https://egazette.gov.in` | Central subordinate rules, regulations & notifications | `IN-S52-1-q` | `true` | Domain allowlist + `verify-gate` |
+| **Supreme Court Cause Lists** (`sci_cause_lists`) | `https://sci.gov.in` | Official Supreme Court daily & weekly cause list schedules (`cause_lists`) | `CC0-1.0` | `true` | Domain allowlist + `verify-gate` |
+
+*(The 5 `vaquill_*` rows — `vaquill_open_india_law` umbrella plus `vaquill_central_legislation`, `vaquill_state_legislation`, `vaquill_regulators`, and `vaquill_tribunals` — together with the other 14 rows account for all **19** entries in `mcp/nyaya/ingest/data/sources.lock.yaml`.)*
 
 ### Non-Commercial Filtering (`NYAYA_COMMERCIAL_SAFE_ONLY`)
 
@@ -100,10 +106,16 @@ build or publish.
   and REST endpoints automatically exclude all `commercial_safe=false` datasets
   (returning `commercial_license_blocked` on targeted NC lookups).
 
-### Optional Chat LLM Provider
+### Optional Embedding, OCR & Chat Providers
 
-- **MCP retrieval requires zero LLM or embedding API keys.** Search is 100%
-  local/lexical (SQLite FTS5 + LanceDB native Rust BM25 FTS + DuckDB Parquet).
+- **MCP retrieval requires zero LLM or embedding API keys.** Search defaults to
+  100% local/lexical (`NYAYA_HYBRID_SEARCH=false`: SQLite FTS5 + LanceDB native
+  Rust BM25 FTS + DuckDB Parquet).
+- Opt-in hybrid search (`NYAYA_HYBRID_SEARCH=true`) uses zero-dependency
+  offline `HashedNgramEmbeddingProvider` by default, or an OpenAI-compatible
+  `/embeddings` HTTP endpoint only when `NYAYA_EMBEDDING_ENDPOINT` is set.
+- Opt-in OCR (`NYAYA_ENABLE_OCR=true`) uses permissive Apache-2.0 backends
+  (`tesseract` CLI or `rapidocr_onnxruntime`), disabled by default.
 - Only the optional `/chat` FastAPI + LangGraph sub-app calls `ChatNVIDIA`
   (`integrate.api.nvidia.com`) when `NVIDIA_API_KEY` is configured.
 
@@ -115,7 +127,8 @@ Every ingestion run must pass 8 hard-fail suites before producing `gate-pass.jso
 1. `check_amendments`: Contiguous Constitutional Amendments 1–106 with golden
    date/article assertions (e.g., 42nd=1976, 99th=`struck_down`, 106th=2023).
 2. `check_concordance`: Referential integrity and anti-collapse checks across
-   IPC↔BNS, CrPC↔BNSS, and IEA↔BSA, plus 39 mandatory golden pairs.
+   IPC↔BNS, CrPC↔BNSS, and IEA↔BSA (**148** criminal mappings, plus 39 mandatory
+   golden pairs) alongside **33** `ITAct1961↔ITAct2025` tax mappings.
 3. `check_invalidations`: Landmark judicial invalidations (struck-down /
    read-down / abeyance) are present with the expected `effect`.
 4. `check_coverage_and_non_truncation`: Completeness floors and `>500 KB`

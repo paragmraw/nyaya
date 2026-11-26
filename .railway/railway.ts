@@ -37,9 +37,11 @@ export default defineRailway(() =>
         // Keep sleep-on-idle (sleepApplication) and IPv6 egress enabled.
         deploy: { sleepApplication: true, ipv6EgressEnabled: true },
         env: {
-          // Railway Storage Bucket (Tigris S3) cold tiers: LanceDB native BM25 FTS
-          // tables + compacted ZSTD Parquet partitions (17.77M HC, 81M DDL District,
-          // 15 Tribunals, 12 Regulators, SC mirror). preserve() keeps the live
+          // Railway Storage Bucket (Tigris S3) cold tiers: 5 LanceDB native Rust
+          // BM25 FTS tables (`sc_chunks`, `hc_hot_chunks` with hot_hc_limit=500_000,
+          // `state_acts_regulators`, `tribunal_chunks`, `cad_debates`) + compacted
+          // ZSTD Parquet partitions (20.7M+ HC, 81M DDL District, 24 Tribunals &
+          // Consumer Commissions, 12 Regulators, SC mirror). preserve() keeps the live
           // credentials configured in the Railway Variables tab.
           NYAYA_BUCKET_ENDPOINT: preserve(),
           NYAYA_BUCKET_NAME: preserve(),
@@ -56,6 +58,15 @@ export default defineRailway(() =>
           // Academic/research-inclusive default (CC-BY-NC DDL 81M & ILDC tagged
           // commercial_safe=false); set "true" for commercial-only lock.
           NYAYA_COMMERCIAL_SAFE_ONLY: "false",
+          // Optional v2.1 OCR & hybrid retrieval flags (disabled by default;
+          // pure lexical BM25 requires zero embedding keys or endpoints).
+          NYAYA_ENABLE_OCR: "false",
+          NYAYA_HYBRID_SEARCH: "false",
+          NYAYA_EMBEDDING_ENDPOINT: preserve(),
+          NYAYA_EMBEDDING_MODEL: preserve(),
+          // Optional BYO official/licensed live docket adapter (get_cause_list live=true).
+          NYAYA_LIVE_DOCKET_API_URL: preserve(),
+          NYAYA_LIVE_DOCKET_API_KEY: preserve(),
           // Optional: mounts the /chat LangGraph sub-app when set; MCP core
           // retrieval requires zero API keys.
           NVIDIA_API_KEY: preserve(),

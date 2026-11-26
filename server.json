@@ -3,7 +3,7 @@
   "name": "io.github.paragmraw/nyaya-mcp",
   "title": "Nyaya Indian Law MCP",
   "description": "Database-free Indian law MCP: Constitution, Central/State Acts, SC/HC judgments & cause lists.",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "repository": {
     "url": "https://github.com/paragmraw/nyaya",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "nyaya-mcp",
-      "version": "2.0.0",
+      "version": "2.1.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
