@@ -27,7 +27,7 @@ on:
         type: boolean
         default: false
       hc_year_from:
-        description: "Minimum High Court year to sync (default 2020; leave empty for full historical)"
+        description: "Minimum High Court year to sync (default 2020; leave empty or 'all' for full historical)"
         type: string
         required: false
         default: "2020"
@@ -83,6 +83,9 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$HC_YEAR_FROM" ]; then
             HC_YEAR_FROM="2020"
           fi
+          case "${HC_YEAR_FROM,,}" in
+            ""|all) HC_YEAR_FROM="" ;;
+          esac
           if [ -n "$HC_YEAR_FROM" ]; then
             SYNC_ARGS+=(--hc-year-from "$HC_YEAR_FROM")
           fi

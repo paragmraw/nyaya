@@ -2017,7 +2017,12 @@ def load_staged_ingest_bundle(
     if hc_root.is_dir():
         for pq_path in sorted(hc_root.rglob("*.parquet")):
             parts_low = [part.lower() for part in pq_path.relative_to(hc_root).parts]
-            if any("case_details-mobile" in part or "case_details_mobile" in part for part in parts_low):
+            if any(
+                "case_details-mobile" in part
+                or "case_details_mobile" in part
+                or "parquet_case_details" in part
+                for part in parts_low
+            ):
                 hc_mobile_files.append(pq_path)
     hc_mobile_set = set(hc_mobile_files)
     hc_files = [f for f in (sorted(hc_dir.rglob("*.parquet")) if hc_dir.is_dir() else []) if f not in hc_mobile_set]
