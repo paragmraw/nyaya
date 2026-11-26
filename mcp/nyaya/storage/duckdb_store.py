@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import duckdb
 
-from ..citations import court_code_variants, court_display_name
+from ..citations import court_code_variants, court_display_name, parse_single_citation
 from ..config import Settings
 from ..exceptions import (
     InvalidFilter,
@@ -188,6 +188,40 @@ def build_s3_secret_sql(settings: Settings) -> str | None:
         f"SCOPE {_sql_literal(scope)}"
         ")"
     )
+
+
+_HC_CASE_ID_RE = re.compile(r"^hc:(\d{4}):([A-Za-z0-9_~-]+):(.+)$")
+_CNR_16_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{2}\d{12}$")
+_DIGITS_COURT_CODE_RE = re.compile(r"^\d+[_~]\d+$")
+_NON_TRIBUNAL_CIT_KINDS = frozenset(
+    {
+        "sc_neutral",
+        "air",
+        "scc",
+        "scr",
+        "other_reporter",
+        "statute_section",
+        "constitution_article",
+        "constitution_schedule",
+        "cpc_order_rule",
+        "regulation_clause",
+        "constitution_amendment",
+    }
+)
+
+
+def _enrich_court_name(row_dict: dict[str, Any]) -> dict[str, Any]:
+    c_code = row_dict.get("court_code")
+    c_name = str(row_dict.get("court_name") or "").strip()
+    if (
+        not c_name
+        or (c_code is not None and c_name.lower() == str(c_code).strip().lower())
+        or _DIGITS_COURT_CODE_RE.match(c_name)
+    ):
+        resolved_name = court_display_name(str(c_code) if c_code is not None else c_name)
+        if resolved_name:
+            row_dict["court_name"] = resolved_name
+    return row_dict
 
 
 class DuckDBStore:
@@ -524,15 +558,157 @@ class DuckDBStore:
         )
         results: list[dict[str, Any]] = []
         for r in rows:
-            row_dict = dict(zip(cols, r))
-            c_code = row_dict.get("court_code")
-            c_name = str(row_dict.get("court_name") or "").strip()
-            if not c_name or (c_code is not None and c_name.lower() == str(c_code).strip().lower()):
-                resolved_name = court_display_name(str(c_code) if c_code is not None else None)
-                if resolved_name:
-                    row_dict["court_name"] = resolved_name
-            results.append(row_dict)
+            results.append(_enrich_court_name(dict(zip(cols, r))))
         return results, total
+
+    def _manifest_as_of(self) -> Date:
+        """Parse manifest.generated_at[:10] as Date, falling back to Date.today()."""
+        if self.manifest is not None and self.manifest.generated_at:
+            try:
+                return Date.fromisoformat(self.manifest.generated_at[:10])
+            except ValueError:
+                pass
+        return Date.today()
+
+    def lookup_judgment_by_id(
+        self,
+        identifier: str,
+        *,
+        commercial_safe_only: bool | None = None,
+    ) -> tuple[str | None, dict[str, Any] | None]:
+        """Look up a single HC or Tribunal judgment record from pruned Parquet partitions."""
+        if self.manifest is None:
+            return None, None
+        ident = (identifier or "").strip()
+        if not ident:
+            return None, None
+
+        cs_only = self._effective_cs(commercial_safe_only)
+        s3_bucket = self.settings.bucket_name if self.settings else None
+
+        def _query_partitions(
+            partitions: list[str],
+            where_sql: str,
+            params: list[Any],
+        ) -> dict[str, Any] | None:
+            if not partitions:
+                return None
+            require_httpfs = any(
+                p.startswith(("s3://", "http://", "https://")) for p in partitions
+            )
+            cs_clause = " AND commercial_safe = true" if cs_only else ""
+            for start in range(0, len(partitions), 24):
+                chunk = partitions[start : start + 24]
+                pq_list = ", ".join(_sql_literal(p) for p in chunk)
+                sql = (
+                    f"SELECT * FROM read_parquet([{pq_list}], union_by_name=true) "
+                    f"WHERE {where_sql}{cs_clause} LIMIT 1"
+                )
+                cols, rows = self._execute_with_timeout(
+                    sql, params, require_httpfs=require_httpfs
+                )
+                if rows:
+                    return _enrich_court_name(dict(zip(cols, rows[0])))
+            return None
+
+        # 1. HC case_id: hc:<year>:<court>:<suffix>
+        hc_m = _HC_CASE_ID_RE.match(ident)
+        if hc_m:
+            yr = int(hc_m.group(1))
+            court_raw = hc_m.group(2)
+            court_norm = court_raw.replace("~", "_")
+            parts = resolve_partitions(
+                self.manifest,
+                "high_court",
+                court=court_norm,
+                year_from=yr,
+                year_to=yr,
+                commercial_safe_only=cs_only,
+                base_dir=self.base_dir,
+                s3_bucket=s3_bucket,
+                offline_only=self.offline_only,
+            )
+            if "~" in court_raw:
+                norm_ident = f"hc:{hc_m.group(1)}:{court_norm}:{hc_m.group(3)}"
+                row = _query_partitions(
+                    parts, "(case_id = ? OR case_id = ?)", [ident, norm_ident]
+                )
+            else:
+                row = _query_partitions(parts, "case_id = ?", [ident])
+            return ("high_court", row) if row is not None else (None, None)
+
+        # 2. 16-char CNR -> prune to trailing 4-digit year when 1950 <= yr <= 2030
+        cnr_upper = ident.upper()
+        if _CNR_16_RE.match(cnr_upper):
+            yr = int(cnr_upper[-4:])
+            y_filter = yr if 1950 <= yr <= 2030 else None
+            parts = resolve_partitions(
+                self.manifest,
+                "high_court",
+                year_from=y_filter,
+                year_to=y_filter,
+                commercial_safe_only=cs_only,
+                base_dir=self.base_dir,
+                s3_bucket=s3_bucket,
+                offline_only=self.offline_only,
+            )
+            row = _query_partitions(parts, "upper(cnr) = ?", [cnr_upper])
+            return ("high_court", row) if row is not None else (None, None)
+
+        # 3. HC neutral citation (e.g. 2023:DHC:888)
+        parsed = parse_single_citation(ident)
+        if parsed is not None and parsed.kind == "hc_neutral":
+            yr_val = parsed.components.get("year")
+            hc_yr = int(yr_val) if yr_val is not None else None
+            parts = resolve_partitions(
+                self.manifest,
+                "high_court",
+                court=parsed.act_or_court,
+                year_from=hc_yr,
+                year_to=hc_yr,
+                commercial_safe_only=cs_only,
+                base_dir=self.base_dir,
+                s3_bucket=s3_bucket,
+                offline_only=self.offline_only,
+            )
+            row = _query_partitions(
+                parts, "lower(neutral_citation) = lower(?)", [parsed.base_ref]
+            )
+            return ("high_court", row) if row is not None else (None, None)
+
+        # 4. Tribunal case_id (skip whitespace / non-tribunal legal citations)
+        if " " in ident or (parsed is not None and parsed.kind in _NON_TRIBUNAL_CIT_KINDS):
+            return None, None
+
+        trib_ds = self.manifest.datasets.get("tribunal")
+        if trib_ds is None:
+            return None, None
+        known_forums = {
+            p.forum_code.upper(): p.forum_code
+            for p in trib_ds.partitions
+            if p.forum_code
+        }
+        inferred_forum: str | None = None
+        if ident.lower().startswith("trib:"):
+            segs = ident.split(":")
+            if len(segs) >= 2 and segs[1].upper() in known_forums:
+                inferred_forum = known_forums[segs[1].upper()]
+        elif "_" in ident:
+            prefix = ident.split("_", 1)[0].upper()
+            if prefix in known_forums:
+                inferred_forum = known_forums[prefix]
+
+        parts = resolve_partitions(
+            self.manifest,
+            "tribunal",
+            forum=inferred_forum,
+            commercial_safe_only=cs_only,
+            base_dir=self.base_dir,
+            s3_bucket=s3_bucket,
+            offline_only=self.offline_only,
+        )
+        row = _query_partitions(parts, "case_id = ?", [ident])
+        return ("tribunal", row) if row is not None else (None, None)
 
     def aggregate(
         self,
@@ -662,7 +838,7 @@ class DuckDBStore:
                 license_spdx=ds_meta.license_spdx,
                 commercial_safe=ds_meta.commercial_safe,
                 terms_status=ds_meta.terms_status,
-                as_of=Date(2026, 11, 22),
+                as_of=self._manifest_as_of(),
             )
             cards = [
                 JudgmentCard(
@@ -697,7 +873,7 @@ class DuckDBStore:
                     license_spdx=ds_meta.license_spdx,
                     commercial_safe=ds_meta.commercial_safe,
                     terms_status=ds_meta.terms_status,
-                    as_of=Date(2026, 11, 22),
+                    as_of=self._manifest_as_of(),
                 )
             ],
         )

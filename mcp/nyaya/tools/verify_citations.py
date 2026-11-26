@@ -29,6 +29,7 @@ from ._util import (
     parse_optional_date,
     validate_query_length,
 )
+from .get_judgment import resolve_judgment_across_tiers
 
 _WS_RE = re.compile(r"\s+")
 _CURLY_QUOTE_TRANS = str.maketrans(
@@ -209,7 +210,7 @@ def _audit_parsed_citation(
 
     # 3. Judicial citations (CNR, INSC, HC neutral, AIR, SCC, SCR, other reporters)
     try:
-        metas = backend.resolve_judgment_id(p.base_ref, commercial_safe_only=cs_only)
+        metas = resolve_judgment_across_tiers(p.base_ref, commercial_safe_only=cs_only)
     except CommercialLicenseBlocked as exc:
         return AuditFinding(
             raw_citation=p.raw_text,
@@ -376,7 +377,20 @@ def _run_verify_citations(
                         excerpt = rec.text[:excerpt_cap]
             else:
                 ident = parsed.base_ref if parsed is not None else q_in.citation
-                metas = backend.resolve_judgment_id(ident, commercial_safe_only=cs_only)
+                try:
+                    metas = resolve_judgment_across_tiers(ident, commercial_safe_only=cs_only)
+                except CommercialLicenseBlocked as exc:
+                    q_status = "COMMERCIAL_LICENSE_BLOCKED"
+                    metas = []
+                    findings.append(
+                        AuditFinding(
+                            raw_citation=q_in.citation,
+                            parsed=None if compact else (parsed.model_dump(mode="json") if parsed else None),
+                            status=q_status,
+                            coverage_note=exc.message,
+                        )
+                    )
+                    continue
                 if len(metas) == 1:
                     jm = metas[0]
                     resolved_jm = jm
@@ -384,21 +398,8 @@ def _run_verify_citations(
                     prov = jm.provenance
                     canon_rec = SqliteStore._meta_to_card(jm).model_dump(mode="json")
 
-                    # 1. Check jm.snippet and jm.title
-                    matched_src: str | None = None
-                    for candidate in (jm.snippet, jm.title):
-                        if candidate and norm_needle and norm_needle in _norm_quote(candidate):
-                            matched_src = candidate
-                            break
-
-                    if matched_src is not None:
-                        q_status = "QUOTE_VERIFIED"
-                        matched_para = 1
-                        excerpt = _framed_or_raw(
-                            matched_src, cap=excerpt_cap, doc_id=doc_id, provenance=prov
-                        )
-                    else:
-                        # 2. Check LanceDB judgment chunks
+                    # 1. Check LanceDB judgment chunks first when full-text chunks exist (for accurate para_start)
+                    if jm.has_lance_text:
                         try:
                             lance = getattr(get_retrieval(), "lance", None)
                             if lance is not None and hasattr(lance, "get_judgment_chunks"):
@@ -417,15 +418,50 @@ def _run_verify_citations(
                         except StorageUnavailable:
                             pass
 
-                        if q_status != "QUOTE_VERIFIED":
-                            fallback_text = jm.snippet or jm.title
-                            q_status = "QUOTE_MISMATCH" if fallback_text else "NOT_FOUND_IN_CORPUS"
-                            if fallback_text and prov is not None:
-                                excerpt = ensure_framed(
-                                    fallback_text[:excerpt_cap],
-                                    doc_id=doc_id,
-                                    provenance=prov,
-                                )
+                    # 2. Check jm.snippet and jm.title
+                    if q_status != "QUOTE_VERIFIED":
+                        matched_src: str | None = None
+                        for candidate in (jm.snippet, jm.title):
+                            if candidate and norm_needle and norm_needle in _norm_quote(candidate):
+                                matched_src = candidate
+                                break
+
+                        if matched_src is not None:
+                            q_status = "QUOTE_VERIFIED"
+                            matched_para = 1
+                            excerpt = _framed_or_raw(
+                                matched_src, cap=excerpt_cap, doc_id=doc_id, provenance=prov
+                            )
+                        else:
+                            # 3. Check LanceDB judgment chunks if not yet checked
+                            if not jm.has_lance_text:
+                                try:
+                                    lance = getattr(get_retrieval(), "lance", None)
+                                    if lance is not None and hasattr(lance, "get_judgment_chunks"):
+                                        chunks = lance.get_judgment_chunks(
+                                            jm.case_id, commercial_safe_only=cs_only
+                                        )
+                                        for ch in chunks:
+                                            ch_text = str(ch.get("text") or "")
+                                            if ch_text and norm_needle and norm_needle in _norm_quote(ch_text):
+                                                q_status = "QUOTE_VERIFIED"
+                                                matched_para = int(ch.get("para_start") or 1)
+                                                excerpt = _framed_or_raw(
+                                                    ch_text, cap=excerpt_cap, doc_id=doc_id, provenance=prov
+                                                )
+                                                break
+                                except StorageUnavailable:
+                                    pass
+
+                            if q_status != "QUOTE_VERIFIED":
+                                fallback_text = jm.snippet or jm.title
+                                q_status = "QUOTE_MISMATCH" if fallback_text else "NOT_FOUND_IN_CORPUS"
+                                if fallback_text and prov is not None:
+                                    excerpt = ensure_framed(
+                                        fallback_text[:excerpt_cap],
+                                        doc_id=doc_id,
+                                        provenance=prov,
+                                    )
 
             finding_idx = len(findings)
             findings.append(
