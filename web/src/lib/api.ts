@@ -1,4 +1,4 @@
-// API client + types for the Nyaya v2.0 SPA.
+// API client + types for the Nyaya v2.1 SPA.
 //
 // All data is fetched client-side against same-origin REST endpoints (see
 // mcp/nyaya/rest.py). In dev, next.config.mjs rewrites /api/* to localhost:8000;

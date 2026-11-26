@@ -11,6 +11,8 @@ from typing import Literal
 
 import pypdfium2 as pdfium
 
+from .ocr import OcrEngine, get_default_ocr_engine, render_pdf_page_to_png
+
 MAX_PDF_BYTES = 15 * 1024 * 1024
 MAX_PDF_PAGES = 500
 MIN_CHARS_PER_PAGE = 100.0
@@ -41,6 +43,32 @@ class PdfExtractionResult:
     text_availability: Literal["indexed_bm25", "scanned_image_only"]
     text_sha256: str
     pages: list[ExtractedPage] = field(default_factory=list)
+    ocr_used: bool = False
+
+
+def _assemble_pages(raw_pages: list[str]) -> tuple[str, list[ExtractedPage], int]:
+    pages: list[ExtractedPage] = []
+    parts: list[str] = []
+    cursor = 0
+    total_non_ws = 0
+    for idx, raw_page_text in enumerate(raw_pages):
+        norm_page = raw_page_text.replace("\r\n", "\n").replace("\r", "\n")
+        if idx > 0 and parts:
+            parts.append("\n\n")
+            cursor += 2
+        start = cursor
+        parts.append(norm_page)
+        cursor += len(norm_page)
+        total_non_ws += len(norm_page.strip())
+        pages.append(
+            ExtractedPage(
+                page_num=idx + 1,
+                text=norm_page,
+                char_start=start,
+                char_end=cursor,
+            )
+        )
+    return "".join(parts), pages, total_non_ws
 
 
 def extract_pdf_bytes(
@@ -49,6 +77,8 @@ def extract_pdf_bytes(
     max_bytes: int = MAX_PDF_BYTES,
     max_pages: int = MAX_PDF_PAGES,
     min_chars_per_page: float = MIN_CHARS_PER_PAGE,
+    enable_ocr: bool = False,
+    ocr_engine: OcrEngine | None = None,
 ) -> PdfExtractionResult:
     """Validate and extract text page-by-page from raw PDF bytes using `pypdfium2`."""
     if not pdf_bytes or not pdf_bytes.startswith(b"%PDF-"):
@@ -72,41 +102,41 @@ def extract_pdf_bytes(
                 f"PDF page count ({page_count}) exceeds {max_pages}-page safety cap."
             )
 
-        pages: list[ExtractedPage] = []
-        parts: list[str] = []
-        cursor = 0
-        total_non_ws = 0
-
+        raw_pages: list[str] = []
         for idx in range(page_count):
             page = doc[idx]
             textpage = page.get_textpage()
             try:
-                raw_page_text = textpage.get_text_range() or ""
+                raw_pages.append(textpage.get_text_range() or "")
             finally:
                 textpage.close()
                 page.close()
 
-            norm_page = raw_page_text.replace("\r\n", "\n").replace("\r", "\n")
-            if idx > 0 and parts:
-                parts.append("\n\n")
-                cursor += 2
-
-            start = cursor
-            parts.append(norm_page)
-            cursor += len(norm_page)
-            total_non_ws += len(norm_page.strip())
-            pages.append(
-                ExtractedPage(
-                    page_num=idx + 1,
-                    text=norm_page,
-                    char_start=start,
-                    char_end=cursor,
-                )
-            )
-
-        full_text = "".join(parts)
+        full_text, pages, total_non_ws = _assemble_pages(raw_pages)
         avg_chars = (total_non_ws / page_count) if page_count > 0 else 0.0
         is_scanned = avg_chars < min_chars_per_page
+        ocr_used = False
+
+        if is_scanned and enable_ocr and page_count > 0:
+            engine = ocr_engine if ocr_engine is not None else get_default_ocr_engine()
+            if engine is not None and engine.is_available():
+                ocr_raw_pages: list[str] = []
+                for idx in range(page_count):
+                    page = doc[idx]
+                    try:
+                        png_bytes = render_pdf_page_to_png(page)
+                        ocr_raw_pages.append(engine.extract_text(png_bytes))
+                    finally:
+                        page.close()
+                ocr_full, ocr_pages, ocr_non_ws = _assemble_pages(ocr_raw_pages)
+                ocr_avg = ocr_non_ws / page_count
+                if ocr_avg >= min_chars_per_page:
+                    full_text = ocr_full
+                    pages = ocr_pages
+                    avg_chars = ocr_avg
+                    is_scanned = False
+                    ocr_used = True
+
         quality: Literal["verified", "scanned_image_only"] = (
             "scanned_image_only" if is_scanned else "verified"
         )
@@ -122,6 +152,7 @@ def extract_pdf_bytes(
             text_availability=availability,
             text_sha256=sha,
             pages=pages,
+            ocr_used=ocr_used,
         )
     finally:
         doc.close()
@@ -133,6 +164,8 @@ def extract_pdf_file(
     max_bytes: int = MAX_PDF_BYTES,
     max_pages: int = MAX_PDF_PAGES,
     min_chars_per_page: float = MIN_CHARS_PER_PAGE,
+    enable_ocr: bool = False,
+    ocr_engine: OcrEngine | None = None,
 ) -> PdfExtractionResult:
     """Read a PDF file from disk (checking size before full read) and extract text."""
     fpath = Path(path)
@@ -146,4 +179,6 @@ def extract_pdf_file(
         max_bytes=max_bytes,
         max_pages=max_pages,
         min_chars_per_page=min_chars_per_page,
+        enable_ocr=enable_ocr,
+        ocr_engine=ocr_engine,
     )

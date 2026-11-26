@@ -10,11 +10,11 @@ import { API_VERSION, pageOpenGraph } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Architecture",
   description:
-    "How Nyaya v2.0 works: database-free pure-lexical pipeline (SQLite FTS5 + LanceDB BM25 + DuckDB ZSTD Parquet + direct S3 pypdfium2) serving 12 MCP tools, 8 resources, 4 prompts, and optional /chat.",
+    "How Nyaya v2.1 works: database-free pure-lexical pipeline (SQLite FTS5 + 5 LanceDB BM25 tables + DuckDB ZSTD Parquet + direct S3 pypdfium2) with opt-in OCR and hybrid RRF, serving 15 MCP tools, 8 resources, 4 prompts, and optional /chat.",
   openGraph: pageOpenGraph({
-    title: "Nyaya v2.0 Architecture - Database-Free Pure-Lexical Legal MCP",
+    title: "Nyaya v2.1 Architecture - Database-Free Legal MCP",
     description:
-      "Baked SQLite FTS5 core, LanceDB BM25 & DuckDB ZSTD Parquet on Railway Storage Bucket, direct AWS S3 pypdfium2, and dual uvx stdio + HTTP transport.",
+      "Baked SQLite FTS5 core, 5 LanceDB BM25 tables & DuckDB ZSTD Parquet on Railway Storage Bucket, direct AWS S3 pypdfium2 with opt-in OCR, and dual uvx stdio + HTTP transport.",
   }),
 };
 
@@ -30,7 +30,7 @@ export default function ArchitecturePage() {
             <p className="eyebrow">Architecture · v{API_VERSION}</p>
             <h1>Pure lexical, database-free</h1>
             <p className="lead lead-wide">
-              Baked SQLite FTS5 core + LanceDB native BM25 + DuckDB ZSTD Parquet + direct S3 <code>pypdfium2</code>, serving 12 MCP tools, 8 <code>nyaya://</code> resources, 4 practitioner prompts, REST APIs, and optional <code>/chat</code> inside a single &lt;1 GB RAM container.
+              Baked SQLite FTS5 core + 5 LanceDB native BM25 tables (with opt-in hybrid RRF) + DuckDB ZSTD Parquet + direct S3 <code>pypdfium2</code> (with opt-in OCR), serving 15 MCP tools, 8 <code>nyaya://</code> resources, 4 practitioner prompts, REST APIs, and optional <code>/chat</code> inside a single &lt;1 GB RAM container.
             </p>
           </section>
 
@@ -47,7 +47,7 @@ export default function ArchitecturePage() {
           <section className="section">
             <div className="section-head">
               <h2>Stack</h2>
-              <p className="sec-desc">Embedded &amp; object-storage components: zero managed database servers, zero dense-vector dependencies in v2.0, and zero API keys required for MCP.</p>
+              <p className="sec-desc">Embedded &amp; object-storage components: zero managed database servers, zero mandatory dense-vector or GPU dependencies (with opt-in hybrid BM25+vector RRF and Apache-2.0 OCR), and zero API keys required for MCP.</p>
             </div>
             <div className="stack-grid">
               <div className="stack-col">

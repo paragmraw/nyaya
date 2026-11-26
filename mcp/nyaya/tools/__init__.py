@@ -1,4 +1,4 @@
-"""MCP v2.0 12-tool surface and fail-fast registration guard for Nyaya."""
+"""MCP v2.1 15-tool surface and fail-fast registration guard for Nyaya."""
 
 from __future__ import annotations
 
@@ -13,12 +13,18 @@ from .corpus_status import corpus_status
 from .corpus_status import register as _corpus_status
 from .cross_reference import cross_reference
 from .cross_reference import register as _cross_reference
+from .get_cause_list import get_cause_list
+from .get_cause_list import register as _get_cause_list
 from .get_judgment import get_judgment
 from .get_judgment import register as _get_judgment
+from .get_judgments_batch import get_judgments_batch
+from .get_judgments_batch import register as _get_judgments_batch
 from .get_provision import get_provision
 from .get_provision import register as _get_provision
 from .get_provision_history import get_provision_history
 from .get_provision_history import register as _get_provision_history
+from .get_provisions_batch import get_provisions_batch
+from .get_provisions_batch import register as _get_provisions_batch
 from .judgment_analytics import judgment_analytics
 from .judgment_analytics import register as _judgment_analytics
 from .search_judgments import register as _search_judgments
@@ -37,9 +43,12 @@ __all__ = [
     "compare_provisions",
     "corpus_status",
     "cross_reference",
+    "get_cause_list",
     "get_judgment",
+    "get_judgments_batch",
     "get_provision",
     "get_provision_history",
+    "get_provisions_batch",
     "judgment_analytics",
     "register",
     "search_judgments",
@@ -48,18 +57,21 @@ __all__ = [
     "verify_citations",
 ]
 
-# Exact 12 canonical v2 tools in registration order.
+# Exact 15 canonical v2.1 tools in registration order.
 _REGISTRATIONS: list[tuple[Any, str, frozenset[str]]] = [
     (_search_statutes, "search_statutes", frozenset({"search_statutes"})),
     (_get_provision, "get_provision", frozenset({"get_provision"})),
+    (_get_provisions_batch, "get_provisions_batch", frozenset({"get_provisions_batch"})),
     (_browse_statute, "browse_statute", frozenset({"browse_statute"})),
     (_compare_provisions, "compare_provisions", frozenset({"compare_provisions"})),
     (_cross_reference, "cross_reference", frozenset({"cross_reference"})),
     (_get_provision_history, "get_provision_history", frozenset({"get_provision_history"})),
     (_search_judgments, "search_judgments", frozenset({"search_judgments"})),
     (_get_judgment, "get_judgment", frozenset({"get_judgment"})),
+    (_get_judgments_batch, "get_judgments_batch", frozenset({"get_judgments_batch"})),
     (_trace_precedent, "trace_precedent", frozenset({"trace_precedent"})),
     (_judgment_analytics, "judgment_analytics", frozenset({"judgment_analytics"})),
+    (_get_cause_list, "get_cause_list", frozenset({"get_cause_list"})),
     (_verify_citations, "verify_citations", frozenset({"verify_citations"})),
     (_corpus_status, "corpus_status", frozenset({"corpus_status"})),
 ]
@@ -79,7 +91,7 @@ def _registered_tool_names(mcp: Any) -> set[str] | None:
 
 
 def register(mcp: Any) -> None:
-    """Register all 12 v2 tools, failing loudly on any registration problem."""
+    """Register all 15 v2.1 tools, failing loudly on any registration problem."""
     for reg_fn, name, expected in _REGISTRATIONS:
         before = _registered_tool_names(mcp)
         try:

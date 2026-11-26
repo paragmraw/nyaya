@@ -20,7 +20,12 @@ from .builders.sqlite_core import (
     create_mini_ingest_input,
 )
 from .extract.normalize import normalize_legal_record
-from .fetchers.official_statutes import load_courts_yaml, load_curated_provisions_yaml
+from .fetchers.official_statutes import (
+    OfficialStatutesFetcher,
+    load_courts_yaml,
+    load_curated_provisions_yaml,
+)
+from .fetchers.research_packs import ResearchPacksFetcher, normalize_judge_name
 from .fetchers.vaquill import classify_vaquill_file
 
 _HTML_OR_ERROR_PREFIX_RE = re.compile(
@@ -708,6 +713,22 @@ def _iter_vaquill_rows(parquet_path: Path, columns: list[str], order_by: str = "
         con.close()
 
 
+def _iter_parquet_dicts(parquet_path: Path) -> Iterable[dict[str, Any]]:
+    con = duckdb.connect(":memory:")
+    try:
+        escaped = str(parquet_path).replace("'", "''")
+        cur = con.execute(f"SELECT * FROM read_parquet('{escaped}')")
+        cols = [desc[0] for desc in (cur.description or ())]
+        while True:
+            batch = cur.fetchmany(10_000)
+            if not batch:
+                break
+            for row in batch:
+                yield dict(zip(cols, row, strict=False))
+    finally:
+        con.close()
+
+
 def _parse_sc_neutral_citation(case_id_raw: str, nc_display: str) -> str | None:
     m = _INSC_RE.search(case_id_raw)
     if m:
@@ -745,10 +766,11 @@ def load_staged_ingest_bundle(
     commercial_safe_only: bool = False,
     include_hc: bool = True,
 ) -> IngestInputBundle:
-    """Assemble an `IngestInputBundle` from real staged Vaquill & Dattam Parquets in `work_dir/raw`."""
-    _ = commercial_safe_only
+    """Assemble an `IngestInputBundle` from real staged Vaquill, Dattam, Official & Research packs in `work_dir/raw`."""
     wdir = Path(work_dir)
     raw_dir = wdir / "raw"
+    official_fetcher = OfficialStatutesFetcher()
+    research_fetcher = ResearchPacksFetcher()
 
     # Seed canonical core acts, aliases, Constitution, CrPC, and verified edges
     mini = create_mini_ingest_input()
@@ -1121,6 +1143,121 @@ def load_staged_ingest_bundle(
                 "commercial_safe": 1,
             }
 
+    def _upsert_official_provisions(
+        rows: list[dict[str, Any]],
+        *,
+        override_existing: bool = True,
+    ) -> None:
+        for p in rows:
+            aid = str(p.get("act_id") or "").strip()
+            if not aid:
+                continue
+            kind = str(p.get("kind") or "section").strip().lower()
+            if aid == "constitution" and kind not in ("schedule", "preamble", "amendment"):
+                kind = "article"
+            ref = str(p.get("ref") or "1").strip()
+            ref_norm = str(p.get("ref_norm") or ref).strip().upper()
+            doc_id = (
+                f"constitution:art:{ref}"
+                if aid == "constitution" and kind == "article"
+                else str(p.get("doc_id") or f"{aid}:{ref}")
+            )
+            cleaned = _clean_text_or_none(str(p.get("text") or ""), doc_id=doc_id, metadata={"act_id": aid})
+            if not cleaned:
+                continue
+
+            act_short = str(p.get("act_short") or aid).strip()
+            act_full = str(p.get("act_full_name") or act_short).strip()
+            if aid not in acts_by_id:
+                short_name = (
+                    act_short
+                    if act_short.lower() not in used_short_names
+                    else _derive_short_name(act_full, aid, used_short_names)
+                )
+                used_short_names.add(short_name.lower())
+                act_status = _map_act_status(
+                    p.get("act_status") or p.get("status"),
+                    title=act_full,
+                )
+                acts_by_id[aid] = {
+                    "act_id": aid,
+                    "short_name": short_name,
+                    "full_name": act_full,
+                    "year": int(p["year"]) if p.get("year") is not None else None,
+                    "act_number": p.get("act_number"),
+                    "jurisdiction": "Central",
+                    "category": "constitution" if aid == "constitution" else "central_act",
+                    "status": act_status,
+                    "commencement_date": _normalize_date_str(p.get("commencement_date")),
+                    "repeal_date": _normalize_date_str(p.get("repeal_date")),
+                    "replaced_by_act": p.get("replaced_by_act"),
+                    "storage_tier": "sqlite_core",
+                    "source_id": str(p.get("source_id") or "indiacode_central_acts"),
+                    "commercial_safe": 1,
+                    "as_of": "2026-11-22",
+                }
+                aliases.setdefault(short_name.lower(), aid)
+                aliases.setdefault(act_full.lower(), aid)
+                no_the = re.sub(r"^the\s+", "", act_full.lower()).strip()
+                aliases.setdefault(no_the, aid)
+
+            key = (aid, kind, ref_norm)
+            if not override_existing and key in provisions_by_key:
+                continue
+            act_meta = acts_by_id[aid]
+            prov_status = str(
+                p.get("status")
+                or ("repealed" if act_meta.get("status") == "repealed" else "in_force")
+            )
+            provisions_by_key[key] = {
+                "doc_id": doc_id,
+                "act_id": aid,
+                "act_short": str(act_meta["short_name"]),
+                "kind": kind,
+                "ref": ref,
+                "ref_norm": ref_norm,
+                "chapter_num": p.get("chapter_num"),
+                "chapter_title": p.get("chapter_title"),
+                "part": p.get("part"),
+                "title": str(p.get("title") or f"Section {ref}").strip(),
+                "text": cleaned,
+                "status": prov_status,
+                "commencement_date": _normalize_date_str(
+                    p.get("commencement_date") or act_meta.get("commencement_date")
+                ),
+                "repeal_date": _normalize_date_str(
+                    p.get("repeal_date") or act_meta.get("repeal_date")
+                ),
+                "metadata": p.get("metadata") or {},
+                "source_id": str(p.get("source_id") or "indiacode_central_acts"),
+                "source_url": str(p.get("source_url") or VAQUILL_CENTRAL_LEGISLATION_URL),
+                "commercial_safe": 1,
+            }
+
+    # 1a-ii. Load India Code Central Acts (`raw/indiacode_central_acts/`)
+    ic_dir = raw_dir / "indiacode_central_acts"
+    if ic_dir.is_dir():
+        _upsert_official_provisions(
+            official_fetcher.load_indiacode_central_acts(ic_dir),
+            override_existing=False,
+        )
+
+    # 1a-iii. Load PRS 2026 Delta (`raw/prs_2026_delta/`)
+    prs_dir = raw_dir / "prs_2026_delta"
+    if prs_dir.is_dir():
+        _upsert_official_provisions(
+            official_fetcher.load_prs_2026_delta(prs_dir),
+            override_existing=True,
+        )
+
+    # 1a-iv. Load Legislative Constitution (`raw/legislative_constitution/`)
+    const_dir = raw_dir / "legislative_constitution"
+    if const_dir.is_dir():
+        _upsert_official_provisions(
+            official_fetcher.load_legislative_constitution(const_dir),
+            override_existing=True,
+        )
+
     # Overlay curated bare-act statutory provisions (overrides truncated Vaquill entries & adds CrPC)
     for cp in load_curated_provisions_yaml():
         aid = str(cp["act_id"])
@@ -1352,6 +1489,64 @@ def load_staged_ingest_bundle(
                     "source_url": str(
                         source_url or f"https://oss-data-in.vaquill.ai/v2026.08.1/{rfile.name}"
                     ),
+                }
+            )
+
+    # 1c-ii. Load Constituent Assembly Debates (`raw/cad_debates/`)
+    cad_dir = raw_dir / "cad_debates"
+    if cad_dir.is_dir():
+        for cad_row in official_fetcher.load_cad_debates(cad_dir):
+            doc_id = str(cad_row["doc_id"])
+            cleaned = _clean_text_or_none(str(cad_row.get("text") or ""), doc_id=doc_id)
+            if not cleaned:
+                continue
+            cad_aid = str(cad_row["act_id"])
+            cad_short = str(cad_row["short_name"])
+            if cad_aid not in acts_by_id:
+                short_name = (
+                    cad_short
+                    if cad_short.lower() not in used_short_names
+                    else _derive_short_name(cad_short, cad_aid, used_short_names)
+                )
+                used_short_names.add(short_name.lower())
+                acts_by_id[cad_aid] = {
+                    "act_id": cad_aid,
+                    "short_name": short_name,
+                    "full_name": f"Constituent Assembly Debates ({cad_row.get('volume') or 'Vol'})",
+                    "year": 1948,
+                    "act_number": None,
+                    "jurisdiction": "Central",
+                    "category": "cad_debate",
+                    "status": "in_force",
+                    "commencement_date": "1946-12-09",
+                    "repeal_date": None,
+                    "replaced_by_act": None,
+                    "storage_tier": "lance_bucket",
+                    "source_id": "cad_debates",
+                    "commercial_safe": 1,
+                    "as_of": "2026-11-22",
+                }
+            else:
+                short_name = str(acts_by_id[cad_aid]["short_name"])
+
+            state_regulator_provisions.append(
+                {
+                    "doc_id": doc_id,
+                    "act_id": cad_aid,
+                    "short_name": short_name,
+                    "jurisdiction": "Central",
+                    "category": "cad_debate",
+                    "kind": "cad_debate",
+                    "ref": str(cad_row["ref"]),
+                    "title": str(cad_row.get("title") or "Constituent Assembly Debate"),
+                    "status": "in_force",
+                    "effective_date": str(cad_row.get("effective_date") or ""),
+                    "text": cleaned,
+                    "commercial_safe": True,
+                    "terms_status": "cleared",
+                    "license_spdx": "CC0-1.0",
+                    "source_id": "cad_debates",
+                    "source_url": str(cad_row.get("source_url") or "https://eparlib.sansad.in/bitstream/123456789/cad_debates_v1_12.json"),
                 }
             )
 
@@ -1716,10 +1911,118 @@ def load_staged_ingest_bundle(
             existing_txt = str(sc_by_id[cid].get("text") or "").strip()
             sc_by_id[cid]["text"] = f"{doctrine}\n\n{existing_txt}" if existing_txt else doctrine
 
+        if lm.get("match_cnr"):
+            sc_by_cnr.setdefault(str(lm["match_cnr"]).upper(), cid)
+        if lm.get("match_insc"):
+            sc_by_neutral.setdefault(str(lm["match_insc"]).upper(), cid)
+
+    # 2b. Enrich Supreme Court judgments with e-SCR neutral citations & headnotes (`raw/escr_judgments/`)
+    escr_dir = raw_dir / "escr_judgments"
+    if escr_dir.is_dir():
+        sc_by_title_year: dict[tuple[str, int | None], str] = {
+            (str(j.get("title") or "").strip().lower(), j.get("year")): cid
+            for cid, j in sc_by_id.items()
+            if j.get("title")
+        }
+        for erow in official_fetcher.load_escr_judgments(escr_dir):
+            cnr_str = str(erow.get("cnr") or "").strip() or None
+            neutral_str = str(erow.get("neutral_citation") or "").strip() or None
+            cnr_key = cnr_str.upper() if cnr_str else None
+            neutral_key = neutral_str.upper() if neutral_str else None
+            raw_title = str(erow.get("title") or "").strip()
+            yr_val = erow.get("year")
+            escr_yr_int: int | None = int(yr_val) if yr_val is not None else None
+
+            matched_id = (
+                (sc_by_cnr.get(cnr_key) if cnr_key else None)
+                or (sc_by_neutral.get(neutral_key) if neutral_key else None)
+                or (str(erow["case_id"]) if erow.get("case_id") and str(erow["case_id"]) in sc_by_id else None)
+                or sc_by_title_year.get((raw_title.lower(), escr_yr_int))
+            )
+
+            target_cid = matched_id or str(
+                erow.get("case_id")
+                or f"escr:{escr_yr_int or 2024}:{cnr_str or hashlib.sha1(raw_title.encode('utf-8')).hexdigest()[:12]}"
+            )
+            headnote_raw = str(erow.get("text") or "").strip()
+            clean_headnote = _clean_text_or_none(headnote_raw, doc_id=target_cid) if headnote_raw else ""
+
+            if matched_id and matched_id in sc_by_id:
+                existing = sc_by_id[matched_id]
+                for field_name in (
+                    "cnr",
+                    "neutral_citation",
+                    "scr_citation",
+                    "air_citation",
+                    "scc_citation",
+                    "judge_coram",
+                    "author_judge",
+                ):
+                    if erow.get(field_name) and not existing.get(field_name):
+                        existing[field_name] = erow[field_name]
+                if erow.get("neutral_citation") and not existing.get("neutral_citation"):
+                    existing["neutral_citation"] = erow["neutral_citation"]
+                if erow.get("scr_citation") and not existing.get("scr_citation"):
+                    existing["scr_citation"] = erow["scr_citation"]
+                if clean_headnote:
+                    existing_txt = str(existing.get("text") or "").strip()
+                    if clean_headnote not in existing_txt:
+                        existing["text"] = f"{existing_txt}\n\n{clean_headnote}" if existing_txt else clean_headnote
+            else:
+                escr_clean_title = _clean_text_or_none(raw_title, doc_id=target_cid)
+                if not escr_clean_title:
+                    continue
+                dec_iso = _normalize_date_str(erow.get("decision_date"))
+                yr_resolved = escr_yr_int or (int(dec_iso[:4]) if dec_iso else 2024)
+                coram_str = str(erow.get("judge_coram") or "")
+                sc_by_id[target_cid] = {
+                    "case_id": target_cid,
+                    "court_code": "SCI",
+                    "court_name": "Supreme Court of India",
+                    "bench": None,
+                    "cnr": cnr_str,
+                    "neutral_citation": neutral_str,
+                    "air_citation": erow.get("air_citation"),
+                    "scc_citation": erow.get("scc_citation"),
+                    "scr_citation": erow.get("scr_citation"),
+                    "title": escr_clean_title,
+                    "petitioner": erow.get("petitioner"),
+                    "respondent": erow.get("respondent"),
+                    "decision_date": dec_iso,
+                    "year": yr_resolved,
+                    "judge_coram": coram_str,
+                    "author_judge": erow.get("author_judge"),
+                    "bench_strength": int(erow["bench_strength"]) if erow.get("bench_strength") else 1,
+                    "disposal_nature": erow.get("disposal_nature"),
+                    "case_type": erow.get("case_type"),
+                    "acts_cited": list(erow.get("acts_cited") or []),
+                    "is_reportable": 1,
+                    "pdf_s3_bucket": None,
+                    "pdf_s3_key": None,
+                    "source_url": str(erow.get("source_url") or "https://digiscr.sci.gov.in/api/v1/judgments"),
+                    "text": clean_headnote or "",
+                    "cited_by_count": 0,
+                    "source_id": "escr_judgments",
+                    "commercial_safe": True,
+                }
+                if cnr_key:
+                    sc_by_cnr[cnr_key] = target_cid
+                if neutral_key:
+                    sc_by_neutral[neutral_key] = target_cid
+
     # 3. Load Dattam High Court metadata Parquets
-    hc_dir = raw_dir / "indian-high-court-judgments" / "metadata" / "parquet"
-    hc_files = sorted(hc_dir.rglob("*.parquet")) if hc_dir.is_dir() else []
+    hc_root = raw_dir / "indian-high-court-judgments"
+    hc_dir = hc_root / "metadata" / "parquet"
+    hc_mobile_files: list[Path] = []
+    if hc_root.is_dir():
+        for pq_path in sorted(hc_root.rglob("*.parquet")):
+            parts_low = [part.lower() for part in pq_path.relative_to(hc_root).parts]
+            if any("case_details-mobile" in part or "case_details_mobile" in part for part in parts_low):
+                hc_mobile_files.append(pq_path)
+    hc_mobile_set = set(hc_mobile_files)
+    hc_files = [f for f in (sorted(hc_dir.rglob("*.parquet")) if hc_dir.is_dir() else []) if f not in hc_mobile_set]
     hc_web_rows: list[dict[str, Any]] = []
+    hc_mobile_rows: list[dict[str, Any]] = []
     seen_hc_ids: set[str] = set()
     hc_row_count = 0
 
@@ -1817,6 +2120,92 @@ def load_staged_ingest_bundle(
                         "commercial_safe": True,
                     }
                 )
+
+        for mobile_file in hc_mobile_files:
+            for mrow in _iter_parquet_dicts(mobile_file):
+                cnr_val = str(mrow.get("cnr") or "").strip().upper()
+                if not cnr_val:
+                    continue
+                mob_item = dict(mrow)
+                mob_item["cnr"] = cnr_val
+                for dt_col in ("filing_date", "registration_date", "decision_date"):
+                    if dt_col in mob_item:
+                        mob_item[dt_col] = _normalize_date_str(mob_item[dt_col])
+                hc_mobile_rows.append(mob_item)
+
+        khoj_dir = raw_dir / "justicehub_khoj"
+        if khoj_dir.is_dir() and hc_web_rows:
+            khoj_rows = research_fetcher.load_justicehub_khoj(khoj_dir)
+            khoj_by_court_name: dict[tuple[str, str], dict[str, Any]] = {}
+            khoj_by_name: dict[str, dict[str, Any]] = {}
+            for krow in khoj_rows:
+                jnorm = str(krow["judge_name_norm"])
+                khoj_by_name.setdefault(jnorm, krow)
+                if krow.get("court_code"):
+                    khoj_by_court_name[(str(krow["court_code"]), jnorm)] = krow
+            for hrow in hc_web_rows:
+                raw_j = str(hrow.get("judge") or "").strip()
+                if not raw_j:
+                    continue
+                parts = [p.strip() for p in re.split(r"[;,]", raw_j) if p.strip()]
+                matched_meta: list[dict[str, Any]] = []
+                canon_names: list[str] = []
+                c_code = str(hrow.get("court_code") or "")
+                for part in parts:
+                    norm_part = normalize_judge_name(part).lower()
+                    kmeta = khoj_by_court_name.get((c_code, norm_part)) or khoj_by_name.get(norm_part)
+                    if kmeta is not None:
+                        canon_names.append(str(kmeta["judge_name"]))
+                        matched_meta.append(
+                            {
+                                "judge_name": kmeta["judge_name"],
+                                "designation": kmeta.get("designation"),
+                                "appointment_date": kmeta.get("appointment_date"),
+                                "retirement_date": kmeta.get("retirement_date"),
+                                "gender": kmeta.get("gender"),
+                                "source_of_recruitment": kmeta.get("source_of_recruitment"),
+                                "source_id": "justicehub_khoj",
+                            }
+                        )
+                    else:
+                        canon_names.append(part)
+                if matched_meta:
+                    hrow["judge"] = "; ".join(canon_names)
+                    if hrow.get("author_judge"):
+                        auth_norm = normalize_judge_name(str(hrow["author_judge"])).lower()
+                        akmeta = khoj_by_court_name.get((c_code, auth_norm)) or khoj_by_name.get(auth_norm)
+                        if akmeta is not None:
+                            hrow["author_judge"] = str(akmeta["judge_name"])
+                    hrow["khoj_judge_metadata"] = (
+                        matched_meta[0] if len(matched_meta) == 1 else matched_meta
+                    )
+
+    # 4. Load Research Packs (DDL 81M & ILDC) when commercial_safe_only is False
+    ddl_district_rows: list[dict[str, Any]] = []
+    ddl_dir = raw_dir / "ddl_81m"
+    if not commercial_safe_only and ddl_dir.is_dir():
+        ddl_district_rows = research_fetcher.load_ddl_district_rows(ddl_dir)
+
+    ildc_rows: list[dict[str, Any]] = []
+    ildc_dir = raw_dir / "ildc"
+    if not commercial_safe_only and ildc_dir.is_dir():
+        for irow in research_fetcher.load_ildc_rows(ildc_dir):
+            cid = str(irow["case_id"])
+            ildc_clean_title = _clean_text_or_none(str(irow.get("title") or ""), doc_id=cid)
+            if not ildc_clean_title:
+                continue
+            raw_txt = str(irow.get("text") or "").strip()
+            clean_txt = _clean_text_or_none(raw_txt, doc_id=cid) if raw_txt else ""
+            if raw_txt and clean_txt is None:
+                continue
+            irow["title"] = ildc_clean_title
+            irow["text"] = clean_txt or ""
+            irow["decision_date"] = _normalize_date_str(irow.get("decision_date"))
+            irow["commercial_safe"] = False
+            irow["license_spdx"] = "CC-BY-NC-4.0"
+            irow["terms_status"] = "non_commercial_only"
+            irow["source_id"] = "ildc"
+            ildc_rows.append(irow)
 
     # Seed verified landmark citation_edges
     edges = [
@@ -1936,12 +2325,12 @@ def load_staged_ingest_bundle(
         provisions=list(provisions_by_key.values()),
         sc_judgments=list(sc_by_id.values()),
         hc_web_rows=hc_web_rows,
-        hc_mobile_rows=[],
+        hc_mobile_rows=hc_mobile_rows,
         state_regulator_provisions=state_regulator_provisions,
-        ddl_district_rows=[],
+        ddl_district_rows=ddl_district_rows,
         tribunal_rows=tribunal_rows,
         regulator_order_rows=regulator_order_rows,
-        ildc_rows=[],
+        ildc_rows=ildc_rows,
         citation_edges=edges,
         hc_row_count=hc_row_count if not include_hc else len(hc_web_rows),
     )

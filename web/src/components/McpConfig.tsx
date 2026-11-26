@@ -212,7 +212,7 @@ export default function McpConfig({ variant = "promo" }: { variant?: Variant }) 
           <div className="mcp-meta">
             <div className="mcp-title-row">
               <span className="mcp-title">MCP server</span>
-              <span className="mcp-tag">12 tools · stdio / http</span>
+              <span className="mcp-tag">15 tools · stdio / http</span>
             </div>
             <p className="mcp-desc">
               Run <b>nyaya-mcp</b> locally via <code>uvx</code> (zero secrets, private briefs) or connect over HTTP inside{" "}

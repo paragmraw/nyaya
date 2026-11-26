@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date as Date
 from typing import Any, ParamSpec, TypeVar
 
 from ..citations import parse_single_citation
 from ..config import get_settings
-from ..exceptions import InvalidFilter
-from ..models import SourceProvenance
+from ..exceptions import InvalidFilter, NotFound, StorageUnavailable
+from ..models import InvalidatingJudgment, ProvisionRecord, SourceProvenance, StatutoryValidity
 from ..sanitize import frame_corpus_text
+from ..storage.point_in_time import reconstruct_provision_as_of
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -119,6 +120,105 @@ def resolve_act_and_ref(
             return parsed.act_or_court, parsed.base_ref, parsed.sub_ref
 
     return clean_act, clean_ref, None
+
+
+_STATUTE_STATUS_VALUES = frozenset(
+    {
+        "in_force",
+        "repealed",
+        "omitted",
+        "struck_down",
+        "read_down",
+        "partially_struck_down",
+        "kept_in_abeyance",
+        "substituted",
+        "unverified",
+    }
+)
+
+
+def frame_point_in_time(
+    pit_dict: dict[str, Any],
+    *,
+    doc_id: str,
+    provenance: SourceProvenance,
+) -> dict[str, Any]:
+    """Apply OWASP ``<corpus_text>`` framing to amendment and invalidation summaries."""
+    framed_amends: list[dict[str, Any]] = []
+    for idx, am in enumerate(pit_dict.get("applied_amendments") or []):
+        am_copy = dict(am)
+        if am_copy.get("summary"):
+            am_id = str(am_copy.get("amendment_id") or f"{doc_id}:am{idx}")
+            am_copy["summary"] = ensure_framed(
+                str(am_copy["summary"]),
+                doc_id=am_id,
+                provenance=provenance,
+            )
+        framed_amends.append(am_copy)
+    pit_dict["applied_amendments"] = framed_amends
+
+    inval = pit_dict.get("active_invalidation")
+    if isinstance(inval, dict) and inval.get("holding_summary"):
+        inval_copy = dict(inval)
+        inval_copy["holding_summary"] = ensure_framed(
+            str(inval_copy["holding_summary"]),
+            doc_id=str(inval_copy.get("case_id") or f"{doc_id}:inval"),
+            provenance=provenance,
+        )
+        pit_dict["active_invalidation"] = inval_copy
+    return pit_dict
+
+
+def apply_point_in_time(
+    rec: ProvisionRecord,
+    backend: Any,
+    as_of_date: Date,
+    *,
+    commercial_safe_only: bool = False,
+) -> tuple[str, StatutoryValidity, dict[str, Any]]:
+    """Reconstruct provision text, validity, and OWASP-framed point-in-time metadata as of ``as_of_date``."""
+    amends: list[Any] = []
+    invals: list[Any] = []
+    try:
+        hist = backend.get_provision_history(
+            rec.act,
+            rec.ref,
+            limit=106,
+            commercial_safe_only=commercial_safe_only,
+        )
+        amends = hist.amendments
+        invals = hist.judicial_validity_events
+    except (NotFound, StorageUnavailable):
+        pass
+
+    pit = reconstruct_provision_as_of(rec, amends, invals, as_of_date)
+    validity_updates: dict[str, Any] = {"verified_as_of": pit.as_of}
+    if pit.effective_status in _STATUTE_STATUS_VALUES:
+        validity_updates["status"] = pit.effective_status
+    if isinstance(pit.active_invalidation, InvalidatingJudgment):
+        validity_updates["invalidating_judgment"] = pit.active_invalidation
+    elif pit.active_invalidation is None:
+        validity_updates["invalidating_judgment"] = None
+    validity = rec.validity.model_copy(update=validity_updates)
+
+    active_inval_dict: dict[str, Any] | None = None
+    if isinstance(pit.active_invalidation, InvalidatingJudgment):
+        active_inval_dict = pit.active_invalidation.model_dump(mode="json")
+    elif isinstance(pit.active_invalidation, Mapping):
+        active_inval_dict = dict(pit.active_invalidation)
+
+    pit_meta = frame_point_in_time(
+        {
+            "effective_status": pit.effective_status,
+            "as_of": pit.as_of.isoformat(),
+            "applied_amendments": pit.applied_amendments,
+            "active_invalidation": active_inval_dict,
+            "reconstruction_basis": pit.reconstruction_basis,
+        },
+        doc_id=rec.doc_id,
+        provenance=rec.provenance,
+    )
+    return pit.text, validity, pit_meta
 
 
 def run_sync(func: Callable[P, T]) -> Callable[P, Any]:

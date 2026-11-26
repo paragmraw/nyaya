@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from ...storage.sqlite_store import SCHEMA_DDL
-from ..extract.citations import extract_citation_edges
 from ..extract.normalize import normalize_legal_record
 from ..fetchers.official_statutes import (
     load_amendments_yaml,
@@ -20,8 +19,13 @@ from ..fetchers.official_statutes import (
     load_invalidations_yaml,
 )
 from ..fetchers.research_packs import sanitize_ddl_district_rows, tag_ildc_research_rows
+from ..fetchers.tribunals_regulators import (
+    load_cpc_first_schedule_yaml,
+    load_tax_concordance_yaml,
+)
 from ..lockfile import DEFAULT_LOCKFILE_PATH, load_and_validate_lockfile
 from ..state import dedupe_and_merge_hc_rows
+from .citation_graph import build_citation_edges_for_corpus
 
 
 def _sha256_text(text: str) -> str:
@@ -84,6 +88,8 @@ class IngestInputBundle:
     ildc_rows: list[dict[str, Any]] = field(default_factory=list)
     citation_edges: list[dict[str, Any]] = field(default_factory=list)
     hc_row_count: int = 0
+    cad_debates: list[dict[str, Any]] = field(default_factory=list)
+    cause_lists: list[dict[str, Any]] = field(default_factory=list)
 
 
 def create_mini_ingest_input() -> IngestInputBundle:
@@ -313,6 +319,40 @@ def create_mini_ingest_input() -> IngestInputBundle:
             "commercial_safe": 1,
             "as_of": "2026-11-22",
         },
+        {
+            "act_id": "it-act-2025",
+            "short_name": "ITAct2025",
+            "full_name": "The Income-tax Act, 2025",
+            "year": 2025,
+            "act_number": "Act No. 12 of 2025",
+            "jurisdiction": "Central",
+            "category": "central_act",
+            "status": "in_force",
+            "commencement_date": "2026-04-01",
+            "repeal_date": None,
+            "replaced_by_act": None,
+            "storage_tier": "sqlite_core",
+            "source_id": "indiacode_central_acts",
+            "commercial_safe": 1,
+            "as_of": "2026-11-26",
+        },
+        {
+            "act_id": "it-act-1961",
+            "short_name": "ITAct1961",
+            "full_name": "The Income-tax Act, 1961",
+            "year": 1961,
+            "act_number": "Act No. 43 of 1961",
+            "jurisdiction": "Central",
+            "category": "central_act",
+            "status": "repealed",
+            "commencement_date": "1962-04-01",
+            "repeal_date": "2026-04-01",
+            "replaced_by_act": "it-act-2025",
+            "storage_tier": "sqlite_core",
+            "source_id": "indiacode_central_acts",
+            "commercial_safe": 1,
+            "as_of": "2026-11-26",
+        },
     ]
 
     aliases = [
@@ -348,6 +388,16 @@ def create_mini_ingest_input() -> IngestInputBundle:
         ("mofa", "mh-mofa-1963"),
         ("sebi lodr", "sebi-lodr-2015"),
         ("sebi-lodr", "sebi-lodr-2015"),
+        ("itact1961", "it-act-1961"),
+        ("it act 1961", "it-act-1961"),
+        ("incometax1961", "it-act-1961"),
+        ("income tax act 1961", "it-act-1961"),
+        ("income-tax act 1961", "it-act-1961"),
+        ("itact2025", "it-act-2025"),
+        ("it act 2025", "it-act-2025"),
+        ("incometax2025", "it-act-2025"),
+        ("income tax act 2025", "it-act-2025"),
+        ("income-tax act 2025", "it-act-2025"),
     ]
 
     provisions = [
@@ -881,6 +931,79 @@ def create_mini_ingest_input() -> IngestInputBundle:
         },
     ]
 
+    cad_debates = [
+        {
+            "chunk_id": "cad:vol7:art21:ambedkar",
+            "debate_id": "cad-vol7-1948-12-06",
+            "volume": "Vol VII",
+            "sitting_date": "1948-12-06",
+            "year": 1948,
+            "speaker": "Dr. B.R. Ambedkar",
+            "article_ref": "Article 21",
+            "title": "Constituent Assembly Debate on Article 21 (Procedure Established by Law)",
+            "text": (
+                "The question of substance in Draft Article 15 (Article 21 of the Constitution of India) "
+                "is whether personal liberty and due process require judicial scrutiny against arbitrary "
+                "executive detention and deprivation without procedure established by law."
+            ),
+            "commercial_safe": True,
+            "terms_status": "cleared",
+            "license_spdx": "IN-S52-1-q",
+            "source_id": "legislative_constitution",
+            "source_url": "https://constitutionofindia.net/debates/06-dec-1948/",
+        },
+        {
+            "chunk_id": "cad:vol7:art32:ambedkar",
+            "debate_id": "cad-vol7-1948-12-09",
+            "volume": "Vol VII",
+            "sitting_date": "1948-12-09",
+            "year": 1948,
+            "speaker": "Dr. B.R. Ambedkar",
+            "article_ref": "Article 32",
+            "title": "Constituent Assembly Debate on Article 32 (Heart and Soul of the Constitution)",
+            "text": (
+                "If I was asked to name any particular article in this Constitution as the most "
+                "important—an article without which this Constitution would be a nullity—I could not "
+                "refer to any other article except this one, Draft Article 25 (Article 32). It is the "
+                "very soul of the Constitution and the very heart of it."
+            ),
+            "commercial_safe": True,
+            "terms_status": "cleared",
+            "license_spdx": "IN-S52-1-q",
+            "source_id": "legislative_constitution",
+            "source_url": "https://constitutionofindia.net/debates/09-dec-1948/",
+        },
+    ]
+
+    cause_lists = [
+        {
+            "court": "Supreme Court of India",
+            "cause_list_date": "2026-11-26",
+            "bench": "Court No. 1 (Chief Justice's Court)",
+            "judge": "Hon'ble Chief Justice of India",
+            "item_number": "1",
+            "case_number": "W.P.(C) No. 1012/2026",
+            "cnr": "SCIN010010122026",
+            "parties": "Union of India v. Bar Council Petitioners",
+            "advocates": ["Attorney General for India", "Sr. Adv. A. Counsel"],
+            "purpose": "Final Hearing",
+            "source_url": "https://www.sci.gov.in/daily-cause-list",
+        },
+        {
+            "court": "High Court of Delhi",
+            "cause_list_date": "2026-11-26",
+            "bench": "DB-I",
+            "judge": "Hon'ble Chief Justice & Bench",
+            "item_number": "12",
+            "case_number": "W.P.(C) 4421/2026",
+            "cnr": "DLHC010044212026",
+            "parties": "Rohan Sharma v. State of NCT of Delhi",
+            "advocates": ["Adv. Meera Krishnan"],
+            "purpose": "Anticipatory Bail / Urgent Mentioning",
+            "source_url": "https://delhihighcourt.nic.in/causelist",
+        },
+    ]
+
     return IngestInputBundle(
         acts=acts,
         aliases=aliases,
@@ -894,6 +1017,8 @@ def create_mini_ingest_input() -> IngestInputBundle:
         regulator_order_rows=regulator_order_rows,
         ildc_rows=ildc_rows,
         citation_edges=edges,
+        cad_debates=cad_debates,
+        cause_lists=cause_lists,
     )
 
 
@@ -906,10 +1031,12 @@ def build_sqlite_core(
     concordance_path: Path | str | None = None,
     invalidations_path: Path | str | None = None,
     courts_path: Path | str | None = None,
+    cpc_schedule_path: Path | str | None = None,
+    tax_concordance_path: Path | str | None = None,
     commercial_safe_only: bool = False,
     include_hc_in_sqlite: bool | None = None,
 ) -> Path:
-    """Build staged `nyaya-core.sqlite`, populate all 12 tables + FTS5 indexes,
+    """Build staged `nyaya-core.sqlite`, populate all tables + FTS5 indexes,
     run integrity checks + VACUUM + ANALYZE, and emit `.sha256`.
     """
     bundle = input_data or create_mini_ingest_input()
@@ -923,6 +1050,16 @@ def build_sqlite_core(
         load_concordance_yaml(concordance_path)
         if concordance_path is not None
         else load_concordance_yaml()
+    )
+    tax_concordance_list = (
+        load_tax_concordance_yaml(tax_concordance_path)
+        if tax_concordance_path is not None
+        else load_tax_concordance_yaml()
+    )
+    cpc_schedule_list = (
+        load_cpc_first_schedule_yaml(cpc_schedule_path)
+        if cpc_schedule_path is not None
+        else load_cpc_first_schedule_yaml()
     )
     invalidations_list = (
         load_invalidations_yaml(invalidations_path)
@@ -968,11 +1105,70 @@ def build_sqlite_core(
         ]
         _flush_batches(con, "INSERT OR REPLACE INTO sources VALUES (?,?,?,?,?,?,?,?,?,?,?)", source_rows)
 
-        # 2. Populate acts & aliases
+        # 2. Populate acts & aliases (ensure CPC & Income-tax acts exist if referenced by schedule/concordance)
+        effective_acts = list(bundle.acts)
+        present_act_ids = {str(a["act_id"]) for a in effective_acts}
+        for default_act in (
+            {
+                "act_id": "cpc-1908",
+                "short_name": "CPC",
+                "full_name": "The Code of Civil Procedure, 1908",
+                "year": 1908,
+                "act_number": "Act No. 5 of 1908",
+                "jurisdiction": "Central",
+                "category": "central_act",
+                "status": "in_force",
+                "commencement_date": "1909-01-01",
+                "repeal_date": None,
+                "replaced_by_act": None,
+                "storage_tier": "sqlite_core",
+                "source_id": "indiacode_central_acts",
+                "commercial_safe": 1,
+                "as_of": lock.updated_at,
+            },
+            {
+                "act_id": "it-act-2025",
+                "short_name": "ITAct2025",
+                "full_name": "The Income-tax Act, 2025",
+                "year": 2025,
+                "act_number": "Act No. 12 of 2025",
+                "jurisdiction": "Central",
+                "category": "central_act",
+                "status": "in_force",
+                "commencement_date": "2026-04-01",
+                "repeal_date": None,
+                "replaced_by_act": None,
+                "storage_tier": "sqlite_core",
+                "source_id": "indiacode_central_acts",
+                "commercial_safe": 1,
+                "as_of": lock.updated_at,
+            },
+            {
+                "act_id": "it-act-1961",
+                "short_name": "ITAct1961",
+                "full_name": "The Income-tax Act, 1961",
+                "year": 1961,
+                "act_number": "Act No. 43 of 1961",
+                "jurisdiction": "Central",
+                "category": "central_act",
+                "status": "repealed",
+                "commencement_date": "1962-04-01",
+                "repeal_date": "2026-04-01",
+                "replaced_by_act": "it-act-2025",
+                "storage_tier": "sqlite_core",
+                "source_id": "indiacode_central_acts",
+                "commercial_safe": 1,
+                "as_of": lock.updated_at,
+            },
+        ):
+            if default_act["act_id"] not in present_act_ids:
+                effective_acts.append(default_act)
+                present_act_ids.add(str(default_act["act_id"]))
+
         act_short_by_id: dict[str, str] = {}
         seen_short_names: set[str] = set()
         act_rows: list[tuple[Any, ...]] = []
-        for act in bundle.acts:
+        for act in effective_acts:
             if commercial_safe_only and not bool(act.get("commercial_safe", 1)):
                 continue
             act_id = str(act["act_id"])
@@ -1006,9 +1202,24 @@ def build_sqlite_core(
         act_commencement_by_id: dict[str, Any] = {a[0]: a[8] for a in act_rows}
         act_repeal_by_id: dict[str, Any] = {a[0]: a[9] for a in act_rows}
 
+        effective_aliases = list(bundle.aliases)
+        for fallback_alias in (
+            ("cpc", "cpc-1908"),
+            ("itact1961", "it-act-1961"),
+            ("it act 1961", "it-act-1961"),
+            ("incometax1961", "it-act-1961"),
+            ("income tax act 1961", "it-act-1961"),
+            ("itact2025", "it-act-2025"),
+            ("it act 2025", "it-act-2025"),
+            ("incometax2025", "it-act-2025"),
+            ("income tax act 2025", "it-act-2025"),
+        ):
+            if fallback_alias not in effective_aliases:
+                effective_aliases.append(fallback_alias)
+
         alias_rows = [
             (alias_lower.strip().lower(), target_act_id)
-            for alias_lower, target_act_id in bundle.aliases
+            for alias_lower, target_act_id in effective_aliases
             if target_act_id in act_short_by_id and alias_lower.strip()
         ]
         _flush_batches(con, "INSERT OR REPLACE INTO act_aliases VALUES (?,?)", alias_rows)
@@ -1098,11 +1309,45 @@ def build_sqlite_core(
                 continue
             _queue_provision(p)
 
-        # Ensure every provision referenced in concordance_list exists
-        for m in concordance_list:
+        # Load CPC First Schedule Orders & Rules from cpc_first_schedule.yaml
+        for cpc_item in cpc_schedule_list:
+            if commercial_safe_only and not bool(cpc_item.get("commercial_safe", True)):
+                continue
+            _queue_provision(
+                {
+                    "doc_id": cpc_item["doc_id"],
+                    "act_id": str(cpc_item.get("act_id") or "cpc-1908"),
+                    "act_short": str(cpc_item.get("act_short") or "CPC"),
+                    "kind": str(cpc_item.get("kind") or "order_rule"),
+                    "ref": str(cpc_item["ref"]),
+                    "ref_norm": str(cpc_item.get("ref_norm") or cpc_item["ref"]).upper(),
+                    "chapter_num": cpc_item.get("order_roman") or cpc_item.get("order_number"),
+                    "chapter_title": cpc_item.get("order_title"),
+                    "title": cpc_item.get("title"),
+                    "text": cpc_item.get("text") or cpc_item.get("title") or "",
+                    "status": str(cpc_item.get("status") or "in_force"),
+                    "commencement_date": act_commencement_by_id.get("cpc-1908") or "1909-01-01",
+                    "metadata": {
+                        "order_number": cpc_item.get("order_number"),
+                        "order_roman": cpc_item.get("order_roman"),
+                        "rule_number": cpc_item.get("rule_number"),
+                    },
+                    "source_id": str(cpc_item.get("source_id") or "indiacode_central_acts"),
+                    "source_url": str(cpc_item.get("source_url") or VAQUILL_CENTRAL_LEGISLATION_URL),
+                }
+            )
+
+        all_concordance = [*concordance_list, *tax_concordance_list]
+
+        # Ensure every provision referenced in criminal + tax concordance exists
+        for m in all_concordance:
             old_act_id = str(m["old_act_id"])
             old_ref = str(m["old_ref"])
             old_doc_id = f"{old_act_id}:{old_ref}"
+            default_old_source = (
+                "indiacode_central_acts" if old_act_id == "it-act-1961" else "vaquill_central_legislation"
+            )
+            default_new_date = "2026-04-01" if str(m.get("new_act_id") or "") == "it-act-2025" else "2024-07-01"
             if old_doc_id not in inserted_provisions:
                 _queue_provision(
                     {
@@ -1112,12 +1357,12 @@ def build_sqlite_core(
                         "kind": "section",
                         "ref": old_ref,
                         "ref_norm": old_ref.upper(),
-                        "title": f"{m['old_act']} Section {old_ref}",
+                        "title": m.get("title") or f"{m['old_act']} Section {old_ref}",
                         "text": f"Section {old_ref} of {m['old_act']}: {m['substantive_delta']}",
                         "status": inval_status_by_doc.get(old_doc_id, "repealed"),
                         "commencement_date": act_commencement_by_id.get(old_act_id),
-                        "repeal_date": act_repeal_by_id.get(old_act_id) or "2024-07-01",
-                        "source_id": "vaquill_central_legislation",
+                        "repeal_date": act_repeal_by_id.get(old_act_id) or default_new_date,
+                        "source_id": str(m.get("source_id") or default_old_source),
                         "source_url": VAQUILL_CENTRAL_LEGISLATION_URL,
                     }
                 )
@@ -1128,6 +1373,9 @@ def build_sqlite_core(
                 new_doc_id = f"{new_act_id}:{new_ref}"
                 base_ref = str(m.get("new_base_ref") or new_ref.split("(", 1)[0])
                 base_doc_id = f"{new_act_id}:{base_ref}"
+                default_conc_source = (
+                    "indiacode_central_acts" if new_act_id == "it-act-2025" else "prs_2026_delta"
+                )
                 if new_doc_id not in inserted_provisions:
                     parent = prov_by_doc_id.get(base_doc_id)
                     if parent is not None:
@@ -1148,7 +1396,7 @@ def build_sqlite_core(
                                 "commencement_date": (
                                     parent.get("commencement_date")
                                     or act_commencement_by_id.get(new_act_id)
-                                    or "2024-07-01"
+                                    or default_new_date
                                 ),
                                 "metadata": {
                                     "parent_doc_id": base_doc_id,
@@ -1168,11 +1416,11 @@ def build_sqlite_core(
                                 "kind": "section",
                                 "ref": new_ref,
                                 "ref_norm": new_ref.upper(),
-                                "title": f"{m['new_act']} Section {new_ref}",
+                                "title": m.get("title") or f"{m['new_act']} Section {new_ref}",
                                 "text": f"Section {new_ref} of {m['new_act']}: {m['substantive_delta']}",
                                 "status": "in_force",
-                                "commencement_date": act_commencement_by_id.get(new_act_id) or "2024-07-01",
-                                "source_id": "prs_2026_delta",
+                                "commencement_date": act_commencement_by_id.get(new_act_id) or default_new_date,
+                                "source_id": str(m.get("source_id") or default_conc_source),
                                 "source_url": "https://prsindia.org/files/bills_acts/acts_parliament/2026/prs_2026_delta.json",
                             }
                         )
@@ -1189,8 +1437,8 @@ def build_sqlite_core(
                             "title": f"{m['new_act']} Section {base_ref}",
                             "text": f"Section {base_ref} of {m['new_act']}: {m['substantive_delta']}",
                             "status": "in_force",
-                            "commencement_date": act_commencement_by_id.get(new_act_id) or "2024-07-01",
-                            "source_id": "prs_2026_delta",
+                            "commencement_date": act_commencement_by_id.get(new_act_id) or default_new_date,
+                            "source_id": str(m.get("source_id") or default_conc_source),
                             "source_url": "https://prsindia.org/files/bills_acts/acts_parliament/2026/prs_2026_delta.json",
                         }
                     )
@@ -1252,9 +1500,9 @@ def build_sqlite_core(
             amend_rows,
         )
 
-        # 5. Populate Criminal Concordance from criminal_concordance.yaml
+        # 5. Populate Criminal & Tax Concordance from criminal_concordance.yaml + tax_concordance.yaml
         conc_rows = []
-        for idx, m in enumerate(concordance_list, start=1):
+        for idx, m in enumerate(all_concordance, start=1):
             old_doc_id = f"{m['old_act_id']}:{m['old_ref']}"
             new_ref = str(m.get("new_ref") or "NONE")
             conc_new_doc_id: str | None = (
@@ -1266,6 +1514,11 @@ def build_sqlite_core(
                 continue
             if conc_new_doc_id is not None and conc_new_doc_id not in inserted_provisions:
                 conc_new_doc_id = None
+            raw_oc = m.get("offence_classification")
+            oc_json = json.dumps(raw_oc, sort_keys=True) if isinstance(raw_oc, dict) else None
+            default_src = (
+                "indiacode_central_acts" if m.get("old_act_id") == "it-act-1961" else "prs_2026_delta"
+            )
             conc_rows.append(
                 (
                     idx,
@@ -1277,10 +1530,15 @@ def build_sqlite_core(
                     m.get("procedural_delta"),
                     m.get("savings_note"),
                     str(m.get("verified_by") or "bprd_official_table_v1"),
-                    "prs_2026_delta",
+                    str(m.get("source_id") or default_src),
+                    oc_json,
                 )
             )
-        _flush_batches(con, "INSERT OR REPLACE INTO concordance VALUES (?,?,?,?,?,?,?,?,?,?)", conc_rows)
+        _flush_batches(
+            con,
+            "INSERT OR REPLACE INTO concordance VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            conc_rows,
+        )
 
         # 6. Populate Judicial Invalidations from judicial_invalidations.yaml
         inval_rows = [
@@ -1373,32 +1631,20 @@ def build_sqlite_core(
             jmeta_rows,
         )
 
-        # 8. Populate citation_edges (curated + automated extraction)
+        # 8. Populate citation_edges (curated + corpus-wide automated extraction)
         edge_rows = list(bundle.citation_edges)
-        for _, j in all_judgments:
-            if j.get("text"):
-                extracted = extract_citation_edges(
-                    from_id=str(j["case_id"]),
-                    from_kind="judgment",
-                    text=str(j["text"]),
-                    from_year=int(j["year"]) if j.get("year") is not None else None,
-                    from_bench_strength=int(j["bench_strength"]) if j.get("bench_strength") is not None else None,
-                    known_judgment_map={
-                        "judgment::AIR::1973:SC:1461": "sc:1973:kesavananda",
-                        "judgment::SCC::2017:10::1": "sc:2017:puttaswamy",
-                        "judgment::SCC::2015:5::1": "sc:2015:shreya-singhal",
-                    },
-                    known_provision_map={
-                        "statute::Constitution::14": "constitution:art:14",
-                        "statute::Constitution::19": "constitution:art:19",
-                        "statute::Constitution::21": "constitution:art:21",
-                        "statute::Constitution::368": "constitution:art:368",
-                        "statute::ITAct::66A": "it-act-2000:66A",
-                        "statute::CrPC::438": "crpc-1973:438",
-                        "statute::BNSS::482": "bnss-2023:482",
-                    },
-                )
-                edge_rows.extend(extracted)
+        alias_dict = {
+            alias: act_short_by_id[aid]
+            for alias, aid in alias_rows
+            if aid in act_short_by_id
+        }
+        corpus_edges = build_citation_edges_for_corpus(
+            bundle.sc_judgments,
+            [*merged_hc, *bundle.ildc_rows],
+            provisions=prov_by_doc_id.values(),
+            alias_map=alias_dict,
+        )
+        edge_rows.extend(corpus_edges)
 
         edge_tuples = [
             (
@@ -1445,6 +1691,40 @@ def build_sqlite_core(
                     (str(dattam_code), c_name, c_tier, str(dattam_code), b_name, state_ut, seat_city, juris_csv)
                 )
         _flush_batches(con, "INSERT OR REPLACE INTO courts VALUES (?,?,?,?,?,?,?,?)", court_tuples)
+
+        # 9b. Populate cause_lists (official SC/HC feeds)
+        cl_tuples: list[tuple[Any, ...]] = []
+        for idx, cl in enumerate(bundle.cause_lists, start=1):
+            adv_raw = cl.get("advocates")
+            if isinstance(adv_raw, list):
+                adv_json = json.dumps([str(x) for x in adv_raw if str(x).strip()])
+            elif isinstance(adv_raw, str) and adv_raw.strip().startswith("["):
+                adv_json = adv_raw.strip()
+            elif adv_raw:
+                adv_json = json.dumps([str(adv_raw).strip()])
+            else:
+                adv_json = "[]"
+            cl_tuples.append(
+                (
+                    idx,
+                    str(cl.get("court") or ""),
+                    str(cl.get("cause_list_date") or ""),
+                    cl.get("bench"),
+                    cl.get("judge"),
+                    cl.get("item_number"),
+                    cl.get("case_number"),
+                    cl.get("cnr"),
+                    cl.get("parties"),
+                    adv_json,
+                    cl.get("purpose"),
+                    str(cl.get("source_url") or ""),
+                )
+            )
+        _flush_batches(
+            con,
+            "INSERT OR REPLACE INTO cause_lists VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            cl_tuples,
+        )
 
         # 10. Compute real record counts per source_id, rebuild FTS5 virtual tables, and verify integrity
         source_counts: dict[str, int] = {}

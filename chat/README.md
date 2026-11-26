@@ -1,6 +1,6 @@
 # nyaya-chat
 
-LangGraph + FastAPI chat backend (**v2.0.0**, Python `>=3.11`) for [nyaya](../README.md). A retrieval-grounded Indian-law assistant powered by `ChatNVIDIA` (`langchain-nvidia-ai-endpoints`, default model `nvidia/nemotron-3.5-lightning-30b-a3b`) and backed by Nyaya v2.0's pure-lexical/metadata/graph corpus.
+LangGraph + FastAPI chat backend (**v2.1.0**, Python `>=3.11`) for [nyaya](../README.md). A retrieval-grounded Indian-law assistant powered by `ChatNVIDIA` (`langchain-nvidia-ai-endpoints`, default model `nvidia/nemotron-3.5-lightning-30b-a3b`) and backed by Nyaya v2.1's pure-lexical/metadata/graph corpus (with optional opt-in hybrid RRF).
 
 ## Architecture
 
@@ -16,7 +16,7 @@ The chat sub-app is mounted into `nyaya.http_app` at `/chat` whenever `NVIDIA_AP
 
 - **Intent Guardrail (`guardrail.py`):** Two-tier pre-agent classifier (Tier 1 instant regex/keyword patterns; Tier 2 Nemotron structured output with `max_tokens=32`, `5s` timeout, failing open to `LEGAL`). Non-legal turns (greetings, capabilities, thanks, off-topic) stream canned SSE responses without invoking tools.
 - **Agent (`graph/agent.py`):** 2-node LangGraph graph (`START -> agent -> (tools -> agent | END)`) with `DedupToolNode`, optional 1-round gated reflection (`MAX_REFLECTION_ROUNDS=1`, `REFLECTION_DEADLINE_S=12.0`), `TURN_BUDGET_S=60.0`, and `SYNTHESIS_THINKING=False` / `SYNTHESIS_MAX_TOKENS=6144`. Skips outer `<corpus_text>` double-wrapping whenever tool JSON already carries parameterized `<corpus_text ...>` envelopes, and treats only `storage_unavailable` / `database_unavailable` as hard storage failures.
-- **8-Tool v2 Allowlist (`tools_layer/spec.py`):** Exposes 8 of the 12 MCP v2 tools to the agent:
+- **8-Tool v2.1 Allowlist (`tools_layer/spec.py`):** `TOOL_SCHEMAS` defines Pydantic schemas for all 15 MCP v2.1 tools, while `TOOL_SPECS` / `DEFAULT_TOOLS` exposes the curated 8-tool allowlist to the agent:
   `search_statutes`, `get_provision`, `compare_provisions`, `browse_statute`, `get_provision_history`, `search_judgments`, `get_judgment`, `trace_precedent`.
   Native mode (`tools_layer/native.py`) calls `nyaya.tools.*` functions directly in-process; fallback mode (`tools_layer/mcp_fallback.py`) calls `MCP_URL` over Streamable HTTP.
 - **Shared Citation Verification (`citations.py` -> `nyaya.citations`):** Preserves inline `[[act: X, ref: Y]]` streaming markers while validating against canonical structural keys (`extract_grounded_keys`), covering SC/HC neutral citations (`2024 INSC 123`, `2024:DHC:1234`), 16-char CNRs, AIR/SCC/SCR, CPC `O.7 R.11`, and sub-sections (`s.65B(4)`), and rejecting mismatched page/section hallucinations (e.g., `AIR 1973 SC 9999` vs `AIR 1973 SC 1461`).
@@ -57,7 +57,7 @@ All LLM parameters (`LLM_MODEL`, `SYNTHESIS_MODEL`, `SYNTHESIS_MAX_TOKENS`, `TUR
 
 ### `GET /chat/` & `GET /chat/openapi.json`
 
-Returns the sub-app service info payload (`{"service": "nyaya-chat", "version": "2.0.0", "turn": "POST /chat/turn", "health": "GET /chat/health"}`) and OpenAPI schema.
+Returns the sub-app service info payload (`{"service": "nyaya-chat", "version": ..., "turn": "POST /chat/turn", "health": "GET /chat/health"}`) and OpenAPI schema.
 
 ### `GET /chat/health`
 

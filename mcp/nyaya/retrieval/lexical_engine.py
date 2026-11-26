@@ -9,7 +9,7 @@ import re
 from datetime import date as Date
 from typing import Any
 
-from ..citations import court_code_variants, court_display_name
+from ..citations import court_code_variants, court_display_name, normalize_jurisdiction
 from ..config import Settings
 from ..exceptions import CommercialLicenseBlocked, QueryTooBroad, StorageUnavailable
 from ..models import (
@@ -24,7 +24,15 @@ from ..models import (
     TextAvailability,
 )
 from ..storage.duckdb_store import DuckDBStore
-from ..storage.lance_store import LanceStore
+from ..storage.lance_store import (
+    CAD_DEBATES_TABLE,
+    HC_HOT_CHUNKS_TABLE,
+    SC_CHUNKS_TABLE,
+    STATE_ACTS_REGULATORS_TABLE,
+    TRIBUNAL_CHUNKS_TABLE,
+    LanceStore,
+    _sql_str,
+)
 from ..storage.memory_backend import InMemoryCorpusBackend
 from ..storage.protocols import CorpusBackend
 from ..storage.sqlite_store import (
@@ -34,6 +42,7 @@ from ..storage.sqlite_store import (
     _multitoken_min_required,
     _token_matches_boundary,
 )
+from .hybrid import HashedNgramEmbeddingProvider, OpenAICompatibleEmbeddingProvider
 from .query_analyzer import analyze_query
 from .ranking import (
     apply_definition_promotion,
@@ -248,12 +257,17 @@ def _lance_row_to_judgment_card(
         else _resolve_court_display_name(
             row.get("court_name"),
             court_code,
-            fallback="High Court",
+            fallback="Tribunal" if tier == "tribunal" else "High Court",
         )
     )
     title_str = str(row.get("title") or "Untitled")
     text_str = str(row.get("text") or "")
-    source_id = str(row.get("source_id") or ("dattam-sc" if tier == "supreme_court" else "dattam-hc"))
+    default_source = (
+        "dattam-sc"
+        if tier == "supreme_court"
+        else ("vaquill_tribunals" if tier == "tribunal" else "dattam-hc")
+    )
+    source_id = str(row.get("source_id") or default_source)
     text_avail: TextAvailability = (
         "on_demand_s3_pdf"
         if source_id in _DATTAM_SOURCES and len(text_str) <= len(title_str) + 60
@@ -290,6 +304,41 @@ def _lance_row_to_judgment_card(
     )
 
 
+def _cad_row_to_statute_hit(row: dict[str, Any]) -> StatuteHit:
+    d_raw = str(row.get("sitting_date") or "")[:10]
+    try:
+        d_val = Date.fromisoformat(d_raw) if d_raw else None
+    except ValueError:
+        d_val = None
+    speaker = str(row.get("speaker") or "").strip()
+    volume = str(row.get("volume") or "").strip()
+    article_ref = str(row.get("article_ref") or volume or row.get("debate_id") or "Debate").strip()
+    title = str(row.get("title") or "").strip() or (
+        f"Constituent Assembly Debate ({speaker})" if speaker else "Constituent Assembly Debate"
+    )
+    return StatuteHit(
+        doc_id=str(row.get("chunk_id") or row.get("debate_id") or f"cad:{article_ref}"),
+        act="CAD",
+        jurisdiction="Central",
+        kind="cad_debate",
+        ref=article_ref,
+        title=title,
+        status="in_force",
+        snippet=str(row.get("text") or "")[:400],
+        bm25_score=float(row.get("_score") or 0.0),
+        provenance=SourceProvenance(
+            source_id=str(row.get("source_id") or "legislative_constitution"),
+            source_name="Constituent Assembly Debates",
+            source_url=str(row.get("source_url") or "https://constitutionofindia.net/debates/"),
+            license_spdx=str(row.get("license_spdx") or "IN-S52-1-q"),
+            commercial_safe=bool(row.get("commercial_safe", True)),
+            terms_status=row.get("terms_status") or "cleared",
+            as_of=d_val or Date(1950, 1, 26),
+            content_sha256=row.get("text_sha256"),
+        ),
+    )
+
+
 class LexicalRetrievalEngine:
     """Lexical + Metadata + Citation-Graph RetrievalEngine."""
 
@@ -309,6 +358,23 @@ class LexicalRetrievalEngine:
         self.duckdb = duckdb
         self.embedder = embedder
         self.reranker = reranker
+
+    def _resolve_embedding_provider(self) -> Any:
+        if not self.settings.hybrid_search:
+            return None
+        if self.embedder is not None:
+            return self.embedder
+        lance_ep = getattr(self.lance, "embedding_provider", None) if self.lance is not None else None
+        if lance_ep is not None:
+            return lance_ep
+        if self.settings.embedding_endpoint:
+            self.embedder = OpenAICompatibleEmbeddingProvider(
+                endpoint=self.settings.embedding_endpoint,
+                model=self.settings.embedding_model or "BAAI/bge-m3",
+            )
+        else:
+            self.embedder = HashedNgramEmbeddingProvider()
+        return self.embedder
 
     def _effective_cs(self, commercial_safe_only: bool | None) -> bool:
         return (
@@ -386,22 +452,73 @@ class LexicalRetrievalEngine:
                 limit=max(50, offset + limit),
             )
 
-        # 3. LanceDB State Acts & Regulators FTS
+        # 3. LanceDB State Acts & Regulators (+ optional Constituent Assembly Debates & hybrid RRF)
         lance_hits: list[StatuteHit] = []
+        hybrid_provider = self._resolve_embedding_provider()
         if self.lance is not None:
             try:
-                l_rows = self.lance.search_state_regulators(
-                    q.query,
-                    act=q.act,
-                    jurisdiction=q.jurisdiction,
-                    category=q.category,
-                    status=q.status,
-                    commercial_safe_only=cs_only,
-                    limit=max(25, offset + limit),
-                )
+                if hybrid_provider is not None and hasattr(self.lance, "hybrid_search"):
+                    sr_clauses: list[str] = []
+                    if cs_only:
+                        sr_clauses.append("commercial_safe = true")
+                    if q.act:
+                        sr_clauses.append(f"short_name = {_sql_str(q.act.strip())}")
+                    norm_juris = normalize_jurisdiction(q.jurisdiction)
+                    if norm_juris:
+                        sr_clauses.append(f"jurisdiction = {_sql_str(norm_juris)}")
+                    if q.category:
+                        sr_clauses.append(f"category = {_sql_str(q.category.strip())}")
+                    if q.status and q.status != "all":
+                        sr_clauses.append(f"status = {_sql_str(q.status.strip())}")
+                    l_rows = self.lance.hybrid_search(
+                        STATE_ACTS_REGULATORS_TABLE,
+                        q.query,
+                        filters=sr_clauses,
+                        embedding_provider=hybrid_provider,
+                        commercial_safe_only=cs_only,
+                        limit=max(25, offset + limit),
+                    )
+                else:
+                    l_rows = self.lance.search_state_regulators(
+                        q.query,
+                        act=q.act,
+                        jurisdiction=q.jurisdiction,
+                        category=q.category,
+                        status=q.status,
+                        commercial_safe_only=cs_only,
+                        limit=max(25, offset + limit),
+                    )
                 lance_hits = [_lance_row_to_statute_hit(r) for r in l_rows]
             except StorageUnavailable:
                 degraded.append("lance_fts")
+
+            if (
+                q.category is None
+                and (not q.jurisdiction or q.jurisdiction.strip().lower() == "central")
+                and (not q.act or q.act.strip().upper() == "CAD")
+                and hasattr(self.lance, "search_cad_debates")
+            ):
+                try:
+                    if hybrid_provider is not None and hasattr(self.lance, "hybrid_search"):
+                        cad_clauses = ["commercial_safe = true"] if cs_only else []
+                        cad_rows = self.lance.hybrid_search(
+                            CAD_DEBATES_TABLE,
+                            q.query,
+                            filters=cad_clauses,
+                            embedding_provider=hybrid_provider,
+                            commercial_safe_only=cs_only,
+                            limit=min(10, max(5, limit)),
+                        )
+                    else:
+                        cad_rows = self.lance.search_cad_debates(
+                            q.query,
+                            commercial_safe_only=cs_only,
+                            limit=min(10, max(5, limit)),
+                        )
+                    lance_hits.extend(_cad_row_to_statute_hit(r) for r in cad_rows)
+                except StorageUnavailable as exc:
+                    if "could not be opened" not in str(exc):
+                        degraded.append("lance_fts")
 
         # Stopword-aware multi-token word-boundary overlap guard to suppress LanceDB OR-noise
         if lance_hits and q.query_mode != "exact_phrase" and not exact_hits and not q.act:
@@ -607,9 +724,10 @@ class LexicalRetrievalEngine:
                 commercial_safe_only=cs_only,
             )
 
-        # 3. LanceDB SC & HC full-text BM25 (plus pari-materia equivalent expansion queries)
+        # 3. LanceDB SC, HC & Tribunal full-text BM25 (+ optional hybrid RRF & pari-materia expansion)
         lance_direct: list[JudgmentCard] = []
         lance_equiv: list[JudgmentCard] = []
+        hybrid_provider = self._resolve_embedding_provider()
         if self.lance is not None and (q.query or analyzed.exact_statute_refs or analyzed.equivalent_statute_refs):
             base_q = (q.query or "").strip()
             if not base_q and analyzed.exact_statute_refs:
@@ -621,31 +739,120 @@ class LexicalRetrievalEngine:
                     variants = court_code_variants(q.court)
                     c_code = next((v for v in variants if "_" in v), None)
 
+                use_hybrid = hybrid_provider is not None and hasattr(self.lance, "hybrid_search")
+
                 if base_q and tier in ("all", "supreme_court"):
-                    for r in self.lance.search_sc(
-                        base_q,
-                        year_from=year_from,
-                        year_to=year_to,
-                        author_judge=q.author_judge,
-                        min_bench_strength=q.min_bench_strength,
-                        commercial_safe_only=cs_only,
-                        limit=30,
-                    ):
+                    if use_hybrid:
+                        sc_clauses: list[str] = []
+                        if cs_only:
+                            sc_clauses.append("commercial_safe = true")
+                        if year_from is not None:
+                            sc_clauses.append(f"year >= {int(year_from)}")
+                        if year_to is not None:
+                            sc_clauses.append(f"year <= {int(year_to)}")
+                        if q.author_judge:
+                            sc_clauses.append(f"author_judge = {_sql_str(q.author_judge.strip())}")
+                        if q.min_bench_strength is not None:
+                            sc_clauses.append(f"bench_strength >= {int(q.min_bench_strength)}")
+                        sc_rows = self.lance.hybrid_search(
+                            SC_CHUNKS_TABLE,
+                            base_q,
+                            filters=sc_clauses,
+                            embedding_provider=hybrid_provider,
+                            commercial_safe_only=cs_only,
+                            limit=30,
+                        )
+                    else:
+                        sc_rows = self.lance.search_sc(
+                            base_q,
+                            year_from=year_from,
+                            year_to=year_to,
+                            author_judge=q.author_judge,
+                            min_bench_strength=q.min_bench_strength,
+                            commercial_safe_only=cs_only,
+                            limit=30,
+                        )
+                    for r in sc_rows:
                         lance_direct.append(_lance_row_to_judgment_card(r, tier="supreme_court", matched_via="direct"))
                 if base_q and tier in ("all", "high_court"):
                     hc_limit = 150 if (tier == "high_court" and q.court is None) else 30
-                    for r in self.lance.search_hc(
-                        base_q,
-                        court_code=c_code,
-                        bench=q.bench,
-                        year_from=year_from,
-                        year_to=year_to,
-                        min_bench_strength=q.min_bench_strength,
-                        disposal_nature=q.disposal_nature,
-                        commercial_safe_only=cs_only,
-                        limit=hc_limit,
-                    ):
+                    if use_hybrid:
+                        hc_clauses: list[str] = []
+                        if cs_only:
+                            hc_clauses.append("commercial_safe = true")
+                        if c_code:
+                            hc_clauses.append(f"court_code = {_sql_str(c_code.strip())}")
+                        if q.bench:
+                            hc_clauses.append(f"bench = {_sql_str(q.bench.strip())}")
+                        if year_from is not None:
+                            hc_clauses.append(f"year >= {int(year_from)}")
+                        if year_to is not None:
+                            hc_clauses.append(f"year <= {int(year_to)}")
+                        if q.min_bench_strength is not None:
+                            hc_clauses.append(f"bench_strength >= {int(q.min_bench_strength)}")
+                        if q.disposal_nature:
+                            hc_clauses.append(f"disposal_nature = {_sql_str(q.disposal_nature.strip())}")
+                        hc_rows = self.lance.hybrid_search(
+                            HC_HOT_CHUNKS_TABLE,
+                            base_q,
+                            filters=hc_clauses,
+                            embedding_provider=hybrid_provider,
+                            commercial_safe_only=cs_only,
+                            limit=hc_limit,
+                        )
+                    else:
+                        hc_rows = self.lance.search_hc(
+                            base_q,
+                            court_code=c_code,
+                            bench=q.bench,
+                            year_from=year_from,
+                            year_to=year_to,
+                            min_bench_strength=q.min_bench_strength,
+                            disposal_nature=q.disposal_nature,
+                            commercial_safe_only=cs_only,
+                            limit=hc_limit,
+                        )
+                    for r in hc_rows:
                         lance_direct.append(_lance_row_to_judgment_card(r, tier="high_court", matched_via="direct"))
+
+                if base_q and tier in ("all", "tribunal") and hasattr(self.lance, "search_tribunals"):
+                    trib_court = str(q.court).strip() if isinstance(q.court, str) and q.court.strip() else None
+                    try:
+                        if use_hybrid:
+                            trib_clauses: list[str] = []
+                            if cs_only:
+                                trib_clauses.append("commercial_safe = true")
+                            if trib_court:
+                                trib_clauses.append(f"court_code = {_sql_str(trib_court)}")
+                            if year_from is not None:
+                                trib_clauses.append(f"year >= {int(year_from)}")
+                            if year_to is not None:
+                                trib_clauses.append(f"year <= {int(year_to)}")
+                            if q.disposal_nature:
+                                trib_clauses.append(f"disposal_nature = {_sql_str(q.disposal_nature.strip())}")
+                            trib_rows = self.lance.hybrid_search(
+                                TRIBUNAL_CHUNKS_TABLE,
+                                base_q,
+                                filters=trib_clauses,
+                                embedding_provider=hybrid_provider,
+                                commercial_safe_only=cs_only,
+                                limit=25,
+                            )
+                        else:
+                            trib_rows = self.lance.search_tribunals(
+                                base_q,
+                                court_code=trib_court,
+                                year_from=year_from,
+                                year_to=year_to,
+                                disposal_nature=q.disposal_nature,
+                                commercial_safe_only=cs_only,
+                                limit=25,
+                            )
+                        for r in trib_rows:
+                            lance_direct.append(_lance_row_to_judgment_card(r, tier="tribunal", matched_via="direct"))
+                    except StorageUnavailable as exc:
+                        if "could not be opened" not in str(exc):
+                            raise
 
                 if analyzed.equivalent_statute_refs:
                     eq_q = " ".join(f"{base_q} {a} {r}".strip() for a, r in analyzed.equivalent_statute_refs)
@@ -862,7 +1069,7 @@ class LexicalRetrievalEngine:
             results=page,
             coverage_note=(
                 "Indexed BM25 covers Supreme Court and hot/reportable High Court judgments; "
-                "broader High Court (20.7M), Tribunal (15 forums), and DDL District (2010-2018) "
+                "broader High Court (20.7M), Tribunal & Consumer Commission (24 forums), and DDL District (2010-2018) "
                 "records are searched via compacted Parquet metadata."
             ),
             degraded_sources=degraded,
@@ -870,7 +1077,7 @@ class LexicalRetrievalEngine:
 
     def health(self) -> dict[str, Any]:
         return {
-            "mode": "lexical_bm25",
+            "mode": "hybrid_rrf" if self.settings.hybrid_search else "lexical_bm25",
             "lance": self.lance.health() if self.lance else {"status": "unconfigured"},
             "duckdb": "ok" if self.duckdb else "unconfigured",
         }

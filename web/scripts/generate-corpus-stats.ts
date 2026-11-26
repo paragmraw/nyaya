@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build-time script to generate corpus-stats.json (Nyaya v2.0 CorpusStatusResponse).
+// Build-time script to generate corpus-stats.json (Nyaya v2.1 CorpusStatusResponse).
 //
 // Run via:  npm run generate:corpus-stats  (also runs as part of `npm run build`)
 // Optional: tsx scripts/generate-corpus-stats.ts --from-manifest path/to/corpus-status.json

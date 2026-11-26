@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Quality overhaul of retrieval, citation parsing, PDF extraction, and corpus hygiene, published as GitHub Release `corpus-v2026.11.25-p1` (`nyaya-core.sqlite.zst` + `manifest.json`). Live corpus counts after the release: 1,569 central acts, 8,544 state acts, 12,152 regulator instruments, 15 tribunals, 40,353 provisions, 38,292 SC judgments, 20,696,054 HC judgments, 813,168 tribunal orders, 615 citation edges.
+## [2.1.0] - 2026-11-26
+
+Coverage, statutory-depth, retrieval, and practitioner-workflow expansion (**Nyaya MCP v2.1**), including the `corpus-v2026.11.25-p1` retrieval and corpus quality overhaul (`1,569` central acts, `8,544` state acts, `12,152` regulator instruments, `40,353` core provisions, `38,292` SC judgments, `20,696,054` HC judgments, `813,168+` tribunal orders, `615+` citation edges).
 
 ### Added
+- **Expanded MCP v2.1 Surface (15 Tools · 8 Resources · 4 Prompts):**
+  - Added 3 new read-only MCP tools in `mcp/nyaya/tools/`: `get_provisions_batch` (partial-success batch fetch of up to 50 provisions with optional `as_of`), `get_judgments_batch` (partial-success batch fetch of up to 20 judgments enforcing `check_publication_ban`), and `get_cause_list` (local `cause_lists` SQLite search or BYO live docket adapter when `live=True`).
+  - Added optional `as_of='YYYY-MM-DD'` point-in-time statutory reconstruction (`mcp/nyaya/storage/point_in_time.py`) to `get_provision` and `get_provisions_batch`.
+  - Added `ITAct1961 <-> ITAct2025` (**33** income-tax concordance mappings in `tax_concordance.yaml`, `ITAct2025 s.536` savings) and BNSS First Schedule `offence_classification` metadata to `compare_provisions`, while expanding `criminal_concordance.yaml` to **148** verified mappings.
+- **Expanded Corpus, Courts & LanceDB Tables:**
+  - Expanded `mcp/nyaya/ingest/data/courts_directory.yaml` to **63** entries, growing from 15 to **24** Tribunals & Consumer Commissions (`NCDRC`, `SCDRC`, `DCDRC`, `DRAT`, `AFT`, `GSTAT`, `RCT`, `CIC`, `SEBI_ADJ`), plus `cpc_first_schedule.yaml` (**58 CPC Orders**, `104` rules) and `19` pinned entries in `sources.lock.yaml` (adding `ncdrc_jagriti`, `nclat_orders`, `egazette_rules`, `sci_cause_lists`).
+  - Added `tribunal_chunks` and `cad_debates` (Constituent Assembly Debates) LanceDB tables (5 total LanceDB tables) with `hot_hc_limit=500_000`, and added the `cause_lists` table to `nyaya-core.sqlite`.
+- **Opt-in OCR, Hybrid Retrieval & Live Docket Settings (`mcp/nyaya/config.py`):**
+  - Added optional disabled-by-default environment variables: `NYAYA_ENABLE_OCR` (Apache-2.0 `TesseractOcrEngine` / `RapidOcrEngine` in `mcp/nyaya/ingest/extract/ocr.py`), `NYAYA_HYBRID_SEARCH` / `NYAYA_EMBEDDING_ENDPOINT` / `NYAYA_EMBEDDING_MODEL` (`mcp/nyaya/retrieval/hybrid.py` BM25 + vector RRF with zero-dependency `HashedNgramEmbeddingProvider` fallback), and `NYAYA_LIVE_DOCKET_API_URL` / `NYAYA_LIVE_DOCKET_API_KEY` (`mcp/nyaya/storage/live_docket.py`).
+- **Release Automation & MCP Registry Metadata:** Added `.github/workflows/release-pypi.yml` (Trusted Publishing to PyPI and Official MCP Registry via `server.json` on `v*` tags).
 - **Curated bare-act provisions (`mcp/nyaya/ingest/data/curated_statute_provisions.yaml`):** loaded by `load_curated_provisions_yaml()` in `mcp/nyaya/ingest/fetchers/official_statutes.py` and overlaid in `ingest/loader.py`, overriding truncated Vaquill entries and adding CrPC provisions.
 - **`court_display_name()` and `normalize_jurisdiction()` (`mcp/nyaya/citations.py`):** Dattam court codes (`_` / `~` forms) resolve to human-readable court names on judgment cards; full state/UT names resolve case-insensitively to canonical codes in jurisdiction filters (SQLite, LanceDB, manifest pruning).
 - **Widened citation parser:** CPC Order/Rule plural and inverted forms, `YYYY:INSC:N` neutral citations, and AIR court suffixes beyond `SC`.
@@ -18,12 +30,13 @@ Quality overhaul of retrieval, citation parsing, PDF extraction, and corpus hygi
 - **Extra quote normalization in `verify_citations`:** curly quotes, Markdown markers, and India Code superscript footnote markers are normalized before quote matching.
 
 ### Changed
+- **Version Standardization (`2.1.0`):** Standardized canonical package/registry versions to `2.1.0` across `mcp/nyaya/__init__.py`, `chat/pyproject.toml`, `web/package.json`, and `server.json`, and updated `chat/nyaya_chat/tools_layer/spec.py` `TOOL_SCHEMAS` to all 15 MCP v2.1 tools.
 - **`search_judgments`:** cross-High-Court diversity (round-robin interleave by court in `lexical_engine.py`; round-robin partition selection across courts, newest year first, in `duckdb_store.py`), card de-duplication and metadata enrichment, and strict anticipatory-bail filtering (`CrPC s. 438` / `BNSS s. 482` signals).
 - **Statute and LanceDB OR-fallback precision:** word-boundary token matching with inflection stems, length-scaled minimum token matches, and title/bigram scoring; in-force provisions are preferred when `status="all"`.
 - **`verify_citations`:** unindexed CPC Order/Rule citations now return `NOT_FOUND_IN_CORPUS` with a `coverage_note` instead of a misleading match.
 - **PDF extraction (`mcp/nyaya/storage/pdf_fetcher.py`):** strips SCR running headers/footers, same-line SCR judge footers, and standalone page numbers; repairs ligature space-dropouts (`_repair_ligature_splits`) and minor year/parenthesis/`v.` word-joins.
 - **Ingest hygiene (`mcp/nyaya/ingest/`):** Vaquill provision text is cleaned of boilerplate headers, Markdown, repeated headings, and India Code footnotes; chapter titles are extracted; the best-scoring multi-part stem is chosen; BNS/BNSS sub-clause rows inherit parent provision text and chapter and are emitted only when the parent exists; Act commencement/repeal dates come from the act rows instead of hard-coded values; per-source record counts are computed and FTS5 tables rebuilt and integrity-checked.
-- **`nyaya-ingest build-sqlite`:** no longer loads the ~20.8M High Court rows (`include_hc=False`); the HC row total is carried as a count. `build-lance-fts` selects hot HC rows round-robin across courts.
+- **`nyaya-ingest build-sqlite`:** no longer loads the ~20.8M High Court rows (`include_hc=False`); the HC row total is carried as a count. `build-lance-fts` selects hot HC rows round-robin across courts (`hot_hc_limit=500_000`).
 - **`Dockerfile` Stage 2b:** added `curl --retry 4 --retry-delay 5 --retry-all-errors` when downloading `nyaya-core.sqlite.zst` to handle transient upstream errors.
 
 ### Fixed

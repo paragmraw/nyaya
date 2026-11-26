@@ -1,4 +1,4 @@
-"""Stateless runtime configuration for nyaya v2.0.
+"""Stateless runtime configuration for nyaya v2.1.
 
 Importing this module or ``nyaya`` has zero I/O side effects: ``get_settings()``
 is evaluated lazily only when requested by the runtime, CLI, or HTTP server.
@@ -102,6 +102,12 @@ class Settings:
     port: int
     redis_url: str | None
     trusted_proxy_hops: int
+    enable_ocr: bool = False
+    hybrid_search: bool = False
+    embedding_endpoint: str | None = None
+    embedding_model: str | None = None
+    live_docket_api_url: str | None = None
+    live_docket_api_key: str | None = None
 
     @property
     def has_bucket_config(self) -> bool:
@@ -125,6 +131,12 @@ class Settings:
             "port": self.port,
             "redis_url": _redact_url(self.redis_url) if self.redis_url else None,
             "trusted_proxy_hops": self.trusted_proxy_hops,
+            "enable_ocr": self.enable_ocr,
+            "hybrid_search": self.hybrid_search,
+            "embedding_endpoint": self.embedding_endpoint,
+            "embedding_model": self.embedding_model,
+            "live_docket_api_url": self.live_docket_api_url,
+            "live_docket_api_key": "***" if self.live_docket_api_key else None,
         }
 
 
@@ -185,6 +197,17 @@ def get_settings() -> Settings:
         port=port,
         redis_url=os.environ.get("REDIS_URL", REDIS_URL) or None,
         trusted_proxy_hops=trusted_proxy_hops,
+        enable_ocr=_is_truthy(os.environ.get("NYAYA_ENABLE_OCR")),
+        hybrid_search=_is_truthy(os.environ.get("NYAYA_HYBRID_SEARCH")),
+        embedding_endpoint=(os.environ.get("NYAYA_EMBEDDING_ENDPOINT") or "").strip() or None,
+        embedding_model=(os.environ.get("NYAYA_EMBEDDING_MODEL") or "").strip() or None,
+        live_docket_api_url=(
+            os.environ.get("NYAYA_LIVE_DOCKET_API_URL")
+            or os.environ.get("NYAYA_LIVE_DOCKET_URL")
+            or ""
+        ).strip()
+        or None,
+        live_docket_api_key=(os.environ.get("NYAYA_LIVE_DOCKET_API_KEY") or "").strip() or None,
     )
 
 
@@ -194,7 +217,6 @@ class RateLimitSettings:
 
     read_per_min: int = RATE_READ_PER_MIN
     mcp_per_min: int = RATE_MCP_PER_MIN
-    embedding_per_min: int = RATE_MCP_PER_MIN
     analytics_per_min: int = RATE_ANALYTICS_PER_MIN
     chat_per_min: int = RATE_CHAT_PER_MIN
     body_size_max_bytes: int = RATE_BODY_MAX_BYTES

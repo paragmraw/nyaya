@@ -1,4 +1,4 @@
-"""compare_provisions: IPC<->BNS, CrPC<->BNSS, IEA<->BSA concordance and side-by-side comparison."""
+"""compare_provisions: IPC<->BNS, CrPC<->BNSS, IEA<->BSA, ITAct1961<->ITAct2025 concordance and comparison."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from ..exceptions import InvalidFilter, NotFound
 from ..models import (
     ClauseDiff,
     ComparisonMappingType,
+    OffenceClassification,
     ProvisionComparisonResponse,
     ProvisionRecord,
     ProvisionResponse,
@@ -81,7 +82,7 @@ def compare_provisions(
     include_text: bool = True,
     commercial_safe_only: bool = False,
 ) -> ProvisionComparisonResponse:
-    """Compare old/new criminal code provisions (IPC<->BNS, CrPC<->BNSS, IEA<->BSA) or two explicit provisions."""
+    """Compare old/new criminal (IPC<->BNS, CrPC<->BNSS, IEA<->BSA) or tax (ITAct1961<->ITAct2025) provisions."""
     backend = get_backend()
     cs_only = effective_commercial_safe(commercial_safe_only)
     alias_map = backend.get_alias_map()
@@ -129,6 +130,7 @@ def compare_provisions(
     procedural_delta: str | None = None
     transitional_rule: str | None = src_rec.validity.transitional_note
     provenance = src_rec.provenance
+    offence_classification: OffenceClassification | dict[str, Any] | None = None
 
     if explicit_target:
         tgt_act, tgt_ref, _ = resolve_act_and_ref(
@@ -166,6 +168,7 @@ def compare_provisions(
             procedural_delta = matched_entry.procedural_delta
             transitional_rule = matched_entry.savings_note or transitional_rule
             provenance = matched_entry.provenance
+            offence_classification = matched_entry.offence_classification
         else:
             mapping_type = "manual_comparison"
             diff_summary = f"Manual side-by-side comparison between {src_rec.act} {src_rec.ref} and {tgt_rec.act} {tgt_rec.ref}."
@@ -178,7 +181,10 @@ def compare_provisions(
             procedural_delta = first.procedural_delta
             transitional_rule = first.savings_note or transitional_rule
             provenance = first.provenance
+            offence_classification = first.offence_classification
             for e in entries:
+                if offence_classification is None and e.offence_classification is not None:
+                    offence_classification = e.offence_classification
                 counterpart_ref = e.new_ref if e.old_doc_id == src_rec.doc_id else e.old_ref
                 if counterpart_ref is not None:
                     c_rec = backend.get_provision(
@@ -220,6 +226,12 @@ def compare_provisions(
             "before 2024-07-01 continue to be governed by IPC/CrPC/IEA; causes on or after 2024-07-01 "
             "are governed by BNS/BNSS/BSA."
         )
+    elif not transitional_rule and src_rec.act in {"ITAct1961", "ITAct2025", "IncomeTax1961", "IncomeTax2025"}:
+        transitional_rule = (
+            "ITAct2025 s.536 savings rule: assessments, appeals, and proceedings for AY 2026-27 and "
+            "earlier tax years continue under the Income-tax Act, 1961; tax years starting on or "
+            "after 2026-04-01 are governed by the Income-tax Act, 2025."
+        )
 
     return ProvisionComparisonResponse(
         mapping_type=mapping_type,
@@ -231,6 +243,7 @@ def compare_provisions(
         procedural_delta=procedural_delta,
         transitional_rule=transitional_rule,
         provenance=provenance,
+        offence_classification=offence_classification,
     )
 
 
@@ -239,17 +252,18 @@ def register(mcp: Any) -> None:
         name="compare_provisions",
         description=(
             "Compare statutory provisions across the 1 July 2024 criminal code transition "
-            "(IPC <-> BNS, CrPC <-> BNSS, Indian Evidence Act <-> BSA) or between any two explicit "
-            "provisions. Auto-resolves verified one-to-one, one-to-many, many-to-one, and omitted "
-            "concordance mappings when target is omitted, returning both verbatim texts (<corpus_text>), "
-            "clause-level diffs, substantive/punishment/procedural deltas, and the BNSS s.531 savings rule."
+            "(IPC <-> BNS, CrPC <-> BNSS, Indian Evidence Act <-> BSA), the Income-tax Act transition "
+            "(ITAct1961 <-> ITAct2025), or between any two explicit provisions. Auto-resolves verified "
+            "one-to-one, one-to-many, many-to-one, and omitted concordance mappings when target is omitted, "
+            "returning both verbatim texts (<corpus_text>), clause-level diffs, substantive/punishment/procedural "
+            "deltas, offence classification where applicable, and transitional savings rules."
         ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
             "openWorldHint": False,
-            "title": "Compare IPC/CrPC/IEA and BNS/BNSS/BSA provisions",
+            "title": "Compare IPC/CrPC/IEA/ITAct1961 and BNS/BNSS/BSA/ITAct2025 provisions",
         },
     )
     @structured_errors

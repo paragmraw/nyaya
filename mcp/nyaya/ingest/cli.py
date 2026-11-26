@@ -7,16 +7,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
+
+import httpx
 
 from .builders.lance_fts import build_lance_fts_tables
 from .builders.parquet_compact import build_compacted_parquets
 from .builders.sqlite_core import build_sqlite_core, create_mini_ingest_input
 from .extract.pdf import extract_pdf_file
+from .fetchers.http import ChecksumMismatchError, SafeHttpFetcher, SecurityError
+from .fetchers.official_statutes import OFFICIAL_SOURCE_IDS, OfficialStatutesFetcher
+from .fetchers.research_packs import RESEARCH_SOURCE_IDS, ResearchPacksFetcher
 from .fetchers.s3_dattam import DattamS3Fetcher
 from .fetchers.vaquill import VaquillFetcher
 from .gate import run_quality_gate
@@ -31,6 +38,20 @@ from .publish import (
     publish_release,
 )
 from .state import IngestState
+
+log = logging.getLogger("nyaya.ingest.cli")
+
+
+class _SyncSourceFetcher(Protocol):
+    def sync_source(
+        self,
+        source_id: str,
+        *,
+        work_dir: Path | str,
+        dry_run: bool = False,
+        fixture: bool = False,
+        verify_sha256: bool = True,
+    ) -> object: ...
 
 _SAMPLE_FIXTURE_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -49,7 +70,7 @@ _SAMPLE_FIXTURE_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nyaya-ingest",
-        description="Nyaya v2.0 OpenJustice Ingestion Pipeline, Curated Legal Data & Quality Gate CLI.",
+        description="Nyaya v2.1 OpenJustice Ingestion Pipeline, Curated Legal Data & Quality Gate CLI.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -68,7 +89,7 @@ def _build_parser() -> argparse.ArgumentParser:
             help="Comma-separated Vaquill categories: central,state,regulator,tribunal",
         )
         p_sync.add_argument("--commercial-safe-only", action="store_true")
-        p_sync.add_argument("--fixture", action="store_true")
+        p_sync.add_argument("--fixture", "--fixture-mode", dest="fixture", action="store_true")
         p_sync.add_argument("--dry-run", action="store_true")
 
     # 2. extract
@@ -138,10 +159,60 @@ def _build_parser() -> argparse.ArgumentParser:
     p_all.add_argument("--hc-year-to", type=int, default=None)
     p_all.add_argument("--vaquill-categories", default=None)
     p_all.add_argument("--commercial-safe-only", action="store_true")
-    p_all.add_argument("--fixture", action="store_true")
+    p_all.add_argument("--fixture", "--fixture-mode", dest="fixture", action="store_true")
     p_all.add_argument("--dry-run", action="store_true")
 
     return parser
+
+
+_SAMPLE_FIXTURE_HC_S3_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Name>indian-high-court-judgments</Name>
+  <IsTruncated>false</IsTruncated>
+  <Contents>
+    <Key>metadata/parquet/year=2024/court=7_26/bench=principal/metadata.parquet</Key>
+    <LastModified>2026-11-22T00:00:00.000Z</LastModified>
+    <ETag>"fixture-hc-2024"</ETag>
+    <Size>1024</Size>
+  </Contents>
+</ListBucketResult>
+"""
+
+
+def _sync_auxiliary_source(
+    fetcher: _SyncSourceFetcher,
+    source_id: str,
+    *,
+    work_dir: Path,
+    dry_run: bool,
+    fixture: bool,
+    bulk_sync: bool,
+) -> None:
+    try:
+        fetcher.sync_source(
+            source_id,
+            work_dir=work_dir,
+            dry_run=dry_run,
+            fixture=fixture,
+        )
+    except ChecksumMismatchError as exc:
+        if not bulk_sync:
+            raise
+        log.warning(
+            "Skipping auxiliary source %s during bulk sync (checksum mismatch): %s",
+            source_id,
+            exc,
+        )
+    except SecurityError:
+        raise
+    except (httpx.HTTPError, RuntimeError, ValueError, OSError) as exc:
+        if not bulk_sync:
+            raise
+        log.warning(
+            "Skipping auxiliary source %s during bulk sync due to upstream error: %s",
+            source_id,
+            exc,
+        )
 
 
 def _cmd_sync(
@@ -156,64 +227,121 @@ def _cmd_sync(
     commercial_safe_only: bool = False,
     fixture: bool = False,
     dry_run: bool = False,
+    http_fetcher: SafeHttpFetcher | None = None,
 ) -> int:
     lock = load_and_validate_lockfile(lockfile)
     work_dir.mkdir(parents=True, exist_ok=True)
     state = IngestState(work_dir / "ingest_state.sqlite")
     try:
-        if fixture:
-            s3_fetcher = DattamS3Fetcher(state=state)
-            s3_fetcher.sync_bucket(
-                "indian-supreme-court-judgments",
-                work_dir,
-                dry_run=dry_run,
-                fixture_xml=_SAMPLE_FIXTURE_S3_XML,
-            )
-            vq_fetcher = VaquillFetcher(state=state)
-            vq_fetcher.sync_packs(
-                work_dir,
-                dry_run=dry_run,
-                fixture_sha256sums={"in_central_legislation.parquet": "a" * 64},
-            )
-            return 0
-
         tier_filter = None if tier == "all" else tier
-        src_filter = None if sources == "all" else [s.strip() for s in sources.split(",") if s.strip()]
+        bulk_sync = sources.strip() == "all"
+        src_filter = None if bulk_sync else [s.strip() for s in sources.split(",") if s.strip()]
         selected = lock.filter_sources(
             tier=tier_filter,  # type: ignore[arg-type]
             source_ids=src_filter,
             commercial_safe_only=commercial_safe_only,
         )
         selected_ids = {s.id for s in selected}
+        if commercial_safe_only:
+            selected_ids -= {"ddl_81m", "ildc"}
 
-        if any(sid.startswith("vaquill_") for sid in selected_ids):
-            cats = (
-                [c.strip() for c in vaquill_categories.split(",") if c.strip()]
-                if vaquill_categories
-                else None
-            )
-            vq_fetcher = VaquillFetcher(state=state)
-            vq_fetcher.sync_packs(work_dir, categories=cats, dry_run=dry_run)
+        resolved_http = http_fetcher or SafeHttpFetcher(allowed_domains=lock.allowed_domains)
+        s3_fetcher = DattamS3Fetcher(state=state, http_fetcher=http_fetcher)
+        vq_fetcher = VaquillFetcher(state=state, http_fetcher=http_fetcher)
+        official_fetcher = OfficialStatutesFetcher(
+            http_fetcher=resolved_http,
+            lockfile=lock,
+            state=state,
+        )
+        research_fetcher = ResearchPacksFetcher(
+            http_fetcher=resolved_http,
+            lockfile=lock,
+            state=state,
+        )
+
+        vaquill_selected = {sid for sid in selected_ids if sid.startswith("vaquill_")}
+        if vaquill_selected:
+            if vaquill_categories:
+                cats: list[str] | None = [
+                    c.strip() for c in vaquill_categories.split(",") if c.strip()
+                ]
+            elif "vaquill_open_india_law" in vaquill_selected:
+                cats = None
+            else:
+                cat_map = {
+                    "vaquill_central_legislation": "central",
+                    "vaquill_state_legislation": "state",
+                    "vaquill_regulators": "regulator",
+                    "vaquill_tribunals": "tribunal",
+                }
+                cats = [cat_map[sid] for sid in sorted(vaquill_selected) if sid in cat_map]
+            if fixture:
+                vq_fetcher.sync_packs(
+                    work_dir,
+                    categories=cats,
+                    dry_run=dry_run,
+                    fixture_sha256sums={"in_central_legislation.parquet": "a" * 64},
+                )
+            else:
+                vq_fetcher.sync_packs(work_dir, categories=cats, dry_run=dry_run)
 
         if "dattam_sc_judgments" in selected_ids:
-            s3_fetcher = DattamS3Fetcher(state=state)
-            s3_fetcher.sync_bucket(
-                "indian-supreme-court-judgments",
-                work_dir,
-                prefixes=["metadata/parquet/"],
-                dry_run=dry_run,
-            )
+            if fixture:
+                s3_fetcher.sync_bucket(
+                    "indian-supreme-court-judgments",
+                    work_dir,
+                    dry_run=dry_run,
+                    fixture_xml=_SAMPLE_FIXTURE_S3_XML,
+                )
+            else:
+                s3_fetcher.sync_bucket(
+                    "indian-supreme-court-judgments",
+                    work_dir,
+                    prefixes=["metadata/parquet/"],
+                    dry_run=dry_run,
+                )
 
         if "dattam_hc_judgments" in selected_ids:
-            s3_fetcher = DattamS3Fetcher(state=state)
-            s3_fetcher.sync_bucket(
-                "indian-high-court-judgments",
-                work_dir,
-                prefixes=["metadata/parquet/"],
-                year_from=hc_year_from,
-                year_to=hc_year_to,
-                dry_run=dry_run,
-            )
+            if fixture:
+                s3_fetcher.sync_bucket(
+                    "indian-high-court-judgments",
+                    work_dir,
+                    year_from=hc_year_from,
+                    year_to=hc_year_to,
+                    dry_run=dry_run,
+                    fixture_xml=_SAMPLE_FIXTURE_HC_S3_XML,
+                )
+            else:
+                s3_fetcher.sync_bucket(
+                    "indian-high-court-judgments",
+                    work_dir,
+                    prefixes=["metadata/parquet/", "metadata/parquet_case_details/"],
+                    year_from=hc_year_from,
+                    year_to=hc_year_to,
+                    dry_run=dry_run,
+                )
+
+        for sid in OFFICIAL_SOURCE_IDS:
+            if sid in selected_ids:
+                _sync_auxiliary_source(
+                    official_fetcher,
+                    sid,
+                    work_dir=work_dir,
+                    dry_run=dry_run,
+                    fixture=fixture,
+                    bulk_sync=bulk_sync,
+                )
+
+        for sid in RESEARCH_SOURCE_IDS:
+            if sid in selected_ids:
+                _sync_auxiliary_source(
+                    research_fetcher,
+                    sid,
+                    work_dir=work_dir,
+                    dry_run=dry_run,
+                    fixture=fixture,
+                    bulk_sync=bulk_sync,
+                )
     finally:
         state.close()
     return 0

@@ -71,12 +71,30 @@ def _build_lance(settings: Settings) -> LanceStore:
     local_dir = settings.data_dir / "lancedb"
     bucket_uri = f"s3://{settings.bucket_name}/lancedb" if settings.has_bucket_config else None
     storage_opts = build_lance_storage_options(settings)
+    if settings.hybrid_search:
+        from ..retrieval.hybrid import (
+            EmbeddingProvider,
+            HashedNgramEmbeddingProvider,
+            OpenAICompatibleEmbeddingProvider,
+        )
+
+        embedder: EmbeddingProvider | None = None
+        if settings.embedding_endpoint:
+            embedder = OpenAICompatibleEmbeddingProvider(
+                endpoint=settings.embedding_endpoint,
+                model=settings.embedding_model or "BAAI/bge-m3",
+            )
+        else:
+            embedder = HashedNgramEmbeddingProvider()
+    else:
+        embedder = None
     return LanceStore(
         local_dir=local_dir,
         bucket_uri=bucket_uri,
         storage_options=storage_opts,
         offline_only=settings.offline_only,
         default_commercial_safe_only=settings.commercial_safe_only,
+        embedding_provider=embedder,
     )
 
 
@@ -350,6 +368,7 @@ def get_pdf_fetcher() -> PdfFetcher:
             _pdf_fetcher = DirectS3PdfFetcher(
                 cache_dir=settings.cache_dir,
                 offline_only=settings.offline_only,
+                enable_ocr=settings.enable_ocr,
             )
         return _pdf_fetcher
 

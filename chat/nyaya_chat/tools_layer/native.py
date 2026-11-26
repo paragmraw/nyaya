@@ -106,6 +106,7 @@ async def _get_provision(
     ref: str = "",
     citation: str | None = None,
     jurisdiction: str | None = None,
+    as_of: str | None = None,
     include_links: bool = True,
     commercial_safe_only: bool = False,
 ) -> str:
@@ -118,6 +119,7 @@ async def _get_provision(
             ref=_clean_optional(ref) or "",
             citation=_clean_optional(citation),
             jurisdiction=_clean_optional(jurisdiction),
+            as_of=_clean_optional(as_of),
             include_links=bool(include_links),
             commercial_safe_only=_effective_cs(commercial_safe_only),
         )

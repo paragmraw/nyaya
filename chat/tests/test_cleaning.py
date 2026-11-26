@@ -206,22 +206,25 @@ def test_prune_unparseable_and_non_list_content_untouched():
     assert prune_list_result(123, "search_statutes") == 123
 
 
-def test_tool_summarizers_cover_all_12_v2_tools_and_strip_corpus_tags():
-    expected_12 = {
+def test_tool_summarizers_cover_all_15_v2_tools_and_strip_corpus_tags():
+    expected_15 = {
         "search_statutes",
         "get_provision",
+        "get_provisions_batch",
         "browse_statute",
         "compare_provisions",
         "get_provision_history",
         "cross_reference",
         "search_judgments",
         "get_judgment",
+        "get_judgments_batch",
         "trace_precedent",
         "verify_citations",
         "judgment_analytics",
+        "get_cause_list",
         "corpus_status",
     }
-    assert set(TOOL_SUMMARIZERS.keys()) == expected_12
+    assert set(TOOL_SUMMARIZERS.keys()) == expected_15
     sample_json = json.dumps(
         {
             "act": "IPC",

@@ -1,4 +1,4 @@
-"""Canonical Pydantic v2 models, enums, query schemas, and tool responses for Nyaya MCP v2.0."""
+"""Canonical Pydantic v2 models, enums, query schemas, and tool responses for Nyaya MCP v2.1."""
 
 from __future__ import annotations
 
@@ -256,6 +256,14 @@ class BrowseResult(BaseModel):
     returned: int = 0
 
 
+class OffenceClassification(BaseModel):
+    cognizable: bool | None = None
+    bailable: bool | None = None
+    punishment: str | None = None
+    triable_by: str | None = None
+    compoundable: bool | str | None = None
+
+
 class ConcordanceEntry(BaseModel):
     old_doc_id: str
     old_ref: ProvisionRef
@@ -268,6 +276,7 @@ class ConcordanceEntry(BaseModel):
     savings_note: str | None = None
     verified_by: str
     provenance: SourceProvenance
+    offence_classification: OffenceClassification | dict[str, Any] | None = None
 
 
 class AmendmentRecord(BaseModel):
@@ -535,6 +544,14 @@ class JudgmentSearchResponse(BaseModel):
     degraded_sources: list[str] = Field(default_factory=list)
 
 
+class PointInTimeMeta(BaseModel):
+    as_of: Date
+    effective_status: str
+    applied_amendments: list[dict[str, Any]] = Field(default_factory=list)
+    active_invalidation: InvalidatingJudgment | dict[str, Any] | None = None
+    reconstruction_basis: str
+
+
 class ProvisionResponse(BaseModel):
     act: str
     act_full_name: str
@@ -551,6 +568,7 @@ class ProvisionResponse(BaseModel):
     validity: StatutoryValidity
     top_links: list[StatutoryLink] = Field(default_factory=list)
     provenance: SourceProvenance
+    as_of_meta: dict[str, Any] | PointInTimeMeta | None = None
 
 
 class StatuteBrowseResponse(BaseModel):
@@ -581,6 +599,7 @@ class ProvisionComparisonResponse(BaseModel):
     procedural_delta: str | None = None
     transitional_rule: str | None = None
     provenance: SourceProvenance
+    offence_classification: OffenceClassification | dict[str, Any] | None = None
 
 
 class ProvisionHistoryResponse(BaseModel):
@@ -738,7 +757,7 @@ class SourceStatusEntry(BaseModel):
 
 
 class CorpusStatusResponse(BaseModel):
-    service_version: str = "2.0.0"
+    service_version: str = "2.1.0"
     as_of: Date | None = None
     retrieval_mode: Literal["lexical_metadata_graph"] = "lexical_metadata_graph"
     commercial_safe_locked: bool = False
@@ -747,3 +766,77 @@ class CorpusStatusResponse(BaseModel):
     sources: list[SourceStatusEntry] = Field(default_factory=list)
     licensing: dict[str, Any] = Field(default_factory=dict)
     court_detail: dict[str, Any] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Batch, Cause-List, and Live Docket Models (v2.1)
+# ---------------------------------------------------------------------------
+
+
+class BatchProvisionResponse(BaseModel):
+    """Partial-success response for ``get_provisions_batch``."""
+
+    total_requested: int
+    returned: int
+    as_of: Date | None = None
+    results: list[dict[str, Any]] = Field(default_factory=list)
+    not_found: list[Any] = Field(default_factory=list)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+
+
+BatchProvisionsResponse = BatchProvisionResponse
+
+
+class BatchJudgmentResponse(BaseModel):
+    """Partial-success response for ``get_judgments_batch``."""
+
+    total_requested: int
+    returned: int
+    view: str
+    results: list[JudgmentViewResponse] = Field(default_factory=list)
+    not_found: list[str] = Field(default_factory=list)
+    ambiguous: list[dict[str, Any]] = Field(default_factory=list)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+
+
+BatchJudgmentsResponse = BatchJudgmentResponse
+
+
+class CauseListEntry(BaseModel):
+    """Structured daily cause-list item from an official Supreme Court or High Court feed."""
+
+    court: str
+    cause_list_date: str
+    bench: str | None = None
+    judge: str | None = None
+    item_number: str | None = None
+    case_number: str | None = None
+    cnr: str | None = None
+    parties: str | None = None
+    advocates: list[str] = Field(default_factory=list)
+    purpose: str | None = None
+    source_url: str = ""
+
+
+class CauseListResponse(BaseModel):
+    """Structured response for ``get_cause_list``."""
+
+    total: int
+    returned: int
+    source: Literal["local", "live"]
+    entries: list[CauseListEntry] = Field(default_factory=list)
+
+
+class LiveCaseStatus(BaseModel):
+    """Structured live docket status snapshot returned by a BYO live docket adapter."""
+
+    case_number: str | None = None
+    cnr: str | None = None
+    court: str
+    status: str
+    next_hearing_date: Date | None = None
+    last_listed_date: Date | None = None
+    bench: str | None = None
+    purpose: str | None = None
+    source_url: str = ""
+    provenance: SourceProvenance | None = None

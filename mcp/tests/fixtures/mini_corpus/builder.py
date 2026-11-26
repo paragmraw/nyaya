@@ -124,16 +124,17 @@ CREATE INDEX idx_amend_target ON provision_amendments(target_act_id, target_ref_
 CREATE INDEX idx_amend_year ON provision_amendments(target_act_id, enacted_date);
 
 CREATE TABLE concordance (
-    id                INTEGER PRIMARY KEY,
-    old_doc_id        TEXT NOT NULL REFERENCES provisions(doc_id),
-    new_doc_id        TEXT REFERENCES provisions(doc_id),
-    mapping_type      TEXT NOT NULL CHECK (mapping_type IN ('one_to_one','one_to_many','many_to_one','omitted','newly_inserted')),
-    substantive_delta TEXT NOT NULL,
-    punishment_delta  TEXT,
-    procedural_delta  TEXT,
-    savings_note      TEXT,
-    verified_by       TEXT NOT NULL,
-    source_id         TEXT NOT NULL REFERENCES sources(source_id)
+    id                          INTEGER PRIMARY KEY,
+    old_doc_id                  TEXT NOT NULL REFERENCES provisions(doc_id),
+    new_doc_id                  TEXT REFERENCES provisions(doc_id),
+    mapping_type                TEXT NOT NULL CHECK (mapping_type IN ('one_to_one','one_to_many','many_to_one','omitted','newly_inserted')),
+    substantive_delta           TEXT NOT NULL,
+    punishment_delta            TEXT,
+    procedural_delta            TEXT,
+    savings_note                TEXT,
+    verified_by                 TEXT NOT NULL,
+    source_id                   TEXT NOT NULL REFERENCES sources(source_id),
+    offence_classification_json TEXT
 );
 CREATE INDEX idx_conc_old ON concordance(old_doc_id);
 CREATE INDEX idx_conc_new ON concordance(new_doc_id);
@@ -234,6 +235,22 @@ CREATE TABLE courts (
     seat_city       TEXT,
     hc_jurisdiction TEXT
 );
+
+CREATE TABLE cause_lists (
+    id              INTEGER PRIMARY KEY,
+    court           TEXT NOT NULL,
+    cause_list_date TEXT NOT NULL,
+    bench           TEXT,
+    judge           TEXT,
+    item_number     TEXT,
+    case_number     TEXT,
+    cnr             TEXT,
+    parties         TEXT,
+    advocates_json  TEXT NOT NULL DEFAULT '[]',
+    purpose         TEXT,
+    source_url      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_cl_court_date ON cause_lists(court, cause_list_date);
 """
 
 
@@ -344,6 +361,8 @@ def _build_sqlite(sqlite_path: Path) -> None:
             ("it-act-2000", "ITAct", "The Information Technology Act, 2000", 2000, "Act No. 21 of 2000", "Central", "central_act", "in_force", "2000-10-17", None, None, "sqlite_core", "vaquill-central", 1, "2026-11-22"),
             ("mh-mofa-1963", "MH-MOFA", "Maharashtra Ownership Flats Act, 1963", 1963, "Mah. Act 45 of 1963", "MH", "state_act", "in_force", "1964-02-10", None, None, "lance_bucket", "vaquill-central", 1, "2026-11-22"),
             ("sebi-lodr-2015", "SEBI-LODR", "SEBI (Listing Obligations and Disclosure Requirements) Regulations, 2015", 2015, "SEBI/LAD-NRO/GN/2015-16/013", "SEBI", "regulator", "in_force", "2015-12-01", None, None, "lance_bucket", "vaquill-central", 1, "2026-11-22"),
+            ("it-act-2025", "ITAct2025", "The Income-tax Act, 2025", 2025, "Act No. 12 of 2025", "Central", "central_act", "in_force", "2026-04-01", None, None, "sqlite_core", "prs-sanhitas", 1, "2026-11-26"),
+            ("it-act-1961", "ITAct1961", "The Income-tax Act, 1961", 1961, "Act No. 43 of 1961", "Central", "central_act", "repealed", "1962-04-01", "2026-04-01", "it-act-2025", "sqlite_core", "vaquill-central", 1, "2026-11-26"),
         ]
         con.executemany("INSERT INTO acts VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", acts)
 
@@ -374,6 +393,14 @@ def _build_sqlite(sqlite_path: Path) -> None:
             ("mofa", "mh-mofa-1963"),
             ("sebi lodr", "sebi-lodr-2015"),
             ("sebi-lodr", "sebi-lodr-2015"),
+            ("itact1961", "it-act-1961"),
+            ("it act 1961", "it-act-1961"),
+            ("incometax1961", "it-act-1961"),
+            ("income tax act 1961", "it-act-1961"),
+            ("itact2025", "it-act-2025"),
+            ("it act 2025", "it-act-2025"),
+            ("incometax2025", "it-act-2025"),
+            ("income tax act 2025", "it-act-2025"),
         ]
         con.executemany("INSERT INTO act_aliases VALUES (?,?)", aliases)
 
@@ -401,8 +428,14 @@ def _build_sqlite(sqlite_path: Path) -> None:
             ("bnss-2023:531", "bnss-2023", "BNSS", "section", "531", "531", 531, "XXXIX", "Repeal and Savings", None, "Repeal and savings", "Notwithstanding repeal of the Code of Criminal Procedure, 1973, pending appeals, applications, trials, inquiries or investigations prior to 1 July 2024 shall continue under the old Code.", "in_force", "2024-07-01", None, "{}", "prs-sanhitas", "https://prsindia.org/", 1),
             ("iea-1872:65B", "iea-1872", "EvidenceAct", "section", "65B", "65B", 65, "V", "Of Documentary Evidence", None, "Admissibility of electronic records", "(1) Any information contained in an electronic record... (4) Certificate signed by a person occupying a responsible official position.", "repealed", "2000-10-17", "2024-07-01", "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
             ("bsa-2023:63", "bsa-2023", "BSA", "section", "63", "63", 63, "V", "Of Documentary Evidence", None, "Admissibility of electronic records", "Electronic or digital record admissibility with certificate in Schedule format under BSA.", "in_force", "2024-07-01", None, "{}", "prs-sanhitas", "https://prsindia.org/", 1),
+            ("cpc-1908:O1-R1", "cpc-1908", "CPC", "order_rule", "Order 1 Rule 1", "O1-R1", 1, "I", "Parties to Suits", None, "Who may be joined as plaintiffs", "All persons may be joined in one suit as plaintiffs where any right to relief in respect of the same act or transaction arises.", "in_force", "1909-01-01", None, "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
             ("cpc-1908:O7-R11", "cpc-1908", "CPC", "order_rule", "Order 7 Rule 11", "O7-R11", 7, "First Schedule", "Pleadings and Plaint", None, "Rejection of plaint", "The plaint shall be rejected in the following cases: (a) where it does not disclose a cause of action; (d) where the suit appears from the statement in the plaint to be barred by any law.", "in_force", "1909-01-01", None, "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
+            ("cpc-1908:O39-R1", "cpc-1908", "CPC", "order_rule", "Order 39 Rule 1", "O39-R1", 39, "XXXIX", "Temporary Injunctions and Interlocutory Orders", None, "Cases in which temporary injunction may be granted", "Where in any suit it is proved by affidavit or otherwise that any property in dispute is in danger of being wasted, damaged or alienated, the Court may grant a temporary injunction.", "in_force", "1909-01-01", None, "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
             ("it-act-2000:66A", "it-act-2000", "ITAct", "section", "66A", "66A", 66, "XI", "Offences", None, "Punishment for sending offensive messages through communication service, etc.", "Any person who sends, by means of a computer resource or a communication device, any information that is grossly offensive...", "struck_down", "2009-10-27", None, "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
+            ("it-act-1961:139", "it-act-1961", "ITAct1961", "section", "139", "139", 139, "XIV", "Procedure for Assessment", None, "Return of income", "Every person whose total income exceeded the maximum amount not chargeable to income-tax during the previous year shall furnish a return of income.", "repealed", "1962-04-01", "2026-04-01", "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
+            ("it-act-2025:263", "it-act-2025", "ITAct2025", "section", "263", "263", 263, "XV", "Return of Income", None, "Return of income", "Every person whose total income during the tax year exceeds the basic exemption threshold shall furnish a return of income in the prescribed form.", "in_force", "2026-04-01", None, "{}", "prs-sanhitas", "https://prsindia.org/", 1),
+            ("it-act-1961:143", "it-act-1961", "ITAct1961", "section", "143", "143", 143, "XIV", "Procedure for Assessment", None, "Assessment", "Where a return has been made under section 139, the Assessing Officer may process the return or issue scrutiny notice under section 143(2).", "repealed", "1962-04-01", "2026-04-01", "{}", "vaquill-central", "https://oss-data-in.vaquill.ai/v2026.08.1/", 1),
+            ("it-act-2025:270", "it-act-2025", "ITAct2025", "section", "270", "270", 270, "XV", "Assessment", None, "Assessment", "Centralised processing and faceless scrutiny assessment of returns filed for a tax year under section 263.", "in_force", "2026-04-01", None, "{}", "prs-sanhitas", "https://prsindia.org/", 1),
         ]
         for row in prov_rows:
             doc_id, act_id, act_short, kind, ref, ref_norm, ref_num, ch_num, ch_title, part, title, text, status, comm, rep, meta_j, src_id, src_url, comm_safe = row
@@ -420,13 +453,15 @@ def _build_sqlite(sqlite_path: Path) -> None:
         con.executemany("INSERT INTO provision_amendments VALUES (?,?,?,?,?,?,?,?,?,?,?)", amendments)
 
         concordance_rows = [
-            (1, "ipc-1860:302", "bns-2023:103", "one_to_one", "Core murder punishment retained in s.103(1); s.103(2) adds mob lynching offence.", "Death or life imprisonment + fine preserved; s.103(2) adds specific mob lynching minimum/death.", "Cognizable, non-bailable, triable by Court of Session.", "BNSS s.531: pre-2024-07-01 offences and pending trials continue under IPC.", "bprd_official_table_v1", "prs-sanhitas"),
-            (2, "ipc-1860:420", "bns-2023:318(4)", "one_to_one", "Cheating and dishonestly inducing delivery of property moved from IPC s.420 to BNS s.318(4).", "Imprisonment up to 7 years and fine unchanged.", "Cognizable, non-bailable.", "BNSS s.531 savings applies to pre-2024-07-01 FIRs.", "bprd_official_table_v1", "prs-sanhitas"),
-            (3, "ipc-1860:375", "bns-2023:63", "one_to_one", "Definition of rape relocated to BNS s.63 with updated exception age (18 years).", "Substantive ingredients preserved; marital exception threshold raised to 18 years.", "Cognizable, non-bailable.", "BNSS s.531 savings applies.", "bprd_official_table_v1", "prs-sanhitas"),
-            (4, "crpc-1973:438", "bnss-2023:482", "one_to_one", "Anticipatory bail consolidated in BNSS s.482 omitting state-specific proviso clutter.", "N/A", "Retains Court of Session / High Court anticipatory bail jurisdiction.", "BNSS s.531 savings applies.", "bprd_official_table_v1", "prs-sanhitas"),
-            (5, "iea-1872:65B", "bsa-2023:63", "one_to_one", "Electronic record admissibility moved from IEA s.65B to BSA s.63 with explicit expert-signed Schedule certificate.", "N/A", "Requires statutory certificate plus expert certification where applicable.", "BNSS s.531 savings applies.", "bprd_official_table_v1", "prs-sanhitas"),
+            (1, "ipc-1860:302", "bns-2023:103", "one_to_one", "Core murder punishment retained in s.103(1); s.103(2) adds mob lynching offence.", "Death or life imprisonment + fine preserved; s.103(2) adds specific mob lynching minimum/death.", "Cognizable, non-bailable, triable by Court of Session.", "BNSS s.531: pre-2024-07-01 offences and pending trials continue under IPC.", "bprd_official_table_v1", "prs-sanhitas", json.dumps({"cognizable": True, "bailable": False, "punishment": "Death or imprisonment for life, and fine", "triable_by": "Court of Session", "compoundable": False})),
+            (2, "ipc-1860:420", "bns-2023:318(4)", "one_to_one", "Cheating and dishonestly inducing delivery of property moved from IPC s.420 to BNS s.318(4).", "Imprisonment up to 7 years and fine unchanged.", "Cognizable, non-bailable.", "BNSS s.531 savings applies to pre-2024-07-01 FIRs.", "bprd_official_table_v1", "prs-sanhitas", json.dumps({"cognizable": True, "bailable": False, "punishment": "Imprisonment up to 7 years and fine", "triable_by": "Magistrate of First Class", "compoundable": True})),
+            (3, "ipc-1860:375", "bns-2023:63", "one_to_one", "Definition of rape relocated to BNS s.63 with updated exception age (18 years).", "Substantive ingredients preserved; marital exception threshold raised to 18 years.", "Cognizable, non-bailable.", "BNSS s.531 savings applies.", "bprd_official_table_v1", "prs-sanhitas", json.dumps({"cognizable": True, "bailable": False, "punishment": "Rigorous imprisonment not less than 10 years (up to life) and fine", "triable_by": "Court of Session", "compoundable": False})),
+            (4, "crpc-1973:438", "bnss-2023:482", "one_to_one", "Anticipatory bail consolidated in BNSS s.482 omitting state-specific proviso clutter.", "N/A", "Retains Court of Session / High Court anticipatory bail jurisdiction.", "BNSS s.531 savings applies.", "bprd_official_table_v1", "prs-sanhitas", None),
+            (5, "iea-1872:65B", "bsa-2023:63", "one_to_one", "Electronic record admissibility moved from IEA s.65B to BSA s.63 with explicit expert-signed Schedule certificate.", "N/A", "Requires statutory certificate plus expert certification where applicable.", "BNSS s.531 savings applies.", "bprd_official_table_v1", "prs-sanhitas", None),
+            (6, "it-act-1961:139", "it-act-2025:263", "one_to_one", "Return of income filing obligations moved from ITAct1961 s.139 to ITAct2025 s.263 using unified 'tax year'.", None, "Electronic filing timelines and belated/updated return rules consolidated in s.263.", "ITAct2025 s.536: returns and assessments for AY 2026-27 and earlier continue under ITAct1961.", "it_act_2025_official_crosswalk", "prs-sanhitas", None),
+            (7, "it-act-1961:143", "it-act-2025:270", "one_to_one", "Processing and scrutiny assessment under s.143 mapped to ITAct2025 s.270.", None, "Retains faceless scrutiny framework.", "ITAct2025 s.536 savings applies to pre-2026-04-01 tax periods.", "it_act_2025_official_crosswalk", "prs-sanhitas", None),
         ]
-        con.executemany("INSERT INTO concordance VALUES (?,?,?,?,?,?,?,?,?,?)", concordance_rows)
+        con.executemany("INSERT INTO concordance VALUES (?,?,?,?,?,?,?,?,?,?,?)", concordance_rows)
 
         invalidations = [
             (1, "it-act-2000:66A", "struck_down", "sc:2015:shreya-singhal", "Shreya Singhal v. Union of India", "(2015) 5 SCC 1", "2015-03-24", 2, "Section 66A of the IT Act, 2000 struck down in its entirety as unconstitutional under Article 19(1)(a).", "dattam-sc"),
@@ -456,6 +491,11 @@ def _build_sqlite(sqlite_path: Path) -> None:
             (3, "sc:2015:shreya-singhal", "judgment", "constitution:art:19", "provision", "interprets", "para 15", "Discussion, advocacy and incitement under Article 19(1)(a) and Article 19(2).", 2015, 2, "verified_curated"),
             (4, "ipc-1860:302", "provision", "bns-2023:103", "provision", "replaced_by", None, "Replaced effective 2024-07-01 by BNS Section 103.", None, None, "verified_curated"),
             (5, "hc:2024:dhc:1234", "judgment", "sc:2017:puttaswamy", "judgment", "cites", "para 18", "Personal liberty safeguards under Article 21 discussed.", 2024, 2, "unverified_automated"),
+            (6, "sc:2017:puttaswamy", "judgment", "constitution:art:21", "provision", "interprets", "para 118", "Privacy is intrinsic to life and personal liberty under Article 21.", 2017, 9, "unverified_automated"),
+            (7, "hc:2024:dhc:1234", "judgment", "crpc-1973:438", "provision", "interprets", "para 4", "Anticipatory bail jurisdiction under Section 438 CrPC examined.", 2024, 2, "unverified_automated"),
+            (8, "hc:2024:dhc:1234", "judgment", "bnss-2023:482", "provision", "references", "para 5", "Corresponding BNSS Section 482 anticipatory bail procedure noted.", 2024, 2, "unverified_automated"),
+            (9, "hc:2024:bhc:567", "judgment", "cpc-1908:O7-R11", "provision", "interprets", "para 7", "Plaint rejection test under Order 7 Rule 11(d) CPC applied.", 2024, 1, "unverified_automated"),
+            (10, "sc:2015:shreya-singhal", "judgment", "sc:1973:kesavananda", "judgment", "cites", "para 9", "Constitutional judicial review principles from Kesavananda Bharati applied.", 2015, 2, "unverified_automated"),
         ]
         con.executemany("INSERT INTO citation_edges VALUES (?,?,?,?,?,?,?,?,?,?,?)", edges)
 
@@ -465,10 +505,17 @@ def _build_sqlite(sqlite_path: Path) -> None:
             ("27_1", "High Court of Bombay", "hc", "27_1", "Original & Appellate", "Maharashtra", "Mumbai", "Maharashtra,Goa,Dadra and Nagar Haveli"),
             ("9_13", "High Court of Allahabad", "hc", "9_13", "Principal Bench", "Uttar Pradesh", "Prayagraj", "Uttar Pradesh"),
             ("NCLAT", "National Company Law Appellate Tribunal", "tribunal", "NCLAT", "Principal", "Delhi", "New Delhi", "All India"),
+            ("NCDRC", "National Consumer Disputes Redressal Commission", "tribunal", "NCDRC", "Principal", "Delhi", "New Delhi", "All India"),
             ("ITAT", "Income Tax Appellate Tribunal", "tribunal", "ITAT", "All Benches", "Maharashtra", "Mumbai", "All India"),
             ("SEBI", "Securities and Exchange Board of India", "regulator", "SEBI", "Head Office", "Maharashtra", "Mumbai", "All India"),
         ]
         con.executemany("INSERT INTO courts VALUES (?,?,?,?,?,?,?,?)", courts)
+
+        cause_list_rows = [
+            (1, "Supreme Court of India", "2026-11-26", "Court No. 1 (Chief Justice's Court)", "Hon'ble Chief Justice of India", "1", "W.P.(C) No. 1012/2026", "SCIN010010122026", "Union of India v. Bar Council Petitioners", json.dumps(["Attorney General for India", "Sr. Adv. A. Counsel"]), "Final Hearing", "https://www.sci.gov.in/daily-cause-list"),
+            (2, "High Court of Delhi", "2026-11-26", "DB-I", "Hon'ble Chief Justice & Bench", "12", "W.P.(C) 4421/2026", "DLHC010044212026", "Rohan Sharma v. State of NCT of Delhi", json.dumps(["Adv. Meera Krishnan"]), "Anticipatory Bail / Urgent Mentioning", "https://delhihighcourt.nic.in/causelist"),
+        ]
+        con.executemany("INSERT INTO cause_lists VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", cause_list_rows)
 
         con.execute("INSERT INTO provisions_fts(provisions_fts) VALUES('rebuild')")
         con.execute("INSERT INTO judgments_meta_fts(judgments_meta_fts) VALUES('rebuild')")
@@ -615,6 +662,78 @@ def _build_lancedb(lance_dir: Path) -> None:
     )
     t_sr = db.create_table("state_acts_regulators", data=state_reg_rows, mode="overwrite")
     t_sr.create_fts_index("text", replace=True, with_position=True)
+
+    tribunal_rows = pa.table(
+        {
+            "chunk_id": ["trib:nclat:2024:10:0", "trib:ncdrc:2024:22:0"],
+            "case_id": ["trib:nclat:2024:10", "trib:ncdrc:2024:22"],
+            "forum_code": ["NCLAT", "NCDRC"],
+            "court_code": ["NCLAT", "NCDRC"],
+            "court_name": [
+                "National Company Law Appellate Tribunal",
+                "National Consumer Disputes Redressal Commission",
+            ],
+            "year": pa.array([2024, 2024], type=pa.int32()),
+            "decision_date": ["2024-02-18", "2024-07-12"],
+            "title": [
+                "Apex Creditors v. Resolution Professional",
+                "Homebuyers Welfare Association v. Horizon Builders Pvt Ltd",
+            ],
+            "neutral_citation": ["2024 NCLAT 10", "2024 NCDRC 22"],
+            "judge": ["Justice Ashok Bhushan", "Justice A.P. Sahi"],
+            "bench_strength": pa.array([2, 2], type=pa.int32()),
+            "disposal_nature": ["Allowed", "Allowed"],
+            "acts_cited": [["IBC"], ["ConsumerProtection"]],
+            "para_start": pa.array([1, 1], type=pa.int32()),
+            "para_end": pa.array([3, 4], type=pa.int32()),
+            "text": [
+                "Resolution plan approved under Section 31 of the Insolvency and Bankruptcy Code; Committee of Creditors commercial wisdom upheld.",
+                "NCDRC directed refund with 9% interest for inordinate delay in handing over residential apartment possession under Consumer Protection Act.",
+            ],
+            "commercial_safe": [True, True],
+            "terms_status": ["cleared", "cleared"],
+            "license_spdx": ["CC-BY-4.0", "CC-BY-4.0"],
+            "source_id": ["vaquill-central", "vaquill-central"],
+            "source_url": [
+                "https://oss-data-in.vaquill.ai/v2026.08.1/",
+                "https://oss-data-in.vaquill.ai/v2026.08.1/",
+            ],
+            "text_sha256": [_sha256_text("nclat"), _sha256_text("ncdrc")],
+        }
+    )
+    t_trib = db.create_table("tribunal_chunks", data=tribunal_rows, mode="overwrite")
+    t_trib.create_fts_index("text", replace=True, with_position=True)
+
+    cad_rows = pa.table(
+        {
+            "chunk_id": ["cad:vol7:art21:ambedkar", "cad:vol7:art32:ambedkar"],
+            "debate_id": ["cad-vol7-1948-12-06", "cad-vol7-1948-12-09"],
+            "volume": ["Vol VII", "Vol VII"],
+            "sitting_date": ["1948-12-06", "1948-12-09"],
+            "year": pa.array([1948, 1948], type=pa.int32()),
+            "speaker": ["Dr. B.R. Ambedkar", "Dr. B.R. Ambedkar"],
+            "article_ref": ["Article 21", "Article 32"],
+            "title": [
+                "Constituent Assembly Debate on Article 21 (Procedure Established by Law)",
+                "Constituent Assembly Debate on Article 32 (Heart and Soul of the Constitution)",
+            ],
+            "text": [
+                "The question of substance in Draft Article 15 (Article 21) is procedure established by law vs due process against arbitrary detention.",
+                "Article 32 (Draft Article 25) is the very soul of the Constitution and the very heart of it, guaranteeing constitutional remedies.",
+            ],
+            "commercial_safe": [True, True],
+            "terms_status": ["cleared", "cleared"],
+            "license_spdx": ["IN-S52-1-q", "IN-S52-1-q"],
+            "source_id": ["legislative-constitution", "legislative-constitution"],
+            "source_url": [
+                "https://constitutionofindia.net/debates/06-dec-1948/",
+                "https://constitutionofindia.net/debates/09-dec-1948/",
+            ],
+            "text_sha256": [_sha256_text("cad21"), _sha256_text("cad32")],
+        }
+    )
+    t_cad = db.create_table("cad_debates", data=cad_rows, mode="overwrite")
+    t_cad.create_fts_index("text", replace=True, with_position=True)
 
 
 def _write_zstd_parquet(table: pa.Table, out_path: Path) -> None:

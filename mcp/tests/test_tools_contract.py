@@ -39,22 +39,26 @@ from nyaya.models import (
 )
 from nyaya.storage.memory_backend import InMemoryCorpusBackend
 
-EXPECTED_12_TOOLS = {
+EXPECTED_15_TOOLS = {
     "search_statutes",
     "get_provision",
+    "get_provisions_batch",
     "browse_statute",
     "compare_provisions",
     "get_provision_history",
     "cross_reference",
     "search_judgments",
     "get_judgment",
+    "get_judgments_batch",
     "trace_precedent",
     "verify_citations",
     "judgment_analytics",
+    "get_cause_list",
     "corpus_status",
 }
 
 LOCAL_SQLITE_TOOLS = {
+    "get_provisions_batch",
     "compare_provisions",
     "cross_reference",
     "get_provision_history",
@@ -62,7 +66,7 @@ LOCAL_SQLITE_TOOLS = {
     "corpus_status",
 }
 
-OPEN_WORLD_TOOLS = EXPECTED_12_TOOLS - LOCAL_SQLITE_TOOLS
+OPEN_WORLD_TOOLS = EXPECTED_15_TOOLS - LOCAL_SQLITE_TOOLS
 
 
 def _fresh_mcp() -> FastMCP:
@@ -188,14 +192,14 @@ def _build_rich_memory_backend() -> InMemoryCorpusBackend:
 # ---------------------------------------------------------------------------
 
 
-async def test_all_12_v2_tools_register_with_expected_names():
+async def test_all_15_v2_tools_register_with_expected_names():
     mcp = _fresh_mcp()
-    assert {t.name for t in await mcp.list_tools()} == EXPECTED_12_TOOLS
+    assert {t.name for t in await mcp.list_tools()} == EXPECTED_15_TOOLS
 
 
 async def test_every_tool_has_description_and_exact_annotations_split():
     tools = await _tool_map(_fresh_mcp())
-    assert set(tools) == EXPECTED_12_TOOLS
+    assert set(tools) == EXPECTED_15_TOOLS
     for name, t in tools.items():
         assert t.description, f"tool {name} has no description"
         ann = t.annotations
@@ -463,7 +467,7 @@ async def test_corpus_status_returns_v2_counts():
     storage.set_backend(_build_rich_memory_backend())
     tools = await _tool_map(_fresh_mcp())
     res = await tools["corpus_status"].fn()
-    assert res.service_version == "2.0.0"
+    assert res.service_version == "2.1.0"
     assert res.retrieval_mode == "lexical_metadata_graph"
     assert res.counts.central_acts >= 2
 

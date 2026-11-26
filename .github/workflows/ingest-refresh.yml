@@ -39,7 +39,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     permissions:
       contents: write
     defaults:
@@ -79,7 +79,7 @@ jobs:
             --tier "${{ inputs.tier || 'daily' }}"
             --work-dir "${{ runner.temp }}/nyaya-ingest/work"
           )
-          HC_YEAR_FROM="${{ inputs.hc_year_from }}"
+          HC_YEAR_FROM="$(printf '%s' "${{ inputs.hc_year_from }}" | xargs)"
           if [ "${{ github.event_name }}" = "schedule" ] && [ -z "$HC_YEAR_FROM" ]; then
             HC_YEAR_FROM="2020"
           fi

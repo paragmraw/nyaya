@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Nyaya v2.0 security fixes are applied to `main`.
+Nyaya v2.1 security fixes are applied to `main`.
 
 | Version | Supported |
 |---|---|
-| `2.0.x` | Yes (`main`) |
-| `< 2.0` | End-of-life (replaced by v2.0) |
+| `2.1.x` | Yes (`main`) |
+| `< 2.1` | End-of-life (replaced by v2.1) |
 
 ## Reporting a Vulnerability
 
@@ -54,7 +54,8 @@ Nyaya implements defense-in-depth at the transport, middleware, storage, and LLM
 
 - **SQLite Core:** Opened strictly read-only (`mode=ro&immutable=1`, `PRAGMA query_only=ON`, `mmap_size=64 MB`).
 - **DuckDB Parquet:** `httpfs` pre-installed at image build time into `/app/duckdb_ext` (`autoinstall_known_extensions=false`); hard-capped at `memory_limit='256MB'`, `threads=2`, 10s `con.interrupt()` timeout, and mandatory partition guards (`QueryTooBroad`). Private Railway Bucket secrets are scoped strictly (`SCOPE 's3://<bucket>'`) so credentials never leak onto public URLs.
-- **Direct S3 PDF Fetcher (`pdf_fetcher.py`):** Enforces a strict bucket allowlist (`indian-supreme-court-judgments`, `indian-high-court-judgments`), strict key regex, `follow_redirects=False`, 15 MB stream cap, `%PDF-` magic-byte gate, `asyncio.Semaphore(4)`, 500-page cap, `chars_per_page >= 50` and `printable_ratio >= 0.70` quality gates, and a 256 MB disk zstd LRU cache (`NYAYA_CACHE_DIR`).
+- **Direct S3 PDF Fetcher & Opt-in OCR (`pdf_fetcher.py`, `ingest/extract/ocr.py`):** Enforces a strict bucket/host allowlist (`indian-supreme-court-judgments`, `indian-high-court-judgments`, `ncdrc.nic.in`, `nclat.nic.in`, `sci.gov.in`, `digiscr.sci.gov.in`, `egazette.gov.in`), strict key regex, `follow_redirects=False`, 15 MB stream cap, `%PDF-` magic-byte gate, `asyncio.Semaphore(4)`, 500-page cap, `chars_per_page >= 50` and `printable_ratio >= 0.70` quality gates, and a 256 MB disk zstd LRU cache (`NYAYA_CACHE_DIR`). Opt-in OCR (`NYAYA_ENABLE_OCR=true`) permits only Apache-2.0 backends (`tesseract` CLI or `rapidocr_onnxruntime`).
+- **BYO Live Docket URL Hygiene (`live_docket.py`, `cause_list_store.py`):** Rejects any URL containing banned scraped/unclear-rights substrings (`_BANNED_URI_SUBSTRINGS`) and restricts live docket endpoints to `http(s)` URLs.
 - **License & Supply-Chain Hygiene:** CI `.github/workflows/security.yml` runs `pip-audit` on both `mcp/` and `chat/`, `npm audit` on `web/`, `osv-scanner`, `trivy` (image + filesystem), `gitleaks`, and enforces the `license-hygiene` lockfile gate banning copyleft PDF/OCR packages (`ecourts`, `pymupdf`, `fitz`, `surya-ocr`) and legacy database/vector client drivers in `mcp/uv.lock` and `chat/uv.lock`.
 
 ### Deployment Recommendations

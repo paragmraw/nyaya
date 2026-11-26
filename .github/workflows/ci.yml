@@ -85,7 +85,7 @@ jobs:
           p.stdin.flush()
           r2 = json.loads(p.stdout.readline())
           tools = r2['result']['tools']
-          assert r2.get('id') == 2 and len(tools) == 12, f'expected 12 tools, got {len(tools)}'
+          assert r2.get('id') == 2 and len(tools) == 15, f'expected 15 tools, got {len(tools)}'
           p.stdin.close()
           rc = p.wait(timeout=15)
           assert rc == 0, f'nyaya-mcp exited with {rc}: {p.stderr.read()}'
@@ -182,7 +182,7 @@ jobs:
 
           curl -fsS http://127.0.0.1:8000/health | python3 -c "import json, sys; d = json.load(sys.stdin); assert d['status'] == 'healthy', d"
           curl -fsS http://127.0.0.1:8000/api/corpus-status | python3 -c "import json, sys; d = json.load(sys.stdin); assert 'counts' in d, d"
-          curl -fsS http://127.0.0.1:8000/api/tools | python3 -c "import json, sys; d = json.load(sys.stdin); assert d['total'] == 12, d"
+          curl -fsS http://127.0.0.1:8000/api/tools | python3 -c "import json, sys; d = json.load(sys.stdin); assert d['total'] == 15, d"
           mcp_code=$(curl -s -o /tmp/mcp-init.out -w '%{http_code}' -X POST http://127.0.0.1:8000/mcp \
             -H 'Content-Type: application/json' \
             -H 'Accept: application/json, text/event-stream' \

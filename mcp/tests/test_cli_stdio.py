@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from nyaya import cli
-from tests.test_tools_contract import EXPECTED_12_TOOLS
+from tests.test_tools_contract import EXPECTED_15_TOOLS
 
 
 def test_mcp_app_import_and_create_mcp_never_calls_get_settings():
@@ -104,8 +104,8 @@ def test_stdio_jsonrpc_handshake_and_tools_list_zero_env_zero_stdout_noise(tmp_p
         assert tools_resp.get("jsonrpc") == "2.0"
         assert tools_resp.get("id") == 2
         tools = tools_resp["result"]["tools"]
-        assert len(tools) == 12
-        assert {t["name"] for t in tools} == EXPECTED_12_TOOLS
+        assert len(tools) == 15
+        assert {t["name"] for t in tools} == EXPECTED_15_TOOLS
 
         proc.stdin.close()
         rc = proc.wait(timeout=45)
@@ -132,15 +132,20 @@ def test_stdio_jsonrpc_handshake_and_tools_list_zero_env_zero_stdout_noise(tmp_p
 
 def test_cli_sync_subcommand_builds_local_core(tmp_path: Path):
     """`nyaya-mcp sync --data-dir <tmp>` builds/ensures nyaya-core.sqlite offline."""
-    rc = cli.main(
-        [
-            "sync",
-            "--pack",
-            "core",
-            "--data-dir",
-            str(tmp_path),
-            "--offline-only",
-        ]
-    )
-    assert rc == 0
-    assert (tmp_path / "nyaya-core.sqlite").is_file()
+    prev_env = dict(os.environ)
+    try:
+        rc = cli.main(
+            [
+                "sync",
+                "--pack",
+                "core",
+                "--data-dir",
+                str(tmp_path),
+                "--offline-only",
+            ]
+        )
+        assert rc == 0
+        assert (tmp_path / "nyaya-core.sqlite").is_file()
+    finally:
+        os.environ.clear()
+        os.environ.update(prev_env)

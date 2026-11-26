@@ -1,4 +1,4 @@
-// Static product copy and curated Open-India-Law Pack metadata (Nyaya v2.0).
+// Static product copy and curated Open-India-Law Pack metadata (Nyaya v2.1).
 //
 // Live metrics and catalogs hydrate from /api/corpus-status, /api/acts,
 // /api/judgments, /api/analytics, and /api/tools, falling back cleanly to
@@ -25,12 +25,12 @@ export const BASELINE_COUNTS: CorpusCounts = {
   central_acts: 1569,
   state_acts: 8544,
   regulators: 12,
-  tribunals: 15,
+  tribunals: 24,
   provisions: 40353,
   articles: 0,
   schedules: 12,
   amendments: 106,
-  concordance_mappings: 46,
+  concordance_mappings: 181,
   judicial_invalidations: 9,
   sc_judgments: 38292,
   hc_judgments: 20696054,
@@ -43,27 +43,27 @@ export const BASELINE_COUNTS: CorpusCounts = {
 export const SERVICES: StackRow[] = [
   {
     name: "Baked SQLite Core",
-    role: "Read-only SQLite3 FTS5 index, IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance, Amendments 1–106, invalidations, SC metadata, and citation graph.",
+    role: "Read-only SQLite3 FTS5 index, 148 criminal (IPC/CrPC/IEA ↔ BNS/BNSS/BSA) & 33 Income-tax (ITAct1961 ↔ ITAct2025) concordances, 58 CPC Orders, Amendments 1–106, point-in-time as_of reconstruction, cause lists, and citation graph.",
     tool: "SQLite FTS5",
   },
   {
     name: "Full-Text Inverted Index",
-    role: "Three native Rust BM25 FTS tables (sc_chunks, hc_hot_chunks, state_acts_regulators) stored on the Railway Storage Bucket.",
-    tool: "LanceDB BM25",
+    role: "Five native Rust BM25 FTS tables (sc_chunks, hc_hot_chunks [hot_hc_limit=500,000], state_acts_regulators, tribunal_chunks, cad_debates) with opt-in hybrid BM25+vector RRF (NYAYA_HYBRID_SEARCH) on the Railway Storage Bucket.",
+    tool: "LanceDB BM25 + RRF",
   },
   {
     name: "Analytical Parquet Engine",
-    role: "Partition-pruned queries over 20.7M+ High Court orders, 15 Tribunals, 12 Regulators, SC mirror, and optional DDL District records with 256 MB / 10s caps.",
+    role: "Partition-pruned queries over 20.7M+ High Court orders, 24 Tribunals & Consumer Commissions, 12 Regulators, SC mirror, and optional DDL District records with 256 MB / 10s caps.",
     tool: "DuckDB + ZSTD Parquet",
   },
   {
     name: "On-Demand PDF Extractor",
-    role: "Direct anonymous HTTPS reads from AWS Open Data S3 buckets with %PDF- magic gate, 15 MB / 500p limits, and a 256 MB disk zstd LRU cache.",
-    tool: "pypdfium2",
+    role: "Direct anonymous HTTPS reads from AWS Open Data S3 buckets with %PDF- magic gate, 15 MB / 500p limits, 256 MB disk zstd LRU cache, and opt-in Apache-2.0 OCR (NYAYA_ENABLE_OCR).",
+    tool: "pypdfium2 + OCR",
   },
   {
     name: "Citation Parser & Verifier",
-    role: "Deterministic priority-ordered parser and verifier for CNR, INSC, HC Neutral, AIR, SCC, SCR, CPC O.7 R.11, and statutory sub-sections.",
+    role: "Deterministic priority-ordered parser and verifier for CNR, INSC, 25 High Court neutral citations, AIR, SCC, SCR, 58 CPC Orders, and statutory sub-sections.",
     tool: "nyaya/citations",
   },
   {
@@ -81,22 +81,22 @@ export const INFRA: StackRow[] = [
   },
   {
     name: "Local Editor Transport",
-    role: "Zero-secret stdio server that fetches checksum-verified packs from GitHub Releases (or configured NYAYA_MANIFEST_URL) so client briefs stay on your machine.",
+    role: "Zero-secret stdio server that fetches checksum-verified packs via nyaya-mcp sync (--pack core|lance|parquet|all) so client briefs stay on your machine.",
     tool: "uvx nyaya-mcp (stdio)",
   },
   {
     name: "Bucket Object Storage",
-    role: "Private Tigris S3-compatible Railway Storage Bucket holding LanceDB BM25 tables and compacted ZSTD Parquet partitions with on-demand serverless compute.",
+    role: "Private Tigris S3-compatible Railway Storage Bucket holding 5 LanceDB BM25 tables and compacted ZSTD Parquet partitions with on-demand serverless compute.",
     tool: "Railway Storage Bucket",
   },
   {
     name: "Ingestion & Integrity Gate",
-    role: "Idempotent nyaya-ingest CLI with 8 hard-fail legal integrity suites (Amendments 1–106, anti-collapse concordance, non-truncation, licensing, LLM01).",
+    role: "Idempotent nyaya-ingest CLI over 19 trusted sources in sources.lock.yaml with 8 hard-fail legal integrity suites (Amendments 1–106, anti-collapse concordance, non-truncation, licensing, LLM01).",
     tool: "nyaya-ingest + CI",
   },
   {
-    name: "Security & Rate Limits",
-    role: "Pure-ASGI stack: streaming 1 MB body cap, 50k-LRU rate limiter (right-most trusted XFF), CSP, HSTS, and s. 228A / BNS s. 72 exclusions.",
+    name: "Security & Live Docket",
+    role: "Pure-ASGI stack: streaming 1 MB body cap, 50k-LRU rate limiter (right-most trusted XFF), CSP, HSTS, s. 228A / BNS s. 72 exclusions, and BYO live-docket adapter hygiene.",
     tool: "Starlette Pure-ASGI",
   },
 ];
@@ -108,34 +108,33 @@ export const FLOW: FlowStep[] = [
   },
   {
     num: "2",
-    text: "QueryAnalyzer normalizes Indian statute aliases, expands IPC/CrPC/IEA ↔ BNS/BNSS/BSA pari-materia equivalents, and parses CNR / INSC / HC neutral / AIR / SCC citations.",
+    text: "QueryAnalyzer normalizes Indian statute aliases, expands IPC/CrPC/IEA ↔ BNS/BNSS/BSA and ITAct1961 ↔ ITAct2025 equivalents, and parses CNR / INSC / 25 HC neutral / AIR / SCC citations.",
   },
   {
     num: "3",
-    text: "Tiered lexical and graph retrieval fuses SQLite FTS5, LanceDB native BM25, DuckDB ZSTD Parquet, and on-demand S3 PDF extraction (pypdfium2) using RRF (k=60).",
+    text: "Tiered lexical and graph retrieval fuses SQLite FTS5, 5 LanceDB native BM25 tables (incl. tribunal_chunks & cad_debates), DuckDB ZSTD Parquet, and on-demand S3 PDFs (pypdfium2 + opt-in OCR) using RRF (k=60), with opt-in hybrid vector fusion.",
   },
   {
     num: "4",
-    text: "All retrieved legal prose passes through OWASP <corpus_text> data-isolation framing, s. 228A / BNS s. 72 suppression checks, and StatutoryValidity annotation.",
+    text: "All retrieved legal prose passes through OWASP <corpus_text> data-isolation framing, s. 228A / BNS s. 72 suppression checks, point-in-time as_of resolution, and StatutoryValidity annotation.",
   },
   {
     num: "5",
-    text: "MCP exposes 12 read-only tools, 8 nyaya:// resources, and 4 practitioner prompts; optional /chat runs verify_inline_markers before rendering grounded citation chips.",
+    text: "MCP exposes 15 read-only tools, 8 nyaya:// resources, and 4 practitioner prompts; optional /chat runs verify_inline_markers before rendering grounded citation chips.",
   },
 ];
 
 export const TODAY: OpennessItem[] = [
-  { on: true, text: "Apache-2.0 MCP server (12 tools, 8 resources, 4 prompts)", meta: "live" },
-  { on: true, text: "Local stdio mode via uvx nyaya-mcp (zero API keys)", meta: "live" },
-  { on: true, text: "Remote Streamable HTTP (/mcp) + REST (/api/*)", meta: "live" },
-  { on: true, text: "Statutory validity & IPC/CrPC/IEA ↔ BNS/BNSS/BSA diffs", meta: "live" },
-  { on: true, text: "Automated nyaya-ingest CLI & 8-suite Integrity Gate", meta: "live" },
-  { on: true, text: "Commercial-safe filter (NYAYA_COMMERCIAL_SAFE_ONLY)", meta: "live" },
+  { on: true, text: "Apache-2.0 MCP server (15 tools, 8 resources, 4 prompts)", meta: "live" },
+  { on: true, text: "Local stdio mode via uvx nyaya-mcp + nyaya-mcp sync packs", meta: "live" },
+  { on: true, text: "Remote Streamable HTTP (/mcp) + REST (/api/*) + BYO live docket", meta: "live" },
+  { on: true, text: "Point-in-time as_of, 148 criminal & 33 Income-tax 1961↔2025 diffs", meta: "live" },
+  { on: true, text: "24 Tribunals & Consumer Commissions, 58 CPC Orders, 25 HC neutrals", meta: "live" },
+  { on: true, text: "Opt-in hybrid BM25+vector RRF & Apache-2.0 OCR (NYAYA_HYBRID_SEARCH / NYAYA_ENABLE_OCR)", meta: "opt-in" },
+  { on: true, text: "19 locked sources in sources.lock.yaml & commercial-safe filtering", meta: "live" },
 ];
 
 export const PLANNED: OpennessItem[] = [
-  { on: false, text: "Optional hybrid dense vectors & reranking", meta: "planned" },
-  { on: false, text: "OCR pipeline for pre-2010 scanned High Court PDFs", meta: "planned" },
   { on: false, text: "Pre-1950 Privy Council & Federal Court archives", meta: "planned" },
   { on: false, text: "Expert-curated overruled/distinguished treatment labels", meta: "planned" },
 ];
@@ -149,13 +148,18 @@ export const MCP_TOOLS_FALLBACK: {
   items: [
     {
       name: "search_statutes",
-      description: "Pure-lexical BM25 & exact-phrase search across Central Acts, Constitution, 36 State/UT packs, and 12 Regulators.",
+      description: "Pure-lexical BM25 & exact-phrase search across Central Acts, Constitution, 36 State/UT packs, CAD debates, and 12 Regulators.",
       open_world: true,
     },
     {
       name: "get_provision",
-      description: "Verbatim section, article, schedule, or regulation text framed in <corpus_text> with StatutoryValidity envelope and top cross-links.",
+      description: "Verbatim section, article, schedule, 58 CPC Orders/Rules, or regulation text framed in <corpus_text> with StatutoryValidity envelope, optional point-in-time as_of reconstruction, and top cross-links.",
       open_world: true,
+    },
+    {
+      name: "get_provisions_batch",
+      description: "Batch fetch up to 50 statutory provisions in one partial-success call with optional point-in-time as_of reconstruction.",
+      open_world: false,
     },
     {
       name: "browse_statute",
@@ -164,7 +168,7 @@ export const MCP_TOOLS_FALLBACK: {
     },
     {
       name: "compare_provisions",
-      description: "Compare IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance with clause diffs, punishment/procedural deltas, and BNSS s. 531 savings.",
+      description: "Compare 148 criminal (IPC/CrPC/IEA ↔ BNS/BNSS/BSA with BNSS offence_classification & s. 531 savings) and 33 Income-tax (ITAct1961 ↔ ITAct2025 with s. 536 savings) concordances, plus clause diffs.",
       open_world: false,
     },
     {
@@ -179,12 +183,17 @@ export const MCP_TOOLS_FALLBACK: {
     },
     {
       name: "search_judgments",
-      description: "Multi-facet search across Supreme Court (38k+), 25 High Courts (20.7M+), 15 Tribunals, and optional District metadata with binding_for_court priority.",
+      description: "Multi-facet search across Supreme Court (38k+), 25 High Courts (20.7M+), 24 Tribunals & Consumer Commissions, and optional District metadata with binding_for_court priority.",
       open_world: true,
     },
     {
       name: "get_judgment",
-      description: "Windowed judgment retrieval (overview, paragraphs, pages, search_within, docket) from indexed text or direct S3 PDFs via pypdfium2.",
+      description: "Windowed judgment retrieval (overview, paragraphs, pages, search_within, docket) from indexed text or direct S3 PDFs via pypdfium2 and opt-in OCR.",
+      open_world: true,
+    },
+    {
+      name: "get_judgments_batch",
+      description: "Batch fetch up to 20 judgments in one partial-success call with publication-ban enforcement and OWASP framing.",
       open_world: true,
     },
     {
@@ -194,21 +203,26 @@ export const MCP_TOOLS_FALLBACK: {
     },
     {
       name: "verify_citations",
-      description: "Audit briefs or citation lists for statutory validity, exact tuple resolution, and optional verbatim quote verification.",
+      description: "Audit briefs or citation lists for statutory validity, exact tuple resolution across 25 HC neutral codes, and optional verbatim quote verification.",
       open_world: true,
     },
     {
       name: "judgment_analytics",
-      description: "Partition-pruned DuckDB aggregations over High Court, District Court, Tribunal, SC, and Regulator ZSTD Parquet datasets.",
+      description: "Partition-pruned DuckDB aggregations over High Court, District Court, 24 Tribunals, SC, and 12 Regulator ZSTD Parquet datasets.",
+      open_world: true,
+    },
+    {
+      name: "get_cause_list",
+      description: "Search daily Supreme Court and High Court cause lists by court, date, bench, judge, party, advocate, case number, or CNR (with optional live BYO docket).",
       open_world: true,
     },
     {
       name: "corpus_status",
-      description: "Inspect active corpus coverage counts, per-source SPDX provenance, freshness as_of, and retrieval tier status.",
+      description: "Inspect active corpus coverage counts, per-source SPDX provenance across 19 locked sources, freshness as_of, and retrieval tier status.",
       open_world: false,
     },
   ],
-  total: 12,
+  total: 15,
   resources_count: 8,
   prompts_count: 4,
 };
@@ -221,7 +235,7 @@ export const MCP_RESOURCES: ResourceItem[] = [
   { uri: "nyaya://amendment/{act}/{number}", desc: "Constitutional Amendment (1–106) or Central Act amendment details and affected articles." },
   { uri: "nyaya://judgment/{identifier}", desc: "Judgment overview card and opening/operative excerpts by CNR, INSC, HC Neutral, or case_id." },
   { uri: "nyaya://judgment/{identifier}/paragraphs/{start}-{end}", desc: "Windowed paragraph-range citation deep-link (capped at 30 paragraphs / 24,000 chars)." },
-  { uri: "nyaya://courts", desc: "Canonical directory of Supreme Court, 25 High Courts (45 Benches), 15 Tribunals, 12 Regulators, and state codes." },
+  { uri: "nyaya://courts", desc: "Canonical directory of Supreme Court, 25 High Courts (45 Benches), 24 Tribunals & Consumer Commissions, 12 Regulators, and state codes." },
 ];
 
 export const MCP_PROMPTS: PromptItem[] = [
@@ -242,8 +256,8 @@ export const FORMAT_CARDS: FormatCard[] = [
   },
   {
     type: "Statute & Sub-Section",
-    format: "IEA s.65B(4) · BNS s.103(1) · CPC O.7 R.11",
-    desc: "Sections with sub-section/clause parsing, CPC Orders & Rules, and automatic StatutoryValidity repeal/invalidation flags.",
+    format: "IEA s.65B(4) · BNS s.103(1) · CPC O.7 R.11 · ITAct2025",
+    desc: "Sections with sub-section/clause parsing, 58 CPC Orders & Rules, Income-tax 1961/2025 crosswalks, and StatutoryValidity flags.",
     url: "https://oss-data-in.vaquill.ai",
     urlLabel: "→ Vaquill Open India Law (CC-BY-4.0)",
   },
@@ -257,7 +271,7 @@ export const FORMAT_CARDS: FormatCard[] = [
   {
     type: "High Court Neutral",
     format: "2024:DHC:1234 · 2024:BHC-OS:567",
-    desc: "Neutral citations across 25 High Courts & 45 Benches resolved to eCourts metadata and on-demand S3 PDFs.",
+    desc: "25 High Court neutral citation formats across 45 Benches resolved to eCourts metadata and on-demand S3 PDFs.",
     url: "https://registry.opendata.aws/indian-high-court-judgments/",
     urlLabel: "→ Dattam Labs HC Open Data (CC-BY-4.0)",
   },
@@ -270,8 +284,8 @@ export const FORMAT_CARDS: FormatCard[] = [
   },
   {
     type: "Regulators & Tribunals",
-    format: "SEBI LODR Reg. 30(1) · ITAT / NCLT Orders",
-    desc: "12 sectoral regulators (SEBI, RBI, CBIC, MCA, TRAI, IRDAI…) and 15 tribunals with official source PDF URLs.",
+    format: "SEBI LODR Reg. 30(1) · NCDRC / NCLT / ITAT / GSTAT",
+    desc: "12 sectoral regulators (SEBI, RBI, CBIC, MCA, TRAI, IRDAI…) and 24 tribunals & Consumer Commissions with official source PDF URLs.",
     url: "https://prsindia.org",
     urlLabel: "→ PRS & Official Portals (CC-BY-4.0)",
   },
@@ -281,7 +295,7 @@ export const PIPE_STEPS: PipeStep[] = [
   {
     num: "01",
     title: "Parse",
-    desc: "Priority-ordered regex & alias engine extracts CNR, INSC, HC Neutral, AIR, SCC, SCR, CPC O.7 R.11, and statutory sub-sections.",
+    desc: "Priority-ordered regex & alias engine extracts CNR, INSC, 25 HC Neutral formats, AIR, SCC, SCR, 58 CPC Orders/Rules, and statutory sub-sections.",
     eg: "\"2024:DHC:1234\" → judgment::HC_NEUTRAL::2024:DHC:1234",
   },
   {
@@ -293,13 +307,13 @@ export const PIPE_STEPS: PipeStep[] = [
   {
     num: "03",
     title: "Audit & Frame",
-    desc: "Attaches StatutoryValidity (repealed / struck down / abeyance), raw citation-graph counts (unverified_automated), and <corpus_text> tags.",
+    desc: "Attaches StatutoryValidity (repealed / struck down / abeyance), point-in-time as_of state, raw citation-graph counts (unverified_automated), and <corpus_text> tags.",
     eg: "status=\"VERIFIED_STRUCK_DOWN_OR_READ_DOWN\" (IT Act s.66A)",
   },
   {
     num: "04",
     title: "Verify & Link",
-    desc: "Runs optional verbatim quote checks against S3 PDFs via pypdfium2 and links citations back to SPDX provenance and license.",
+    desc: "Runs optional verbatim quote checks against S3 PDFs via pypdfium2 (with opt-in OCR) and links citations back to SPDX provenance and license.",
     eg: "→ Source card: 2017 INSC 801 · CC-BY-4.0",
   },
 ];
@@ -313,7 +327,7 @@ export const LIMITS: Limit[] = [
   {
     mark: "02",
     title: "Pre-2010 scanned & image-only PDFs",
-    sub: "Direct AWS Open Data PDFs yielding fewer than 50 extracted characters per page via pypdfium2 are rejected as scanned_image_only (text_unavailable_metadata_only) rather than returning garbled OCR text.",
+    sub: "By default, direct AWS Open Data PDFs yielding fewer than 50 extracted characters per page via pypdfium2 are rejected as scanned_image_only (text_unavailable_metadata_only). Opt-in Apache-2.0 OCR (NYAYA_ENABLE_OCR=1 via Tesseract or RapidOCR) can be enabled on self-hosted instances.",
   },
   {
     mark: "03",
@@ -337,38 +351,38 @@ export const CAPS: Cap[] = [
   {
     code: "CON-01",
     name: "Constitution & Amendments",
-    desc: "Constitutional provisions, 12 schedules, and verified Amendments 1–106 with judicial invalidations.",
+    desc: "Constitutional provisions, 12 schedules, CAD debates, and verified Amendments 1–106 with judicial invalidations.",
     coverage: "12 sch · 106 amd",
   },
   {
     code: "COD-02",
-    name: "Criminal code transition",
-    desc: "IPC/CrPC/IEA ↔ BNS/BNSS/BSA concordance, clause diffs, punishment deltas, and BNSS s. 531 savings.",
-    coverage: "46 maps",
+    name: "Criminal & Tax transitions",
+    desc: "148 criminal (IPC/CrPC/IEA ↔ BNS/BNSS/BSA + BNSS offence classification & s. 531) and 33 Income-tax 1961↔2025 maps.",
+    coverage: "181 maps",
   },
   {
     code: "LEG-03",
     name: "Central, State & Regulators",
-    desc: "37 Legislation jurisdictions (1,569 Central + 8,544 State/UT Acts) and 12 regulators (12,152 instruments).",
+    desc: "37 Legislation jurisdictions (1,569 Central + 8,544 State/UT Acts, 58 CPC Orders) and 12 regulators (12,152 instruments).",
     coverage: "37 jur · 12 reg",
   },
   {
     code: "JUD-04",
     name: "Judiciary & Tribunals",
-    desc: "38,292 SC judgments, 20.7M+ High Court orders, and 15 Tribunals (813,168 orders).",
+    desc: "38,292 SC judgments, 20.7M+ High Court orders, and 24 Tribunals & Consumer Commissions (813,168 orders).",
     coverage: "21.5M+ records",
   },
   {
     code: "CTR-05",
     name: "Citation audit & verify",
-    desc: "Exact tuple resolution for CNR, INSC, HC Neutral, AIR, SCC, O.7 R.11, s.65B(4), and PDF quote checks.",
+    desc: "Exact tuple resolution for CNR, INSC, 25 HC Neutral formats, AIR, SCC, 58 CPC Orders, s.65B(4), and PDF quote checks.",
     coverage: "verify_citations",
   },
   {
     code: "GRF-06",
-    name: "Precedent graph & analytics",
-    desc: "Citation graph edges (unverified_automated) and partition-pruned DuckDB facet analytics.",
-    coverage: "12 MCP tools",
+    name: "Graph, Batch & Cause Lists",
+    desc: "Citation graph edges, DuckDB facet analytics, batch tools, point-in-time as_of, and daily cause lists.",
+    coverage: "15 MCP tools",
   },
 ];
 
@@ -479,7 +493,7 @@ export const CURATED: CuratedRow[] = [
     type: "Central Statute",
     category: "legislation",
     tier: "Baked SQLite Core",
-    coverage: "Sections + Orders I–LI (incl. O.7 R.11)",
+    coverage: "Sections + 58 CPC Orders (Orders I–LI, 104 rules incl. O.7 R.11)",
     status: "live",
     license_spdx: "CC-BY-4.0",
     commercial_safe: true,
@@ -601,13 +615,13 @@ export const CURATED: CuratedRow[] = [
     name: "Constituent Assembly Debates (12 Volumes)",
     type: "Constitutional History",
     category: "legislation",
-    tier: "LanceDB BM25 (sources.lock.yaml)",
-    coverage: "12 volumes of framing debates (declared in sources.lock.yaml; pending ingest)",
-    status: "coming",
-    license_spdx: "IN-S52-1-q",
+    tier: "LanceDB BM25 (cad_debates)",
+    coverage: "12 volumes of framing debates (CC0-1.0, cad_debates LanceDB table)",
+    status: "live",
+    license_spdx: "CC0-1.0",
     commercial_safe: true,
     source: "eparlib.sansad.in",
-    fallback_date: "",
+    fallback_date: "2026-11-22",
   },
   {
     short_name: "Regulators",
@@ -629,12 +643,12 @@ export const CURATED: CuratedRow[] = [
     name: "Supreme Court of India Judgments",
     type: "Apex Judiciary",
     category: "judiciary",
-    tier: "SQLite + LanceDB + AWS S3 PDF",
-    coverage: "38,292 judgments, citation graph & S3 PDFs",
+    tier: "SQLite + LanceDB (sc_chunks) + AWS S3 PDF",
+    coverage: "38,292 judgments, citation graph, daily cause lists & S3 PDFs",
     status: "live",
     license_spdx: "CC-BY-4.0",
     commercial_safe: true,
-    source: "Dattam Labs AWS Open Data + Vaquill",
+    source: "Dattam Labs AWS Open Data + e-SCR + SCI",
     fallback_date: "2026-11-25",
   },
   {
@@ -643,8 +657,8 @@ export const CURATED: CuratedRow[] = [
     name: "25 Indian High Courts (45 Benches)",
     type: "High Court Judiciary",
     category: "judiciary",
-    tier: "DuckDB Parquet + LanceDB Hot + S3 PDF",
-    coverage: "20,696,054 orders/metadata + hot reportable text + on-demand PDFs",
+    tier: "DuckDB Parquet + LanceDB Hot (500k cap) + S3 PDF",
+    coverage: "20,696,054 orders/metadata + 500k hot reportable chunks + 25 HC neutral citations",
     status: "live",
     license_spdx: "CC-BY-4.0",
     commercial_safe: true,
@@ -653,17 +667,51 @@ export const CURATED: CuratedRow[] = [
   },
   {
     short_name: "Tribunals",
-    aliases: ["NCLT", "NCLAT", "ITAT", "NGT", "SAT", "CAT", "CESTAT", "DRT", "CCI", "IBBI"],
-    name: "15 Indian Tribunals & Quasi-Judicial Forums",
+    aliases: [
+      "NCLT",
+      "NCLAT",
+      "ITAT",
+      "NGT",
+      "SAT",
+      "CAT",
+      "CESTAT",
+      "DRT",
+      "DRAT",
+      "CCI",
+      "IBBI",
+      "NCDRC",
+      "SCDRC",
+      "DCDRC",
+      "AFT",
+      "GSTAT",
+      "RCT",
+      "CIC",
+      "SEBI_ADJ",
+    ],
+    name: "24 Indian Tribunals & Consumer Commissions",
     type: "Tribunals",
     category: "tribunals",
-    tier: "DuckDB ZSTD Parquet + PDF URL",
-    coverage: "813,168 matters (ITAT, NCLT, NGT, SAT, APTEL, CAT, CESTAT, DRT, CCI, IBBI…)",
+    tier: "LanceDB (tribunal_chunks) + DuckDB ZSTD Parquet",
+    coverage: "813,168+ matters (NCDRC/SCDRC/DCDRC, DRAT, AFT, GSTAT, RCT, CIC, SEBI_ADJ, NCLT/NCLAT, ITAT, NGT, SAT…)",
     status: "live",
     license_spdx: "CC-BY-4.0",
     commercial_safe: true,
-    source: "Vaquill v2026.08.1 + Official Portals",
+    source: "Vaquill v2026.08.1 + NCDRC + NCLAT",
     fallback_date: "2026-11-25",
+  },
+  {
+    short_name: "eGazette",
+    aliases: ["Gazette", "SubordinateLegislation"],
+    name: "Gazette of India Subordinate Rules & Notifications",
+    type: "Subordinate Legislation",
+    category: "legislation",
+    tier: "Baked SQLite Core",
+    coverage: "Central rules, notifications & Income-tax 1961↔2025 (33 maps) crosswalk",
+    status: "live",
+    license_spdx: "IN-S52-1-q",
+    commercial_safe: true,
+    source: "egazette.gov.in + Income Tax Act 2025",
+    fallback_date: "2026-11-22",
   },
   {
     short_name: "JusticeHub",

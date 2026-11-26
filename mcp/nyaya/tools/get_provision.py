@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import date as Date
 from typing import Any
 
 from ..exceptions import InvalidFilter, NotFound
-from ..models import ProvisionResponse, StatutoryLink
+from ..models import PointInTimeMeta, ProvisionResponse, StatutoryLink
 from ..storage import get_backend
 from ._error import structured_errors
 from ._util import (
+    apply_point_in_time,
     effective_commercial_safe,
     ensure_framed,
+    parse_optional_date,
     resolve_act_and_ref,
     run_sync,
 )
@@ -22,10 +25,12 @@ def get_provision(
     citation: str | None = None,
     section: str | None = None,
     jurisdiction: str | None = None,
+    as_of: Date | str | None = None,
     include_links: bool = True,
     commercial_safe_only: bool = False,
 ) -> ProvisionResponse:
     """Fetch a single statutory section, Constitution article/schedule, CPC order/rule, or regulation."""
+    as_of_date = parse_optional_date(as_of, field="as_of")
     backend = get_backend()
     cs_only = effective_commercial_safe(commercial_safe_only)
     raw_ref = ref or (section or "")
@@ -66,6 +71,18 @@ def get_provision(
     if req_sub and sub_found is None:
         sub_found = str(req_sub) in rec.text
 
+    raw_text = rec.text
+    validity = rec.validity
+    as_of_meta: PointInTimeMeta | None = None
+    if as_of_date is not None:
+        raw_text, validity, pit_payload = apply_point_in_time(
+            rec,
+            backend,
+            as_of_date,
+            commercial_safe_only=cs_only,
+        )
+        as_of_meta = PointInTimeMeta.model_validate(pit_payload)
+
     framed_links: list[StatutoryLink] = []
     for link in rec.top_links[:15]:
         note = link.context_note
@@ -89,10 +106,11 @@ def get_provision(
         chapter_num=rec.chapter_num,
         chapter_title=rec.chapter_title,
         part=rec.part,
-        text=ensure_framed(rec.text, doc_id=rec.doc_id, provenance=rec.provenance),
-        validity=rec.validity,
+        text=ensure_framed(raw_text, doc_id=rec.doc_id, provenance=rec.provenance),
+        validity=validity,
         top_links=framed_links,
         provenance=rec.provenance,
+        as_of_meta=as_of_meta,
     )
 
 
@@ -104,7 +122,8 @@ def register(mcp: Any) -> None:
             "CPC Order/Rule, or regulator clause along with its StatutoryValidity envelope "
             "(in_force / repealed / struck_down / read_down / kept_in_abeyance, replacement pointers, "
             "BNSS s.531 transitional note, and invalidating Supreme Court judgment) and up to 15 "
-            "cross-reference links. Accepts either (act, ref) or a combined citation string "
+            "cross-reference links. Supports optional point-in-time reconstruction via as_of='YYYY-MM-DD'. "
+            "Accepts either (act, ref) or a combined citation string "
             "(e.g. 'IPC s.302', 'Art. 21A', 'CPC O.7 R.11', 'Schedule 7 List I Entry 82')."
         ),
         annotations={
@@ -123,6 +142,7 @@ def register(mcp: Any) -> None:
         citation: str | None = None,
         section: str | None = None,
         jurisdiction: str | None = None,
+        as_of: str | None = None,
         include_links: bool = True,
         commercial_safe_only: bool = False,
     ) -> ProvisionResponse:
@@ -132,6 +152,7 @@ def register(mcp: Any) -> None:
             citation=citation,
             section=section,
             jurisdiction=jurisdiction,
+            as_of=as_of,
             include_links=include_links,
             commercial_safe_only=commercial_safe_only,
         )

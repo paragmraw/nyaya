@@ -11,12 +11,14 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 import httpx
 import pypdfium2 as pdfium
 import zstandard as zstd
 
 from ..exceptions import PdfFetchError
+from ..ingest.extract.ocr import OcrEngine, get_default_ocr_engine, render_pdf_page_to_png
 from ..models import JudgmentContent, JudgmentExcerpt, JudgmentMeta
 from ..retrieval.paragraph_bm25 import ParagraphBM25
 from ..sanitize import strip_control_chars
@@ -27,6 +29,21 @@ ALLOWED_PDF_BUCKETS = frozenset(
         "indian-high-court-judgments",
     }
 )
+
+ALLOWED_PDF_HTTPS_HOSTS = frozenset(
+    {
+        "ncdrc.nic.in",
+        "nclat.nic.in",
+        "sci.gov.in",
+        "digiscr.sci.gov.in",
+        "egazette.gov.in",
+        "*.s3.ap-south-1.amazonaws.com",
+    }
+)
+_OFFICIAL_EXACT_HOSTS = frozenset(
+    h for h in ALLOWED_PDF_HTTPS_HOSTS if not h.startswith("*.")
+)
+_S3_AP_SOUTH_1_HOST_RE = re.compile(r"^[a-z0-9][a-z0-9.-]*\.s3\.ap-south-1\.amazonaws\.com$")
 
 PDF_KEY_RE = re.compile(
     r"^data/pdf/year=(19[5-9]\d|20[0-3]\d)/"
@@ -407,6 +424,29 @@ def validate_s3_pdf_target(bucket: str | None, key: str | None) -> str:
     return f"https://{bucket}.s3.ap-south-1.amazonaws.com/{key}"
 
 
+def validate_official_pdf_url(url: str | None) -> str:
+    """Strictly validate an official HTTPS PDF URL against ``ALLOWED_PDF_HTTPS_HOSTS``."""
+    if not url or not url.strip():
+        raise PdfFetchError("Missing PDF URL.", reason="disallowed_key")
+    clean = url.strip()
+    if any(bad in clean for bad in ("..", "\\", "\r", "\n")):
+        raise PdfFetchError(f"Unsafe characters in PDF URL: {clean!r}", reason="disallowed_key")
+    parsed = urlsplit(clean)
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        raise PdfFetchError(f"PDF URL must use HTTPS with valid host: {clean!r}", reason="disallowed_key")
+    if parsed.username is not None or parsed.password is not None:
+        raise PdfFetchError("Credentials are not allowed in PDF URL.", reason="disallowed_key")
+    if parsed.port not in (None, 443):
+        raise PdfFetchError(f"Disallowed port in PDF URL: {clean!r}", reason="disallowed_key")
+    host = parsed.hostname.lower()
+    if host not in _OFFICIAL_EXACT_HOSTS and not _S3_AP_SOUTH_1_HOST_RE.fullmatch(host):
+        raise PdfFetchError(
+            f"PDF host {host!r} is not in ALLOWED_PDF_HTTPS_HOSTS.",
+            reason="disallowed_key",
+        )
+    return clean
+
+
 def _split_oversized_block(text: str, *, max_len: int = _CHUNK_TARGET_CHARS) -> list[str]:
     """Split a single block > _MAX_PARAGRAPH_CHARS into chunks <= max_len along headings/sentences."""
     pieces: list[str] = []
@@ -523,10 +563,19 @@ def _extract_pdf_sync(
     pdf_bytes: bytes,
     page_start: int | None = None,
     page_end: int | None = None,
+    *,
+    enable_ocr: bool = False,
+    ocr_engine: OcrEngine | None = None,
+    enforce_page_cap: bool = False,
 ) -> dict[str, Any]:
     doc = pdfium.PdfDocument(pdf_bytes)
     try:
         total_pages = len(doc)
+        if enforce_page_cap and total_pages > MAX_PDF_PAGES:
+            raise PdfFetchError(
+                f"PDF page count ({total_pages}) exceeds {MAX_PDF_PAGES}-page safety cap.",
+                reason="size_limit",
+            )
         truncated_pages = total_pages > MAX_PDF_PAGES
         if page_start is not None or page_end is not None:
             start_idx = max(0, (page_start or 1) - 1)
@@ -550,12 +599,31 @@ def _extract_pdf_sync(
                     tp.close()
                 page.close()
 
-        extracted_count = max(1, len(pages_text))
-        all_text = "\n".join(pages_text)
-        non_ws_chars = sum(1 for c in all_text if not c.isspace())
-        chars_per_page = non_ws_chars / extracted_count
-        printable_chars = sum(1 for c in all_text if c.isprintable() or c in "\n\r\t")
-        printable_ratio = (printable_chars / len(all_text)) if all_text else 0.0
+        def _measure(texts: list[str]) -> tuple[float, float]:
+            cnt = max(1, len(texts))
+            joined = "\n".join(texts)
+            non_ws = sum(1 for c in joined if not c.isspace())
+            printable = sum(1 for c in joined if c.isprintable() or c in "\n\r\t")
+            return non_ws / cnt, (printable / len(joined)) if joined else 0.0
+
+        chars_per_page, printable_ratio = _measure(pages_text)
+
+        if (chars_per_page < MIN_CHARS_PER_PAGE or printable_ratio < MIN_PRINTABLE_RATIO) and enable_ocr and indices:
+            engine = ocr_engine if ocr_engine is not None else get_default_ocr_engine()
+            if engine is not None and engine.is_available():
+                ocr_pages: list[str] = []
+                for idx in indices:
+                    page = doc[idx]
+                    try:
+                        png_bytes = render_pdf_page_to_png(page)
+                        ocr_pages.append(strip_control_chars(engine.extract_text(png_bytes)))
+                    finally:
+                        page.close()
+                ocr_cpp, ocr_pr = _measure(ocr_pages)
+                if ocr_cpp >= MIN_CHARS_PER_PAGE and ocr_pr >= MIN_PRINTABLE_RATIO:
+                    pages_text = ocr_pages
+                    chars_per_page = ocr_cpp
+                    printable_ratio = ocr_pr
 
         if chars_per_page < MIN_CHARS_PER_PAGE or printable_ratio < MIN_PRINTABLE_RATIO:
             quality = "scanned_image_only"
@@ -668,7 +736,7 @@ class _DiskZstdLru:
 
 
 class DirectS3PdfFetcher:
-    """Async direct S3 HTTPS PDF fetcher using Apache-2.0 ``pypdfium2``."""
+    """Async direct S3 & official HTTPS PDF fetcher using Apache-2.0 ``pypdfium2``."""
 
     def __init__(
         self,
@@ -677,6 +745,8 @@ class DirectS3PdfFetcher:
         client: httpx.AsyncClient | None = None,
         offline_only: bool = False,
         max_cache_bytes: int = DEFAULT_LRU_MAX_BYTES,
+        enable_ocr: bool = False,
+        ocr_engine: OcrEngine | None = None,
     ) -> None:
         self.cache = _DiskZstdLru(cache_dir / "pdf_cache", max_bytes=max_cache_bytes)
         self._owns_client = client is None
@@ -685,6 +755,8 @@ class DirectS3PdfFetcher:
             timeout=httpx.Timeout(connect=3.0, read=8.0, write=8.0, pool=3.0),
         )
         self.offline_only = offline_only
+        self.enable_ocr = enable_ocr
+        self.ocr_engine = ocr_engine
         self._sem = asyncio.Semaphore(4)
 
     async def _download_pdf_bytes(self, url: str) -> bytes:
@@ -694,10 +766,10 @@ class DirectS3PdfFetcher:
                 reason="http_error",
             )
         try:
-            async with self._client.stream("GET", url) as resp:
+            async with self._client.stream("GET", url, follow_redirects=False) as resp:
                 if resp.status_code != 200:
                     raise PdfFetchError(
-                        f"S3 returned HTTP {resp.status_code} for {url}",
+                        f"PDF endpoint returned HTTP {resp.status_code} for {url}",
                         reason="http_error",
                     )
                 cl_raw = resp.headers.get("Content-Length")
@@ -739,26 +811,36 @@ class DirectS3PdfFetcher:
         except httpx.HTTPError as exc:
             raise PdfFetchError(f"S3 PDF HTTP error: {exc}", reason="http_error") from exc
 
-    async def fetch_and_read(
+    async def _fetch_extract_and_window(
         self,
-        meta: JudgmentMeta,
         *,
-        mode: Literal["overview", "paragraphs", "pages", "search_within", "docket"] = "overview",
-        para_start: int | None = None,
-        para_end: int | None = None,
-        page_start: int | None = None,
-        page_end: int | None = None,
-        query: str | None = None,
-        max_chars: int = 24_000,
+        url: str,
+        cache_key: str,
+        case_id: str,
+        mode: Literal["overview", "paragraphs", "pages", "search_within", "docket"],
+        para_start: int | None,
+        para_end: int | None,
+        page_start: int | None,
+        page_end: int | None,
+        query: str | None,
+        max_chars: int,
+        enable_ocr: bool | None,
+        ocr_engine: OcrEngine | None,
+        enforce_page_cap: bool,
     ) -> JudgmentContent:
-        url = validate_s3_pdf_target(meta.pdf_s3_bucket, meta.pdf_s3_key)
-        cache_key = hashlib.sha256(f"{meta.pdf_s3_bucket}/{meta.pdf_s3_key}".encode()).hexdigest()
-
+        eff_ocr = self.enable_ocr if enable_ocr is None else bool(enable_ocr)
+        eff_engine = ocr_engine if ocr_engine is not None else self.ocr_engine
         extracted = self.cache.get(cache_key)
-        if extracted is None:
+        if extracted is None or (extracted.get("extraction_quality") == "scanned_image_only" and eff_ocr):
             pdf_bytes = await self._download_pdf_bytes(url)
             async with self._sem:
-                extracted = await asyncio.to_thread(_extract_pdf_sync, pdf_bytes)
+                extracted = await asyncio.to_thread(
+                    _extract_pdf_sync,
+                    pdf_bytes,
+                    enable_ocr=eff_ocr,
+                    ocr_engine=eff_engine,
+                    enforce_page_cap=enforce_page_cap,
+                )
             if extracted["extraction_quality"] != "scanned_image_only":
                 self.cache.put(cache_key, extracted)
 
@@ -771,7 +853,7 @@ class DirectS3PdfFetcher:
 
         if quality == "scanned_image_only":
             return JudgmentContent(
-                case_id=meta.case_id,
+                case_id=case_id,
                 mode=mode,
                 extraction_quality="scanned_image_only",
                 extraction_method="pypdfium2_s3_pdf",
@@ -856,7 +938,7 @@ class DirectS3PdfFetcher:
                 used += len(txt)
 
         return JudgmentContent(
-            case_id=meta.case_id,
+            case_id=case_id,
             mode=mode,
             extraction_quality=quality,  # type: ignore[arg-type]
             extraction_method="pypdfium2_s3_pdf",
@@ -869,6 +951,72 @@ class DirectS3PdfFetcher:
             next_page=next_page,
             pdf_url=url,
             content_sha256=extracted.get("sha256"),
+        )
+
+    async def fetch_and_read(
+        self,
+        meta: JudgmentMeta,
+        *,
+        mode: Literal["overview", "paragraphs", "pages", "search_within", "docket"] = "overview",
+        para_start: int | None = None,
+        para_end: int | None = None,
+        page_start: int | None = None,
+        page_end: int | None = None,
+        query: str | None = None,
+        max_chars: int = 24_000,
+        enable_ocr: bool | None = None,
+        ocr_engine: OcrEngine | None = None,
+    ) -> JudgmentContent:
+        url = validate_s3_pdf_target(meta.pdf_s3_bucket, meta.pdf_s3_key)
+        cache_key = hashlib.sha256(f"{meta.pdf_s3_bucket}/{meta.pdf_s3_key}".encode()).hexdigest()
+        return await self._fetch_extract_and_window(
+            url=url,
+            cache_key=cache_key,
+            case_id=meta.case_id,
+            mode=mode,
+            para_start=para_start,
+            para_end=para_end,
+            page_start=page_start,
+            page_end=page_end,
+            query=query,
+            max_chars=max_chars,
+            enable_ocr=enable_ocr,
+            ocr_engine=ocr_engine,
+            enforce_page_cap=False,
+        )
+
+    async def fetch_official_pdf_url(
+        self,
+        url: str,
+        *,
+        case_id: str | None = None,
+        mode: Literal["overview", "paragraphs", "pages", "search_within", "docket"] = "overview",
+        para_start: int | None = None,
+        para_end: int | None = None,
+        page_start: int | None = None,
+        page_end: int | None = None,
+        query: str | None = None,
+        max_chars: int = 24_000,
+        enable_ocr: bool | None = None,
+        ocr_engine: OcrEngine | None = None,
+    ) -> JudgmentContent:
+        """Fetch and extract an official court/tribunal/gazette PDF URL with strict host/size/page guards."""
+        clean_url = validate_official_pdf_url(url)
+        url_hash = hashlib.sha256(f"official_url:{clean_url}".encode()).hexdigest()
+        return await self._fetch_extract_and_window(
+            url=clean_url,
+            cache_key=url_hash,
+            case_id=case_id or f"url:{url_hash[:16]}",
+            mode=mode,
+            para_start=para_start,
+            para_end=para_end,
+            page_start=page_start,
+            page_end=page_end,
+            query=query,
+            max_chars=max_chars,
+            enable_ocr=enable_ocr,
+            ocr_engine=ocr_engine,
+            enforce_page_cap=True,
         )
 
     async def aclose(self) -> None:

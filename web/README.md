@@ -1,6 +1,6 @@
 # nyaya-web
 
-Next.js 16 + React 19 static-export frontend (**v2.0.0**) for [nyaya](../README.md). Builds into static HTML/CSS/JS (`web/out/`) served from the same Starlette origin (`mcp/nyaya/http_app.py`) as the MCP server, `/api/*` REST routes, and optional `/chat` assistant.
+Next.js 16 + React 19 static-export frontend (**v2.1.0**) for [nyaya](../README.md). Builds into static HTML/CSS/JS (`web/out/`) served from the same Starlette origin (`mcp/nyaya/http_app.py`) as the MCP server, `/api/*` REST routes, and optional `/chat` assistant.
 
 ## Routes
 
